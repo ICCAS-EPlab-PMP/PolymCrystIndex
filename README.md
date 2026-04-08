@@ -77,13 +77,13 @@ Download the installer and run it directly. For most users, the packaged install
 
 ### Linux
 
-Linux 暂时不单独发布安装包。请先克隆仓库，然后直接运行 `Workspace/deploy/server/` 下的部署脚本。
+Linux 暂时不单独发布安装包。请先克隆仓库，然后直接运行 `deploy/server/` 下的部署脚本。
 
-We do not currently ship a separate Linux release package. Please clone the repository and run the deployment scripts under `Workspace/deploy/server/`.
+We do not currently ship a separate Linux release package. Please clone the repository and run the deployment scripts under `deploy/server/`.
 
 ```bash
 git clone https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex.git
-cd PolymCrystalIndex/Workspace/deploy/server
+cd PolymCrystalIndex/deploy/server
 
 # 以当前用户方式安装 / user-mode install
 APP_PROFILE=cloud bash ./install_user_linux.sh
@@ -105,7 +105,7 @@ We do not currently maintain or test macOS devices, and we **do not provide a va
 ```bash
 # example only; adjust to your own source package layout
 tar -xzf your-source-package.tar.gz
-cd PolymCrystIndex/Workspace/deploy/server
+cd PolymCrystIndex/deploy/server
 bash ./install_user_linux.sh
 ```
 
@@ -117,28 +117,32 @@ If you use macOS, expect manual adjustments for Python, Node.js, Fortran, and pa
 
 ### SSRF 16B HDPE 纤维样品完整示例 / End-to-End SSRF 16B HDPE Example
 
-仓库中的 `Workspace/EXAMPLE/` 提供了一个可复核示例，包含上海光源 SSRF 16B 线站的 HDPE 纤维样品数据、Y2O3 标样校准文件，以及指标化结果文件。
+仓库中的 `EXAMPLE/` 提供了一个可复核示例，包含上海光源 SSRF 16B 线站的 HDPE 纤维样品数据、Y2O3 标样校准文件，以及指标化结果文件。
 
-The `Workspace/EXAMPLE/` directory contains a reproducible example based on an HDPE fiber sample measured at SSRF 16B, with Y2O3 calibration data and indexing outputs.
+The `EXAMPLE/` directory contains a reproducible example based on an HDPE fiber sample measured at SSRF 16B, with Y2O3 calibration data and indexing outputs.
 
-欢迎用户直接基于 `Workspace/EXAMPLE/` 进行尝试，快速熟悉从示例数据到结果文件的整体流程。后续我们也会补充配套视频说明。
+欢迎用户直接基于 `EXAMPLE/` 进行尝试，快速熟悉从示例数据到结果文件的整体流程。后续我们也会补充配套视频说明。
 
-Users are encouraged to start directly with `Workspace/EXAMPLE/` to get familiar with the overall flow from sample data to result files. Video walkthroughs will be added in the future.
+Users are encouraged to start directly with `EXAMPLE/` to get familiar with the overall flow from sample data to result files. Video walkthroughs will be added in the future.
 
 ## 文档导航 / Documentation
 
-- [`Reference.md`](Reference.md)：仓库结构、模块职责、接口速查与技术参考  
-  Repository structure, module mapping, API quick reference, and technical details
-- [`deploy/README.md`](deploy/README.md)：Linux 部署与运维说明  
-  Linux deployment and operations guide
-- [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)：接口文档  
-  API documentation
-- [`docs/FRONTEND_BACKEND_MANUAL.md`](docs/FRONTEND_BACKEND_MANUAL.md)：前后端说明  
-  Frontend/backend manual
-- [`docs/FORTRAN_MANUAL.md`](docs/FORTRAN_MANUAL.md)：Fortran 核心说明  
-  Fortran core manual
-- [`pyside/README.md`](pyside/README.md)：PySide 工具说明  
-  PySide tool guide
+- [`Reference.md`](Reference.md)：仓库结构、模块职责、前后端/后端资源索引与技术参考  
+  Repository structure, module mapping, backend/frontend resource index, and technical notes
+- [`PROFILES.md`](PROFILES.md)：运行 profile、环境开关与本地/云端行为说明  
+  Runtime profiles, environment switches, and local/cloud behavior notes
+- [`deploy/README.md`](deploy/README.md)：Linux 部署、systemd 配置与运维检查清单  
+  Linux deployment steps, systemd setup, and operations checklist
+- [`EXAMPLE/README.md`](EXAMPLE/README.md)：示例数据、输入文件与结果文件说明  
+  Example dataset, input files, and expected outputs
+- [`fiber_diffraction_indexing/README.md`](fiber_diffraction_indexing/README.md)：可复用 Python 指标化包概览与 CLI 用法  
+  Reusable Python indexing package overview and CLI usage
+- [`fiber_diffraction_indexing/docs/user_guide.md`](fiber_diffraction_indexing/docs/user_guide.md)：遗传算法指标化流程与输入配置说明  
+  Genetic-algorithm indexing workflow and input configuration guide
+- [`fiber_diffraction_indexing/docs/api_reference.md`](fiber_diffraction_indexing/docs/api_reference.md)：`fiberdiffraction` 模块 API 参考  
+  API reference for the `fiberdiffraction` package
+- [`pyside/README.md`](pyside/README.md)：辅助 PySide 工具、启动脚本与打包说明  
+  Auxiliary PySide tools, launch scripts, and packaging notes
 
 ## 贡献 / Contributing
 

@@ -8,6 +8,8 @@
 > 纤维衍射图谱指标化平台  
 > A fiber diffraction pattern indexing platform for scientific analysis, verification, and deployment.
 
+<img width="7016" height="4961" alt="final" src="https://github.com/user-attachments/assets/9c53a9fd-39ef-424a-9737-6d3840b99a51" />
+
 PolymCrystIndex 面向纤维衍射与聚合物结构分析场景，提供从图像预处理、峰提取、二维积分到晶胞参数优化与 Miller 指数标注的完整工作流。项目同时维护 Linux 服务器版、Windows 本地桌面版、独立 Python 能力封装与配套工具链，适合研究团队、同步辐射实验用户和需要可复核分析流程的工程化场景。
 
 PolymCrystIndex provides an end-to-end workflow for fiber diffraction analysis, including preprocessing, peak extraction, 2D integration, cell parameter optimization, and Miller indexing. The repository serves Linux server deployment, Windows desktop delivery, reusable Python components, and supporting tools for research teams and synchrotron users who need reproducible analysis workflows.
@@ -53,13 +55,6 @@ PolymCrystIndex provides an end-to-end workflow for fiber diffraction analysis, 
 | Python Components | 脚本化调用与二次集成 | 适合自动化流程和算法复用 |
 | PySide Tools | 辅助前后处理 | 适合特定调试和处理场景 |
 
-## 界面与流程展示占位 / Media Placeholders
-
-> [中英共用图片占位 / Shared image placeholder] 在这里放置主界面截图，供中文与英文说明共用。  
-> Insert one shared overview screenshot here for both Chinese and English readers.
-
-> [中英共用 GIF 占位 / Shared GIF placeholder] 在这里放置完整工作流 GIF（upload → extract peaks → index → export），供中英文共用。  
-> Insert one shared workflow GIF here for both Chinese and English readers.
 
 ## 安装 / Installation
 

@@ -1,0 +1,27 @@
+# Processing Information
+# Generated on: 2026-01-26 15:00:27
+
+## Axis Ranges for Output 2D Data
+- X-axis (q_A^-1) range: 0.1071 to 4.3217
+- Y-axis (chi) range (degrees): -179.81 to 179.78
+
+## Processing Parameters
+- Input Mode: Raw Detector Image + PONI
+- Integration points (radial x azimuthal): 1000 x 1080
+- Mask min threshold: 1.0000
+- Mask max threshold: 994069.4500
+- Mask fill value: 0.0
+- Custom Mask Uploaded: Yes
+- PyFAI Integration Method: ('full', 'csc', 'cython')
+
+## Processed Files Summary:
+- processed_HDPE-STANDARD-sd1-5s_00018.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 487849.56
+- processed_HDPE-STANDARD-sd1-5s_00019.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 490703.84
+- processed_HDPE-STANDARD-sd1-5s_00020.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 500551.81
+- processed_HDPE-STANDARD-sd1-5s_00021.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 497423.12
+- processed_HDPE-STANDARD-sd1-5s_00022.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 501324.31
+- processed_HDPE-STANDARD-sd1-5s_00023.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 121010.73
+- processed_HDPE-STANDARD-sd1-5s_00024.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 490460.19
+- processed_HDPE-STANDARD-sd1-5s_00015.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 447342.53
+- processed_HDPE-STANDARD-sd1-5s_00016.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 474108.19
+- processed_HDPE-STANDARD-sd1-5s_00017.tiff: Mask Ratio = 10.4%, Min Intensity = 0.00, Max Intensity = 475524.34

@@ -1,0 +1,50 @@
+# Input Template for Fiber Diffraction Indexing
+# =============================================
+# This template shows the required format for input files.
+# Lines starting with # are comments and will be ignored.
+
+# Population size (line 4)
+100
+
+# Generation steps (line 5)
+100
+
+# Survival rate (line 6) - fraction of population that survives
+0.2
+
+# Crossover rate (line 7) - fraction created through crossover
+0.4
+
+# Mutation rate (line 8) - fraction created through mutation
+0.3
+
+# C-axis parameter (line 11) - 0 for variable, or fixed value in Å
+0.0
+
+# Layer mode (line 13) - 0 for disabled, 1 for enabled
+0
+
+# Additional parameters (lines 14-23)
+# These lines are reserved for future use
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+# Minimum parameter values (line 25) - a b c alpha beta gamma
+5.0 5.0 5.0 30.0 30.0 30.0
+
+# Maximum parameter values (line 26) - a b c alpha beta gamma
+15.0 15.0 15.0 150.0 150.0 150.0
+
+# Tilt status (line 27) - 0 for disabled, 1 for enabled
+0
+
+# OpenMP thread count (line 28) - 0 for system default
+0

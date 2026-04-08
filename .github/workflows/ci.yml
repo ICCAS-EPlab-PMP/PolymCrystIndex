@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        working-directory: Workspace/backend
+        run: |
+          pip install -r requirements.txt
+      - name: Compile backend sources
+        working-directory: Workspace/backend
+        run: python -m compileall .
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install and build
+        working-directory: Workspace/frontend
+        env:
+          APP_PROFILE: cloud
+          VITE_APP_PROFILE: cloud
+        run: |
+          npm ci
+          npm run build

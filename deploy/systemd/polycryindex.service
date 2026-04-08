@@ -1,0 +1,17 @@
+[Unit]
+Description=PolyCryIndex API Server
+After=network.target
+
+[Service]
+Type=simple
+User=polycryindex
+WorkingDirectory=/opt/polycryindex/Workspace/backend
+ExecStart=/opt/polycryindex/venv/bin/python run_prod.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/polycryindex/Workspace/backend/.env
+
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

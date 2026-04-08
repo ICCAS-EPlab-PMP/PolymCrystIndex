@@ -1,0 +1,53 @@
+{
+  "appId": "com.polymcrystindex.desktop",
+  "productName": "PolymCrystIndex",
+  "directories": {
+    "output": "../../execute/electron/dist"
+  },
+  "afterPack": "./scripts/after-pack.js",
+  "files": [
+    "main.js",
+    "preload.js",
+    "backend-manager.js",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "../../execute/electron/stage/workspace",
+      "to": "workspace"
+    },
+    {
+      "from": "../icon/polymindex.ico",
+      "to": "icon/polymindex.ico"
+    }
+  ],
+  "asar": true,
+  "win": {
+    "icon": "../icon/polymindex.ico",
+    "signAndEditExecutable": false,
+    "executableName": "PolymCrystIndex",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "perMachine": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "installerIcon": "../icon/polymindex.ico",
+    "uninstallerIcon": "../icon/polymindex.ico"
+  }
+}

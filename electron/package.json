@@ -1,0 +1,20 @@
+{
+  "name": "polymcrystindex-electron",
+  "version": "1.7.0",
+  "private": true,
+  "author": "PolymCrystIndex Team",
+  "description": "Electron shell for the Workspace local desktop build",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "powershell -ExecutionPolicy Bypass -File .\\scripts\\dev.ps1",
+    "prepare:python": "powershell -ExecutionPolicy Bypass -File .\\scripts\\prepare-python-runtime.ps1",
+    "prepare:workspace": "powershell -ExecutionPolicy Bypass -File .\\scripts\\prepare-workspace-stage.ps1",
+    "dist": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build.ps1"
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^24.13.3",
+    "rcedit": "^5.0.2"
+  }
+}

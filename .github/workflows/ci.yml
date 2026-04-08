@@ -15,11 +15,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        working-directory: Workspace/backend
+        working-directory: backend
         run: |
           pip install -r requirements.txt
       - name: Compile backend sources
-        working-directory: Workspace/backend
+        working-directory: backend
         run: python -m compileall .
 
   frontend-build:
@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: "20"
       - name: Install and build
-        working-directory: Workspace/frontend
+        working-directory: frontend
         env:
           APP_PROFILE: cloud
           VITE_APP_PROFILE: cloud

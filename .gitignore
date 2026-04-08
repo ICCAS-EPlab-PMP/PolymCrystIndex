@@ -1,0 +1,29 @@
+# Python caches and local environments
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/venv/
+**/*.egg-info/
+
+# Node/Electron build artifacts
+**/node_modules/
+**/dist/
+electron/.cache/
+electron/resources/app/localversion/
+
+# Local runtime data
+backend/users.db
+backend/core/users.db
+backend/temp/
+backend/result/
+backend/hdf5/
+backend/workdir/
+backend/userresult/
+backend/figures/
+
+# OS/editor files
+.DS_Store
+Thumbs.db

@@ -58,7 +58,6 @@ fiber_diffraction_indexing/
 │   ├── sort.py              # 排序脚本 / Sorting script
 │   └── diffraction_fiber.py # 衍射计算 / Diffraction calculation
 │
-├── tests/                    # 测试 / Tests
 ├── docs/                     # 文档 / Documentation
 │   ├── user_guide.md        # 用户指南 / User guide
 │   └── api_reference.md     # API 参考 / API reference

@@ -3,7 +3,7 @@
 该目录包含两类本地桌面调试工具：
 
 - `previous/`：前处理 / WAXS 衍射数据分析工具（PySide6）
-- `post/`：后处理查看器（含多个 Qt 绑定变体）
+- `post/`：后处理查看器（当前保留 `pyside6/` 版本）
 
 ## Structure
 
@@ -13,9 +13,7 @@ pyside/
 │   ├── main.py
 │   └── waxs_viewer/
 └── post/
-    ├── pyside6/
-    ├── QT/
-    └── silxversion/
+    └── pyside6/
 ```
 
 ## Recommended Entry Points
@@ -29,17 +27,12 @@ python main.py
 
 ### Post
 
-推荐优先使用 `post/silxversion/post16.py`：
+当前入口：`post/pyside6/post16.py`
 
 ```bash
-cd pyside/post/silxversion
+cd pyside/post/pyside6
 python post16.py
 ```
-
-备选：
-
-- `post/pyside6/post16.py`
-- `post/QT/post16.py`（PyQt6 版本，不作为首选）
 
 ## One-Click Launch
 
@@ -71,30 +64,24 @@ cd pyside
 powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-默认会生成：
+默认会生成打包输出目录，包括：
 
-- 优先尝试 onefile：
-  - `../execute/pyside/dist/PolymCrystIndex-Previous.exe`
-  - `../execute/pyside/dist/PolymCrystIndex-Post.exe`
-- 若 onefile 失败则自动回退 onedir：
-  - `../execute/pyside/dist/PolymCrystIndex-Previous/`
-  - `../execute/pyside/dist/PolymCrystIndex-Post/`
-
-并同步到：
-
-- `../execute/pyside/win-exe/pyside-previous/`
-- `../execute/pyside/win-exe/pyside-post/`
+- `dist/`：最终 onefile / onedir 产物
+- `build/`：PyInstaller 中间构建目录
+- `spec/`：输出 spec 相关中间文件
+- `win-exe/`：整理后的 Windows 发布目录
+- `package-summary.txt`：最终打包摘要
 
 脚本行为：
 
 - `build_exe.ps1` 会先为每个目标尝试 `onefile`。
 - 若 `onefile` 构建失败，会自动清理残留并回退到 `onedir`。
-- 最终采用模式、是否触发回退、dist 产物路径与整理后的 `win-exe/` 路径会写入 `../execute/pyside/package-summary.txt`。
+- 最终采用模式、是否触发回退以及产物位置会写入 `package-summary.txt`。
 - `package_previous.spec` 与 `package_post.spec` 已显式补充 PySide6 / fabio / pyFAI / silx / hdf5plugin 的 hiddenimports、datas、binaries 收集逻辑。
 
 说明：
 
-- `execute/` 是唯一活动构建输出目录；`_release_bundle/` 仅可作为 **[DEPRECATED]** 历史说明存在。
+- 打包产物以 `build_exe.ps1` 当前配置的输出目录为准；`_release_bundle/` 仅可作为 **[DEPRECATED]** 历史说明存在。
 - `backup/` 是仓库外 `../backup/` 归档区，构建/部署脚本不得引用它。
 
 ## Current Notes

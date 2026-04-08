@@ -124,9 +124,9 @@ Users are encouraged to start directly with `EXAMPLE/` to get familiar with the 
 
 **Note: Despite its long history in structural studies, HDPE poses a significant challenge for the current workflow due to its exceptionally small unit cell and sparse reflections.**
 
-### PCL 指标化分析结果（北京高能光源 HEPS-ID08）：
+### 内部最佳案例：PCL 指标化分析结果（北京高能光源 HEPS-ID08）：
 
-### PCL indexing analysis results from HEPS ID08
+### Best result in our group: PCL indexing analysis results from HEPS ID08
 
 <img width="2068" height="2162" alt="diffraction_marked" src="https://github.com/user-attachments/assets/f7c3c196-4304-4a6a-a822-588f6c982e9e" />
 

@@ -1,9 +1,8 @@
 # PolymCrystIndex
 
-[![GitHub Release](https://img.shields.io/github/v/release/ICCAS-EPlab-PMP/PolymCrystalIndex?label=release)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/ICCAS-EPlab-PMP/PolymCrystalIndex/ci.yml?branch=main&label=CI)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/actions/workflows/ci.yml)
-[![GitHub stars](https://img.shields.io/github/stars/ICCAS-EPlab-PMP/PolymCrystalIndex?style=social)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex)
-[![GitHub issues](https://img.shields.io/github/issues/ICCAS-EPlab-PMP/PolymCrystalIndex)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/issues)
+[![Release](https://img.shields.io/badge/release-windowsV17-blue)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/tag/windowsV17)
+[![Homepage](https://img.shields.io/badge/homepage-polymcrystal.com-0a7cff)](https://www.polymcrystal.com)
+[![Preview](https://img.shields.io/badge/preview-index.polymcrystal.com-6f42c1)](https://index.polymcrystal.com)
 [![Paper](https://img.shields.io/badge/paper-IUCr%20oc5041-blue)](https://journals.iucr.org/paper?oc5041)
 
 > 纤维衍射图谱指标化平台  

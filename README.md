@@ -120,6 +120,12 @@ The `EXAMPLE/` directory contains a reproducible example based on an HDPE fiber 
 
 Users are encouraged to start directly with `EXAMPLE/` to get familiar with the overall flow from sample data to result files. Video walkthroughs will be added in the future.
 
+这是一幅来自北京同步辐射高能光源ID08线站PCL指标化的图象：
+
+Here is a indexing pattern of PCL in HEPS ID08.
+
+<img width="2068" height="2162" alt="diffraction_marked" src="https://github.com/user-attachments/assets/f7c3c196-4304-4a6a-a822-588f6c982e9e" />
+
 ## 文档导航 / Documentation
 
 - [`Reference.md`](Reference.md)：仓库结构、模块职责、前后端/后端资源索引与技术参考  

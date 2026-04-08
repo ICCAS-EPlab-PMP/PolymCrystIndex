@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/badge/release-windowsV17-blue)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/tag/windowsV17)
 [![Homepage](https://img.shields.io/badge/homepage-polymcrystal.com-0a7cff)](https://www.polymcrystal.com)
-[![Preview](https://img.shields.io/badge/preview-index.polymcrystal.com-6f42c1)](https://index.polymcrystal.com)
+[![Preview](https://img.shields.io/badge/preview-index.polymcrystal.com-6f42c1)](http://index.polymcrystal.com)
 [![Paper](https://img.shields.io/badge/paper-IUCr%20oc5041-blue)](https://journals.iucr.org/paper?oc5041)
 
 > 纤维衍射图谱指标化平台  

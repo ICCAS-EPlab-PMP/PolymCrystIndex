@@ -6,14 +6,14 @@
 |------|---------|------|
 | 操作系统 | Rocky 9 / Ubuntu 20.04+ / CentOS 7+ | 运行环境 |
 | Python | 3.9+ | 后端运行时 |
-| Node.js | 16+ | 构建 `Workspace/frontend` |
-| gfortran | 任意可用版本 | 编译 `Workspace/fortrancode` |
+| Node.js | 16+ | 构建 `frontend` |
+| gfortran | 任意可用版本 | 编译 `fortrancode` |
 
 ## 源码与安装语义
 
-- 仓库内唯一权威源码入口：`Workspace/`
-- Linux 部署脚本入口：`Workspace/deploy/server/*.sh`
-- 安装后保持 Workspace 语义：`/opt/polycryindex/Workspace/...`
+- 当前 GitHub 仓库根目录就是源码入口
+- Linux 部署脚本入口：`deploy/server/*.sh`
+- 安装目标目录仍保持 Workspace 语义：`/opt/polycryindex/Workspace/...`
 - `APP_PROFILE` 是主 profile 入口；Linux 部署固定写入 `APP_PROFILE=cloud`
 - `APP_ENV` 仅保留兼容；默认写入 `beta`
 
@@ -49,20 +49,20 @@
 ### root / systemd 方式
 
 ```bash
-cd Workspace/deploy/server
+cd deploy/server
 sudo APP_PROFILE=cloud bash ./deploy_linux.sh
 ```
 
 ### 当前用户方式
 
 ```bash
-cd Workspace/deploy/server
+cd deploy/server
 APP_PROFILE=cloud bash ./install_user_linux.sh
 ```
 
 脚本会自动完成：
 
-1. 从当前仓库 `Workspace/` 复制源码到安装目录中的 `Workspace/`
+1. 从当前仓库根目录复制源码到安装目录中的 `Workspace/`
 2. 创建 `venv/` 并安装 `Workspace/backend/requirements.txt`
 3. 编译 `Workspace/fortrancode/` 中的 Fortran 程序
 4. 以 `VITE_APP_PROFILE=cloud` 构建 `Workspace/frontend/`
@@ -72,8 +72,8 @@ APP_PROFILE=cloud bash ./install_user_linux.sh
 ## 手动部署要点
 
 ```bash
-sudo mkdir -p /opt/polycryindex
-sudo cp -r Workspace /opt/polycryindex/
+sudo mkdir -p /opt/polycryindex/Workspace
+sudo rsync -a ./ /opt/polycryindex/Workspace/
 cd /opt/polycryindex
 python3 -m venv venv
 source venv/bin/activate
@@ -99,7 +99,7 @@ APP_PROFILE=cloud VITE_APP_PROFILE=cloud npm run build
 
 ## systemd 路径
 
-模板文件位于仓库：`Workspace/deploy/systemd/polycryindex.service`
+模板文件位于仓库：`deploy/systemd/polycryindex.service`
 
 关键路径：
 
@@ -130,7 +130,7 @@ journalctl -u polycryindex --since "1 hour ago"
 
 | 问题 | 排查方法 |
 |------|---------|
-| Fortran 找不到 | 检查 `Workspace/backend/.env` 中的 Fortran 路径 |
+| Fortran 找不到 | 检查 `/opt/polycryindex/Workspace/backend/.env` 中的 Fortran 路径 |
 | 权限不足 | 检查 `/opt/polycryindex/Workspace/backend/` 与 `/opt/polycryindex/logs/` 权限 |
 | 端口被占用 | `lsof -i :8000` |
 | 前端 404 | 确认 `Workspace/frontend/dist/` 已构建 |

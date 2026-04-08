@@ -23,7 +23,7 @@
 | `fiber_diffraction_indexing/` | 可复用 Python 包与命令行能力 |
 | `pyside/` | 辅助前后处理与调试工具 |
 | `deploy/` | Linux 部署脚本、systemd 模板与运维文档 |
-| `docs/` | API、前后端与 Fortran 文档 |
+| `PROFILES.md` / `deploy/README.md` / `pyside/README.md` / `fiber_diffraction_indexing/docs/` | 运行配置、部署、辅助工具与 Python 包文档 |
 | `EXAMPLE/` | 示例数据与结果 |
 
 ### 0.2 阅读建议 / Reading Guide
@@ -230,9 +230,9 @@
 | `backend/.env.example` | 环境变量配置模板 |
 | `frontend/.env.production` | 前端生产环境变量 |
 | `deploy/README.md` | 部署指南 |
-| `deploy/deploy.sh` | 自动化部署脚本 |
+| `deploy/server/deploy_linux.sh` | root/systemd 部署脚本 |
+| `deploy/server/install_user_linux.sh` | 当前用户部署脚本 |
 | `deploy/systemd/polycryindex.service` | systemd 服务单元 |
-| `fortrancode/COMPILE.md` | Fortran 编译指南 |
 
 ---
 
@@ -263,15 +263,17 @@ Levenberg-Marquardt 优化算法实现，包含主程序 `lm_opt2`/`lm_opt2.exe`
 | `scripts/diffraction_fiber.py` | 衍射计算脚本 |
 | `scripts/initial.py` | 初始参数生成脚本 |
 | `scripts/sort.py` | 排序工具脚本 |
-| `tests/` | 测试目录 |
 
-### 3.3 `docs/` - 项目文档
+### 3.3 文档与配置说明
 
 | 文件 | 功能说明 |
 |-----|---------|
-| `FRONTEND_BACKEND_MANUAL.md` | 前后端详细开发手册 |
-| `API_DOCUMENTATION.md` | API 端点完整文档 |
-| `FORTRAN_MANUAL.md` | Fortran 算法说明 |
+| `Reference.md` | 仓库总体参考文档 |
+| `PROFILES.md` | 本地 / 云端 profile 与环境变量行为说明 |
+| `deploy/README.md` | Linux 部署与运维说明 |
+| `pyside/README.md` | PySide 工具与打包说明 |
+| `fiber_diffraction_indexing/docs/user_guide.md` | Python 指标化包使用指南 |
+| `fiber_diffraction_indexing/docs/api_reference.md` | Python 指标化包 API 参考 |
 
 ### 3.4 `frontend/` - 前端资源
 
@@ -298,7 +300,8 @@ Levenberg-Marquardt 优化算法实现，包含主程序 `lm_opt2`/`lm_opt2.exe`
 | 目录/文件 | 功能说明 |
 |----------|---------|
 | `deploy/README.md` | 部署指南（环境要求、步骤、配置说明、问题排查） |
-| `deploy/deploy.sh` | 自动化部署脚本（创建目录、安装依赖、构建前端、配置 systemd） |
+| `deploy/server/deploy_linux.sh` | root/systemd 模式部署脚本 |
+| `deploy/server/install_user_linux.sh` | 当前用户模式部署脚本 |
 | `deploy/systemd/polycryindex.service` | systemd 服务单元文件 |
 
 ### 3.7 根目录目录/文件
@@ -307,10 +310,10 @@ Levenberg-Marquardt 优化算法实现，包含主程序 `lm_opt2`/`lm_opt2.exe`
 |----------|---------|
 | `EXAMPLE/` | 示例数据目录 |
 | `icon/` | 应用图标资源 |
-| `figures/` | 根级图表输出目录 |
+| `.github/` | GitHub Actions 等仓库自动化配置 |
+| `PROFILES.md` | profile 与环境配置说明 |
+| `Reference.md` | 结构化参考文档 |
 | `README.md` | 项目说明 |
-| `WHITELIST.md` | 白名单说明 |
-| `manual.md` | 使用手册 |
 
 ---
 

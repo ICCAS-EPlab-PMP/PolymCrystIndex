@@ -158,9 +158,7 @@ If this project contributes to your research, please cite:
 论文链接 / Paper link: https://journals.iucr.org/paper?oc5041
 
 ```text
-Ma, T., Hu, W., Wang, D. & Liu, G. (2025).
-PolymCrystIndex: A fiber diffraction pattern indexing platform.
-J. Appl. Cryst. 58, 759-767.
+Ma, T., Hu, W., Wang, D. & Liu, G. (2025). PolymCrystIndex: A fiber diffraction pattern indexing platform. J. Appl. Cryst. 58, 759-767.
 ```
 
 ## 产权、维护与机构信息 / Ownership, Maintenance, and Institutional Links

@@ -120,6 +120,9 @@ The `EXAMPLE/` directory contains a reproducible example based on an HDPE fiber 
 
 Users are encouraged to start directly with `EXAMPLE/` to get familiar with the overall flow from sample data to result files. Video walkthroughs will be added in the future.
 
+**说明：HDPE 因其晶胞过小且反射数据稀疏，是本程序处理中最具挑战性的案例（尽管其结构研究历史悠久）。**
+**Note: Despite its long history in structural studies, HDPE poses a significant challenge for the current workflow due to its exceptionally small unit cell and sparse reflections.**
+
 ### PCL 指标化分析结果（北京高能光源 HEPS-ID08）：
 
 ### PCL indexing analysis results from HEPS ID08

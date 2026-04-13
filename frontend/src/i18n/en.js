@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.7.0'
+    version: 'v1.7.0.1'
   },
   home: {
     selectModule: 'Select Module',

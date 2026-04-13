@@ -1,4 +1,5 @@
 """Application configuration settings."""
+
 import os
 import platform
 from pathlib import Path
@@ -21,7 +22,10 @@ def _default_postprocess_executable() -> str:
 
 
 def _resolve_profile() -> str:
-    profile = os.getenv("APP_PROFILE", "").strip().lower() or os.getenv("PROFILE", "").strip().lower()
+    profile = (
+        os.getenv("APP_PROFILE", "").strip().lower()
+        or os.getenv("PROFILE", "").strip().lower()
+    )
     if profile in ("local", "cloud"):
         return profile
 
@@ -39,7 +43,7 @@ class Settings(BaseSettings):
     """
 
     PROJECT_NAME: str = "PolymCrystIndex API"
-    VERSION: str = "1.7.0"
+    VERSION: str = "1.7.0.1"
     API_PREFIX: str = "/api"
 
     # --- Profile ---
@@ -136,8 +140,10 @@ settings = get_settings()
 def ensure_directories() -> None:
     """Ensure all required directories exist."""
     for dir_path in [
-        settings.UPLOAD_DIR, settings.RESULT_DIR,
-        settings.HDF5_DIR, settings.WORKING_DIR,
+        settings.UPLOAD_DIR,
+        settings.RESULT_DIR,
+        settings.HDF5_DIR,
+        settings.WORKING_DIR,
         settings.USER_RESULT_DIR,
     ]:
         Path(dir_path).mkdir(parents=True, exist_ok=True)

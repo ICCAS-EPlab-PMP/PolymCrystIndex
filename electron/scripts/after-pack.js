@@ -1,6 +1,8 @@
 const fs = require('fs')
 const path = require('path')
 
+const packageMetadata = require('../package.json')
+
 function normalizeWindowsVersion(version) {
   const segments = String(version)
     .split('.')
@@ -21,7 +23,7 @@ module.exports = async function afterPack(context) {
   }
 
   const productFilename = context.packager.appInfo.productFilename
-  const appVersion = context.packager.appInfo.version
+  const appVersion = packageMetadata.polymcrystindexDisplayVersion || context.packager.appInfo.version
   const appVersionWindows = normalizeWindowsVersion(appVersion)
   const executablePath = path.join(context.appOutDir, `${productFilename}.exe`)
   const iconPath = path.resolve(__dirname, '..', '..', 'icon', 'polymindex.ico')

@@ -1,8 +1,11 @@
 const fs = require('fs')
 const path = require('path')
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const packageMetadata = require('./package.json')
 
 const backendManager = require('./backend-manager')
+
+const DISPLAY_VERSION = packageMetadata.polymcrystindexDisplayVersion || app.getVersion()
 
 let mainWindow = null
 let shuttingDown = false
@@ -97,7 +100,7 @@ async function shutdownBackend() {
 }
 
 ipcMain.handle('app:get-runtime-info', async () => ({
-  appVersion: app.getVersion(),
+  appVersion: DISPLAY_VERSION,
   backendStatus: backendManager.getStatus(),
   isPackaged: app.isPackaged,
 }))

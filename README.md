@@ -1,6 +1,6 @@
 # PolymCrystIndex
 
-[![Release](https://img.shields.io/badge/release-windowsV17-blue)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/tag/windowsV17)
+[![Release](https://img.shields.io/badge/release-v1.7.0.1-blue)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases)
 [![Homepage](https://img.shields.io/badge/homepage-polymcrystal.com-0a7cff)](http://www.polymcrystal.com)
 [![Preview](https://img.shields.io/badge/preview-index.polymcrystal.com-6f42c1)](http://index.polymcrystal.com)
 [![Paper](https://img.shields.io/badge/paper-IUCr%20oc5041-blue)](https://journals.iucr.org/paper?oc5041)
@@ -64,7 +64,7 @@ PolymCrystIndex provides an end-to-end workflow for fiber diffraction analysis, 
 http://www.polymcrystal.com/download/PolymCrystindexsetup.zip
 
 **国际下载 / International release**  
-https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/download/windowsV17/PolymCrystIndex.Setup.1.7.0.exe
+https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/latest
 
 下载后运行安装程序即可。建议使用发布包而不是自行拼装运行环境。
 

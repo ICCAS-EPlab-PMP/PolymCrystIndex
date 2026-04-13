@@ -737,7 +737,7 @@ onMounted(async () => {
     status.pyfai = data.pyfai
     setStatus(`Backend connected — pyFAI: ${data.pyfai ? '✓' : '✗'}  fabio: ${data.fabio ? '✓' : '✗'}`)
   } catch {
-    setStatus('⚠ Cannot connect to backend, please confirm FastAPI is running (http://localhost:8000)')
+    setStatus('⚠ Cannot connect to backend, please confirm the backend is running')
   }
 })
 </script>

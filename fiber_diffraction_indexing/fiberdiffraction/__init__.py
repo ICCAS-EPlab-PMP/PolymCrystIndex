@@ -18,39 +18,39 @@ Fiber Diffraction Indexing 包
 用法示例：
     # 命令行
     python -m fiberdiffraction -i input.txt -d diffraction.txt
-    
+
     # Python API - 基本流程
     from fiberdiffraction import FiberDiffractionIndexer
-    
+
     indexer = FiberDiffractionIndexer("input.txt", "diffraction.txt")
     indexer.run()
-    
+
     # Python API - HDF5 模式
     indexer = FiberDiffractionIndexer("input.txt", "diffraction.txt",
                                       use_hdf5=True, hdf5_file="results.h5")
     indexer.run()
-    
+
     # Python API - GUI 回调
     from fiberdiffraction import IndexingCallback, FiberDiffractionIndexer
-    
+
     class MyGUI(IndexingCallback):
         def on_progress(self, step, message):
             # 更新 GUI 进度条
             pass
-    
+
     indexer = FiberDiffractionIndexer("input.txt", "diffraction.txt", callback=MyGUI())
     indexer.run()
-    
+
     # Python API - 单独使用配置
     from fiberdiffraction import InputConfig
-    
+
     config = InputConfig("input.txt")
     print(config.population_size)
     print(config.parameter_min)
-    
+
     # Python API - 绘图
     from fiberdiffraction import HDF5Manager, Plotter
-    
+
     hdf5 = HDF5Manager("results.h5", mode='r')
     plotter = Plotter(hdf5)
     plotter.plot_timing()
@@ -58,7 +58,7 @@ Fiber Diffraction Indexing 包
     hdf5.close()
 """
 
-__version__ = "1.7.0"
+__version__ = "1.7.0.1"
 __author__ = "POLYCRYSTINDEX Team"
 __email__ = "polycrystindex@example.com"
 __license__ = "MIT"
@@ -70,7 +70,12 @@ from .genetic import GeneticEngine
 from .fortran import FortranCaller
 from .fileio import FileManager
 from .indexer import FiberDiffractionIndexer
-from .callbacks import IndexingCallback, DefaultCallback, SilentCallback, CallbackAdapter
+from .callbacks import (
+    IndexingCallback,
+    DefaultCallback,
+    SilentCallback,
+    CallbackAdapter,
+)
 from .hdf5 import HDF5Manager
 from .plotter import Plotter
 from .cli import main
@@ -83,19 +88,15 @@ __all__ = [
     "FortranCaller",
     "FileManager",
     "FiberDiffractionIndexer",
-    
     # 回调接口
     "IndexingCallback",
     "DefaultCallback",
     "SilentCallback",
     "CallbackAdapter",
-    
     # HDF5
     "HDF5Manager",
-    
     # 绘图
     "Plotter",
-    
     # CLI
     "main",
 ]

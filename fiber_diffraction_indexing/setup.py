@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="fiber-diffraction-indexing",
-    version="1.7.0",
+    version="1.7.0.1",
     author="POLYCRYSTINDEX Team",
     author_email="polycrystindex@example.com",
     description="A global optimization approach to automated indexing of fiber diffraction patterns",

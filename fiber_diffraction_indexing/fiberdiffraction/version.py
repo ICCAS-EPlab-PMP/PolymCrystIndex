@@ -2,13 +2,15 @@
 Fiber Diffraction Indexing 版本信息。
 """
 
-VERSION = "1.7.0"
+VERSION = "1.7.0.1"
 RELEASE_DATE = "2026.02.28"
 PROGRAM_NAME = "POLYCRYSTINDEX"
+
 
 def get_version_string():
     """获取格式化的版本字符串。"""
     return f"{PROGRAM_NAME} VERSION {VERSION} RELEASE in {RELEASE_DATE}"
+
 
 def get_citation():
     """获取引用信息。"""

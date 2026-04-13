@@ -3,6 +3,7 @@ param(
     [switch]$ForceRebuildPython,
     [switch]$SkipFrontendBuild,
     [switch]$SkipSmokeTest,
+    [switch]$ExtendedSmokeTest,
     [string]$PythonVersion = '3.11.9'
 )
 
@@ -20,6 +21,13 @@ $electronExecuteRoot = Join-Path $executeRoot 'electron'
 $distRoot = Join-Path $electronExecuteRoot 'dist'
 $smokeOutput = Join-Path $electronExecuteRoot 'smoke-test.json'
 $stageWorkspaceRoot = Join-Path $electronExecuteRoot 'stage\workspace'
+
+if (Test-Path $distRoot) {
+    Remove-Item -Path (Join-Path $distRoot '*') -Recurse -Force
+}
+else {
+    New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
+}
 
 function Invoke-CheckedCommand {
     param(
@@ -161,4 +169,8 @@ finally {
 
 if (-not $SkipSmokeTest) {
     Invoke-ElectronSmokeTest
+}
+
+if ($ExtendedSmokeTest) {
+    & (Join-Path $scriptRoot 'smoke-port-test.ps1') -All -OutputDir $electronExecuteRoot
 }

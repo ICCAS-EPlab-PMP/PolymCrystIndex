@@ -32,8 +32,8 @@ export const requiresAuth = () => {
 }
 
 export const getApiBase = () => {
-  // Local profile always uses localhost
-  if (isLocalProfile()) return 'http://localhost:8000/api'
+  // Local profile uses same-origin relative path
+  if (isLocalProfile()) return '/api'
   
   // Cloud profile uses env config or relative path
   const envBase = import.meta.env.VITE_API_BASE_URL

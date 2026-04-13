@@ -1,18 +1,67 @@
 const fs = require('fs')
 const http = require('http')
+const net = require('net')
 const path = require('path')
 const { spawn } = require('child_process')
 
-const DEFAULT_PORT = Number(process.env.POLYCRYINDEX_BACKEND_PORT || 8000)
+const DESKTOP_PREFERRED_PORT = 18700
+const PORT_SCAN_WINDOW = 20
 const HEALTH_TIMEOUT_MS = 45000
 const HEALTH_RETRY_MS = 1000
+
+// Parse optional env-var override for preferred start port
+let preferredStart = DESKTOP_PREFERRED_PORT
+if (process.env.POLYCRYINDEX_BACKEND_PORT) {
+  const envPort = Number(process.env.POLYCRYINDEX_BACKEND_PORT)
+  if (!Number.isInteger(envPort) || envPort < 1 || envPort > 65535) {
+    throw new Error(
+      `POLYCRYINDEX_BACKEND_PORT 必须为 1-65535 之间的整数，当前值: ${process.env.POLYCRYINDEX_BACKEND_PORT}`
+    )
+  }
+  preferredStart = envPort
+}
+
+/**
+ * Probe whether a TCP port is free on the given host.
+ * Returns true if the port is available, false if occupied.
+ */
+function probePort(host, port) {
+  return new Promise((resolve) => {
+    const server = net.createServer()
+    server.once('error', () => resolve(false))
+    server.once('listening', () => {
+      server.close()
+      resolve(true)
+    })
+    server.listen(port, host)
+  })
+}
+
+/**
+ * Scan ports from preferredStart to preferredStart + windowSize - 1.
+ * Returns the first free port, or throws if all are occupied.
+ */
+async function findFreePort(preferredStart, windowSize) {
+  const host = '127.0.0.1'
+  for (let offset = 0; offset < windowSize; offset++) {
+    const port = preferredStart + offset
+    if (port > 65535) break
+    if (await probePort(host, port)) {
+      return port
+    }
+  }
+  const rangeEnd = Math.min(preferredStart + windowSize - 1, 65535)
+  throw new Error(
+    `没有可用端口 (扫描范围: ${preferredStart}-${rangeEnd})，请关闭占用端口的其他程序后重试`
+  )
+}
 
 let backendProcess = null
 let stoppingBackend = false
 let backendState = {
-  port: DEFAULT_PORT,
-  appUrl: `http://127.0.0.1:${DEFAULT_PORT}`,
-  healthUrl: `http://127.0.0.1:${DEFAULT_PORT}/health`,
+  port: null,
+  appUrl: null,
+  healthUrl: null,
   started: false,
   pid: null,
   workspaceRoot: null,
@@ -121,10 +170,13 @@ async function startBackend({ packaged }) {
   ensurePathExists(frontendDist, 'frontend dist')
   ensurePathExists(fortranRoot, 'fortrancode 目录')
 
+  const port = await findFreePort(preferredStart, PORT_SCAN_WINDOW)
+  process.stdout.write(`[backend] Using port ${port} (preferred: ${preferredStart})\n`)
+
   backendState = {
-    port: DEFAULT_PORT,
-    appUrl: `http://127.0.0.1:${DEFAULT_PORT}`,
-    healthUrl: `http://127.0.0.1:${DEFAULT_PORT}/health`,
+    port,
+    appUrl: `http://127.0.0.1:${port}`,
+    healthUrl: `http://127.0.0.1:${port}/health`,
     started: false,
     pid: null,
     workspaceRoot,
@@ -134,7 +186,7 @@ async function startBackend({ packaged }) {
 
   backendProcess = spawn(
     pythonCommand,
-    ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(DEFAULT_PORT)],
+    ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
     {
       cwd: backendRoot,
       env: {

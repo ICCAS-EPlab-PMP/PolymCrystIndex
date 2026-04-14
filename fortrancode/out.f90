@@ -437,7 +437,7 @@ program LMfit
         do i=1,diffraction_num
             write(5,*) Miller_trans(i,1),Miller_trans(i,2),Miller_trans(i,3),Miller_trans(i,4),Miller_trans(i,5)*180/3.141592653589
         end do
-        write(5,*) "volume:",Miller_trans(1,6)
+        write(5,*) "volume:",Miller_trans(1,7)
     end if
     
     close(5)!关闭文件

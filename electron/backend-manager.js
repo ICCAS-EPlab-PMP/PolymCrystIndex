@@ -58,6 +58,8 @@ async function findFreePort(preferredStart, windowSize) {
 
 let backendProcess = null
 let stoppingBackend = false
+let backendExitInfo = null
+let backendStderrTail = ''
 let backendState = {
   port: null,
   appUrl: null,
@@ -67,6 +69,26 @@ let backendState = {
   workspaceRoot: null,
   runtimeRoot: null,
   backendRoot: null,
+  runtimeDataDir: null,
+}
+
+function appendBackendStderr(chunk) {
+  const text = chunk.toString()
+  backendStderrTail = `${backendStderrTail}${text}`.slice(-8000)
+}
+
+function buildBackendExitError() {
+  if (!backendExitInfo) {
+    return null
+  }
+
+  const suffix = backendStderrTail.trim()
+    ? `\n\n后端错误输出:\n${backendStderrTail.trim()}`
+    : ''
+
+  return new Error(
+    `本地后端进程已提前退出 (code=${backendExitInfo.code}, signal=${backendExitInfo.signal || 'none'})${suffix}`
+  )
 }
 
 function resolveWorkspaceRoot(packaged) {
@@ -142,6 +164,11 @@ async function waitForHealth(healthUrl) {
   let lastError = null
 
   while (Date.now() < deadline) {
+    const exitError = buildBackendExitError()
+    if (exitError && !stoppingBackend) {
+      throw exitError
+    }
+
     try {
       return await httpGetJson(healthUrl)
     } catch (error) {
@@ -150,10 +177,15 @@ async function waitForHealth(healthUrl) {
     }
   }
 
+  const exitError = buildBackendExitError()
+  if (exitError && !stoppingBackend) {
+    throw exitError
+  }
+
   throw new Error(`本地后端健康检查超时: ${lastError ? lastError.message : 'unknown error'}`)
 }
 
-async function startBackend({ packaged }) {
+async function startBackend({ packaged, userDataDir }) {
   if (backendProcess && backendState.started) {
     return backendState
   }
@@ -164,14 +196,24 @@ async function startBackend({ packaged }) {
   const frontendDist = path.join(workspaceRoot, 'frontend', 'dist', 'index.html')
   const fortranRoot = path.join(workspaceRoot, 'fortrancode')
   const pythonCommand = resolvePythonCommand(runtimeRoot)
+  const runtimeDataDir = packaged ? path.join(userDataDir, 'backend-runtime') : null
 
   ensurePathExists(workspaceRoot, 'Workspace 根目录')
   ensurePathExists(backendRoot, 'backend 目录')
   ensurePathExists(frontendDist, 'frontend dist')
   ensurePathExists(fortranRoot, 'fortrancode 目录')
+  if (runtimeDataDir) {
+    fs.mkdirSync(runtimeDataDir, { recursive: true })
+  }
 
   const port = await findFreePort(preferredStart, PORT_SCAN_WINDOW)
   process.stdout.write(`[backend] Using port ${port} (preferred: ${preferredStart})\n`)
+  if (runtimeDataDir) {
+    process.stdout.write(`[backend] Using runtime data directory ${runtimeDataDir}\n`)
+  }
+
+  backendExitInfo = null
+  backendStderrTail = ''
 
   backendState = {
     port,
@@ -182,6 +224,7 @@ async function startBackend({ packaged }) {
     workspaceRoot,
     runtimeRoot,
     backendRoot,
+    runtimeDataDir,
   }
 
   backendProcess = spawn(
@@ -197,6 +240,7 @@ async function startBackend({ packaged }) {
         AUTH_DISABLED: process.env.AUTH_DISABLED || 'true',
         LOCAL_USERNAME: process.env.LOCAL_USERNAME || 'localuser',
         LOCAL_DISPLAY_NAME: process.env.LOCAL_DISPLAY_NAME || 'Local Researcher',
+        POLYCRYINDEX_RUNTIME_DATA_DIR: runtimeDataDir || '',
       },
       windowsHide: true,
     }
@@ -209,10 +253,12 @@ async function startBackend({ packaged }) {
   })
 
   backendProcess.stderr.on('data', (chunk) => {
+    appendBackendStderr(chunk)
     process.stderr.write(`[backend] ${chunk}`)
   })
 
   backendProcess.once('exit', (code, signal) => {
+    backendExitInfo = { code, signal }
     backendState.started = false
     backendState.pid = null
     backendProcess = null
@@ -256,6 +302,7 @@ async function stopBackend() {
   backendProcess = null
   backendState.started = false
   backendState.pid = null
+  backendState.runtimeDataDir = null
 }
 
 function getStatus() {

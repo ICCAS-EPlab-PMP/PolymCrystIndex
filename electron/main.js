@@ -66,7 +66,10 @@ function createMainWindow() {
 }
 
 async function loadApplication() {
-  const backendInfo = await backendManager.startBackend({ packaged: app.isPackaged })
+  const backendInfo = await backendManager.startBackend({
+    packaged: app.isPackaged,
+    userDataDir: app.getPath('userData'),
+  })
   if (isSmokeTestMode()) {
     writeSmokeTestResult({ ok: true, packaged: app.isPackaged, backendInfo })
     return

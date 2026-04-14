@@ -9,6 +9,13 @@ from pydantic_settings import BaseSettings
 BACKEND_DIR = Path(__file__).parent.parent
 _PROJECT_ROOT = BACKEND_DIR.parent
 _IS_WIN = platform.system() == "Windows"
+_RUNTIME_DATA_ROOT_ENV = os.getenv("POLYCRYINDEX_RUNTIME_DATA_DIR", "").strip()
+_RUNTIME_DATA_ROOT = Path(_RUNTIME_DATA_ROOT_ENV) if _RUNTIME_DATA_ROOT_ENV else None
+
+
+def _runtime_data_path(relative_name: str, fallback_root: Path) -> str:
+    root = _RUNTIME_DATA_ROOT or fallback_root
+    return str(root / relative_name)
 
 
 def _default_fortran_executable() -> str:
@@ -69,17 +76,17 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:5173"]
 
     # --- Database ---
-    USER_DB_PATH: str = str(BACKEND_DIR / "users.db")
+    USER_DB_PATH: str = _runtime_data_path("users.db", BACKEND_DIR)
 
     # --- Admin ---
     DEFAULT_ADMIN_USERNAME: str = "admin"
     DEFAULT_ADMIN_PASSWORD: str = "admin123"
 
     # --- Directories ---
-    UPLOAD_DIR: str = str(BACKEND_DIR / "temp")
-    RESULT_DIR: str = str(BACKEND_DIR / "result")
-    HDF5_DIR: str = str(BACKEND_DIR / "hdf5")
-    USER_RESULT_DIR: str = str(BACKEND_DIR / "userresult")
+    UPLOAD_DIR: str = _runtime_data_path("temp", BACKEND_DIR)
+    RESULT_DIR: str = _runtime_data_path("result", BACKEND_DIR)
+    HDF5_DIR: str = _runtime_data_path("hdf5", BACKEND_DIR)
+    USER_RESULT_DIR: str = _runtime_data_path("userresult", BACKEND_DIR)
 
     # --- Limits ---
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024
@@ -90,7 +97,7 @@ class Settings(BaseSettings):
     # --- Fortran ---
     FORTRAN_EXECUTABLE: str = _default_fortran_executable()
     FORTRAN_POSTPROCESS_EXECUTABLE: str = _default_postprocess_executable()
-    WORKING_DIR: str = str(BACKEND_DIR / "workdir")
+    WORKING_DIR: str = _runtime_data_path("workdir", BACKEND_DIR)
 
     class Config:
         env_file = ".env"

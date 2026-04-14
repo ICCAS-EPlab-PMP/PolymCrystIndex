@@ -269,7 +269,12 @@
       </div>
     </div>
 
-    <div class="actions">
+    <div class="actions-bar">
+      <p v-if="saveNotice" class="save-notice" role="status" aria-live="polite">
+        {{ saveNotice }}
+      </p>
+
+      <div class="actions">
       <button class="btn-secondary" @click="resetParams">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="1,4 1,10 7,10"/>
@@ -285,12 +290,13 @@
           <polyline points="7,3 7,8 15,8"/>
         </svg>
       </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, computed, watch, ref, onMounted } from 'vue'
+import { reactive, computed, watch, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/index'
 
@@ -346,6 +352,8 @@ const expandedSections = reactive({
 })
 
 const adminMaxOmpThreads = ref(null)
+const saveNotice = ref('')
+let saveNoticeTimer = null
 
 const effectiveOmpMax = computed(() => adminMaxOmpThreads.value || 256)
 
@@ -362,6 +370,12 @@ const fetchAdminOmpLimit = async () => {
 
 onMounted(() => {
   fetchAdminOmpLimit()
+})
+
+onBeforeUnmount(() => {
+  if (saveNoticeTimer) {
+    clearTimeout(saveNoticeTimer)
+  }
 })
 
 watch(() => props.params, (newParams) => {
@@ -391,7 +405,17 @@ const resetParams = () => {
 
 const saveParams = () => {
   Object.assign(props.params, localParams)
-  alert(t('params.saved'))
+  saveNotice.value = t('params.saved')
+  if (typeof window !== 'undefined') {
+    window.$toast?.(saveNotice.value)
+  }
+  if (saveNoticeTimer) {
+    clearTimeout(saveNoticeTimer)
+  }
+  saveNoticeTimer = setTimeout(() => {
+    saveNotice.value = ''
+    saveNoticeTimer = null
+  }, 3000)
 }
 </script>
 
@@ -798,10 +822,24 @@ const saveParams = () => {
   font-size: 0.875rem;
 }
 
+.actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.save-notice {
+  margin: 0;
+  color: var(--success, #15803d);
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 .btn-secondary,

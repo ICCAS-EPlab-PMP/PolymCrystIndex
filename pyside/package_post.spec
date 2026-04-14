@@ -95,8 +95,8 @@ binaries = _dedupe(binaries)
 hiddenimports = sorted(set(hiddenimports))
 
 a = Analysis(
-    ['post/silxversion/post16.py'],
-    pathex=[str(spec_root), str(spec_root / 'post' / 'silxversion')],
+    ['post/pyside6/post16.py'],
+    pathex=[str(spec_root), str(spec_root / 'post' / 'pyside6')],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

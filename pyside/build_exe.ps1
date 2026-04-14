@@ -39,7 +39,6 @@ function Invoke-PyInstallerBuild {
             '--clean',
             '--distpath', $DistRoot,
             '--workpath', $BuildRoot,
-            '--specpath', $SpecOutRoot,
             $SpecPath
         )
     }
@@ -140,7 +139,7 @@ function Invoke-PackageTarget {
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $pysideRoot = Resolve-Path $scriptRoot
-$repoRoot = Resolve-Path (Join-Path $pysideRoot '..')
+$repoRoot = Resolve-Path (Join-Path $pysideRoot '..\..')
 $venvRoot = Join-Path $pysideRoot '.venv-build'
 $venvPython = Join-Path $venvRoot 'Scripts\python.exe'
 $executeRoot = Join-Path $repoRoot 'execute\pyside'
@@ -159,7 +158,7 @@ if (-not (Test-Path $venvPython)) {
 Invoke-Step $venvPython @('-m', 'pip', 'install', '--upgrade', 'pip')
 Invoke-Step $venvPython @('-m', 'pip', 'install', 'PyInstaller', 'pyinstaller-hooks-contrib', 'hdf5plugin')
 Invoke-Step $venvPython @('-m', 'pip', 'install', '-r', (Join-Path $pysideRoot 'previous\requirements.txt'))
-Invoke-Step $venvPython @('-m', 'pip', 'install', '-r', (Join-Path $pysideRoot 'post\silxversion\requirements.txt'))
+Invoke-Step $venvPython @('-m', 'pip', 'install', '-r', (Join-Path $pysideRoot 'post\pyside6\requirements.txt'))
 
 New-Item -ItemType Directory -Force -Path $distRoot, $buildRoot, $specOutRoot, $winExeRoot | Out-Null
 

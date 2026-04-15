@@ -235,7 +235,7 @@ const startAnalysis = async () => {
     logs.value.push('[System] Starting analysis...')
     await scrollToBottom()
     
-    const runResult = await api.runAnalysis(uploadResult.data.filename, props.params)
+    const runResult = await api.runAnalysis(uploadResult.data.path, props.params)
     if (!runResult.success) {
       throw new Error(runResult.message || 'Failed to start analysis')
     }

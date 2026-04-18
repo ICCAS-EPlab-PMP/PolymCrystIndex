@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.7.0.1'
+    version: 'v1.8.0'
   },
   home: {
     selectModule: '选择功能模块',
@@ -28,6 +28,16 @@ export default {
       title: '指标化程序',
       desc: '基于遗传算法的晶体结构索引和晶胞参数优化'
     },
+    glide: {
+      title: 'GLIDE 滑移分析',
+      desc: '对晶胞施加滑移剪切变换，批量生成多组 FullMiller 结果',
+      batchInput: '批量输入'
+    },
+    manual: {
+      title: '手动晶胞参数',
+      desc: '直接输入晶胞参数和波长，批量生成 FullMiller 结果',
+      batchInput: '批量输入'
+    },
     results: {
       title: '结果展现与处理',
       desc: '可视化分析结果，Miller索引标注',
@@ -45,6 +55,9 @@ export default {
   },
   nav: {
     return: '返回主页',
+    index: '指标化',
+    glide: 'GLIDE',
+    manual: '手动',
     dataImport: '数据导入',
     parameters: '参数设置',
     analysis: '运行分析',
@@ -153,6 +166,25 @@ export default {
     azimuth: '方位角 (E1)',
     qValue: 'Q值 (E2)',
     volume: '体积 (E3)',
+    glideTitle: 'Glide 剪切批次',
+    glideHint: '添加一组或多组 glide 参数。每组都会对优化后的晶胞施加剪切变换，并生成各自的 FullMiller.txt。l0 不能为 0。',
+    glideLabelPlaceholder: '例如 glide_01',
+    addGlideGroup: '新增 glide 组',
+    fixedPeakTitle: '固定峰约束',
+    fixedPeakToggle: '启用固定峰模式',
+    fixedPeakFormatLabel: 'peak_index h k l',
+    fixedPeakPlaceholder: '1 1 1 0\n3 2 0 1',
+    fixedPeakHint: '每行一个峰。格式为 peak_index h k l，其中 peak_index 对应观测衍射峰的序号。',
+    nearPeakMode: '近峰讨论模式',
+    nearPeakTqHint: '默认 0.2。近峰组内允许的最大 Δq。',
+    nearPeakTaHint: '默认 2.0。近峰组内允许的最大 Δangle。',
+    fixedPeakSummaryReady: '已准备 {count} 个固定峰。',
+    fixedPeakSummaryEmpty: '未提供固定峰文本。留空将禁用 fixhkl.txt。',
+    glideSummaryEmpty: '尚未配置 glide 组。分析将不会生成 glide-shear 批次。',
+    glideSummaryReady: '已配置 {count} 个 glide 组。',
+    glideSummaryInvalid: '警告：有 {count} 个分组的 l0 = 0（无效）。',
+    label: '标签',
+    remove: '移除',
     lmOptimization: 'LM 优化',
     pseudoOrth: '伪正交约束',
     tiltOpt: '倾斜优化',
@@ -227,7 +259,24 @@ export default {
     maxDeviationQ: '最大 Δq',
     maxDeviationQPoint: 'Δq 最大点 (hkl)',
     maxDeviationPsi: '最大 Δψ',
-    maxDeviationPsiPoint: 'Δψ 最大点 (hkl)'
+    maxDeviationPsiPoint: 'Δψ 最大点 (hkl)',
+    nearPeakTitle: '近峰讨论',
+    mode: '模式',
+    enabled: '已启用',
+    disabled: '未启用',
+    twoPeakGroups: '2 峰组',
+    fourPeakGroups: '4 峰组',
+    peaksLabel: '峰 {indices}',
+    hkRuleLabel: 'HK 规则',
+    passed: '通过',
+    failed: '未通过',
+    noNearPeakGroups: '当前阈值下没有匹配到 2 峰组或 4 峰组。',
+    glideTitle: 'Glide 剪切批次',
+    groupsLabel: '分组数',
+    batchRootLabel: '批次根目录',
+    fullMillerLabel: 'FullMiller',
+    outputMillerLabel: 'outputMiller',
+    cellLabel: '晶胞'
   },
   visualizer: {
     title: 'Miller 索引可视化',
@@ -625,5 +674,47 @@ export default {
     retry: '重试',
     active: '已启用',
     localMode: '本地研究模式'
+  },
+  glide: {
+    title: 'GLIDE 滑移分析',
+    subtitle: '输入基准晶胞参数和多组滑移剪切参数，批量生成 FullMiller 结果。',
+    baseCellParams: '基准晶胞参数',
+    glideShearGroups: '滑移剪切组',
+    label: '标签',
+    labelPlaceholder: '例如 glide_01',
+    nA: 'nA',
+    nATip: '沿 a 轴的滑移剪切分量（整数，可为负值）',
+    nB: 'nB',
+    nBTip: '沿 b 轴的滑移剪切分量（整数，可为负值）',
+    l0: 'l₀',
+    l0Tip: '滑移层数（整数，可为负值，不能为零）',
+    removeGroup: '移除该组',
+    addGroup: '新增滑移组',
+    generate: '生成 GLIDE 结果',
+    generating: '生成中...',
+    errorNoGroup: '至少需要一组 l₀ 不为零的滑移参数',
+    analysisComplete: 'GLIDE 分析完成：共 {count} 组',
+    baseCell: '基准晶胞',
+    cell: '晶胞',
+    volume: '体积',
+    reflections: '个反射',
+    download: '下载 FullMiller.txt',
+    generationFailed: 'GLIDE 生成失败',
+    requestFailed: '请求失败'
+  },
+  manual: {
+    title: '手动晶胞参数',
+    subtitle: '输入一组或多组晶胞参数和波长，批量生成 FullMiller.txt 结果。',
+    group: '第 {index} 组',
+    addGroup: '新增分组',
+    generate: '生成 FullMiller（{count} 组{plural}）',
+    generating: '生成中...',
+    download: '下载 FullMiller.txt',
+    generationFailed: '生成失败',
+    requestFailed: '请求失败',
+    someGroupsFailed: '部分分组失败',
+    volume: '体积',
+    cell: '晶胞',
+    reflections: '个反射'
   }
 }

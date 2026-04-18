@@ -1,20 +1,24 @@
 """Results response models."""
+
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 
 class CellParams(BaseModel):
     """Unit cell parameters."""
+
     a: float
     b: float
     c: float
     alpha: float
     beta: float
     gamma: float
+    volume: Optional[float] = None
 
 
 class MillerDataPoint(BaseModel):
     """Miller indices with diffraction data."""
+
     h: int
     k: int
     l: int
@@ -24,6 +28,7 @@ class MillerDataPoint(BaseModel):
 
 class MaxDeviationPoint(BaseModel):
     """Point with maximum deviation."""
+
     h: int
     k: int
     l: int
@@ -32,6 +37,7 @@ class MaxDeviationPoint(BaseModel):
 
 class QualityMetrics(BaseModel):
     """Quality metrics for fitting results."""
+
     rFactor: float
     maxDeviation: float
     maxDeviationPoint: MaxDeviationPoint
@@ -39,6 +45,7 @@ class QualityMetrics(BaseModel):
 
 class FilesInfo(BaseModel):
     """Output file information."""
+
     cellFile: str
     millerFile: str
     fullMillerFile: str
@@ -46,6 +53,7 @@ class FilesInfo(BaseModel):
 
 class ResultsResponse(BaseModel):
     """Full analysis results response."""
+
     success: bool = True
     data: Optional[dict] = None
     message: Optional[str] = None

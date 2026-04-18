@@ -491,7 +491,7 @@ write_total_time(total_time: float) -> None
 write_convergence(step: int, best_error: float, best_cell: List[float]) -> None
     """写入收敛数据"""
 
-write_metadata(version: str = "1.7.0.1") -> None
+write_metadata(version: str = "1.8.0") -> None
     """写入元数据"""
 ```
 

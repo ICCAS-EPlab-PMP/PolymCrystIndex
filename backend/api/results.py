@@ -1,4 +1,5 @@
 """Results API routes."""
+
 import os
 import shutil
 from typing import Optional
@@ -15,46 +16,38 @@ from services.indexing_service import IndexingService
 router = APIRouter(prefix="/results", tags=["Results"])
 
 
+def _existing_paths(*paths: str) -> list[str]:
+    return [path for path in paths if os.path.exists(path)]
+
+
 @router.get("", response_model=ResultsResponse)
 async def get_results(
     current_user: dict = Depends(get_current_user),
     task_manager: TaskManager = Depends(get_task_manager),
 ):
     """Get analysis results.
-    
+
     Returns the best unit cell parameters, Miller indices, and quality metrics.
     """
     tasks = await task_manager.list_user_tasks(current_user["username"])
-    
+
     if not tasks:
-        return ResultsResponse(
-            success=False,
-            message="No results found"
-        )
-    
+        return ResultsResponse(success=False, message="No results found")
+
     completed_tasks = [t for t in tasks if t.status.value == "completed"]
-    
+
     if not completed_tasks:
-        return ResultsResponse(
-            success=False,
-            message="No completed tasks found"
-        )
-    
+        return ResultsResponse(success=False, message="No completed tasks found")
+
     latest_task = completed_tasks[-1]
-    
+
     indexing_service = IndexingService(task_manager)
     results = await indexing_service.get_results(latest_task.id)
-    
+
     if not results:
-        return ResultsResponse(
-            success=False,
-            message="Results data not available"
-        )
-    
-    return ResultsResponse(
-        success=True,
-        data=results
-    )
+        return ResultsResponse(success=False, message="Results data not available")
+
+    return ResultsResponse(success=True, data=results)
 
 
 @router.get("/download")
@@ -65,93 +58,99 @@ async def download_results(
     task_manager: TaskManager = Depends(get_task_manager),
 ):
     """Download analysis results.
-    
+
     Args:
         type: Download type - "zip", "hdf5", "cell", or "miller"
         task_id: Optional specific task ID, uses latest if not provided
     """
     tasks = await task_manager.list_user_tasks(current_user["username"])
-    
+
     if not tasks:
         raise HTTPException(status_code=404, detail="No tasks found")
-    
+
     completed_tasks = [t for t in tasks if t.status.value == "completed"]
-    
+
     if not completed_tasks:
         raise HTTPException(status_code=404, detail="No completed tasks found")
-    
+
     if task_id:
         target_task = next((t for t in completed_tasks if t.id == task_id), None)
         if not target_task:
             raise HTTPException(status_code=404, detail="Task not found")
     else:
         target_task = completed_tasks[-1]
-    
+
     user_id = target_task.user_id or "anonymous"
-    user_result_dir = os.path.abspath(
-        os.path.join(settings.USER_RESULT_DIR, user_id)
-    )
+    user_result_dir = os.path.abspath(os.path.join(settings.USER_RESULT_DIR, user_id))
     work_dir = os.path.join(user_result_dir, target_task.id)
-    
+
     if type == "zip":
         archive_path = os.path.join(settings.RESULT_DIR, f"{target_task.id}.zip")
-        
+
         if not os.path.exists(archive_path):
             os.makedirs(settings.RESULT_DIR, exist_ok=True)
-            shutil.make_archive(
-                archive_path.replace('.zip', ''),
-                'zip',
-                work_dir
-            )
-        
+            shutil.make_archive(archive_path.replace(".zip", ""), "zip", work_dir)
+
         return FileResponse(
             archive_path,
             media_type="application/zip",
-            filename=f"results_{target_task.id}.zip"
+            filename=f"results_{target_task.id}.zip",
         )
-    
+
     elif type == "hdf5":
         hdf5_path = os.path.join(work_dir, "results.h5")
-        
+
         if not os.path.exists(hdf5_path):
             raise HTTPException(status_code=404, detail="HDF5 file not found")
-        
+
         return FileResponse(
             hdf5_path,
             media_type="application/x-hdf5",
-            filename=f"results_{target_task.id}.h5"
+            filename=f"results_{target_task.id}.h5",
         )
-    
+
     elif type == "cell":
-        cell_files = [f for f in os.listdir(work_dir) if f.startswith("cell_") and f.endswith("_annealing.txt")]
-        
-        if not cell_files:
+        result_dir = os.path.join(work_dir, "result")
+        search_dirs = [d for d in (work_dir, result_dir) if os.path.isdir(d)]
+        cell_candidates = []
+        for base_dir in search_dirs:
+            for file_name in os.listdir(base_dir):
+                if file_name.startswith("cell_") and file_name.endswith(
+                    ("_annealing.txt", ".txt")
+                ):
+                    cell_candidates.append(os.path.join(base_dir, file_name))
+
+        if not cell_candidates:
             raise HTTPException(status_code=404, detail="Cell file not found")
-        
-        latest_cell = sorted(cell_files)[-1]
-        cell_path = os.path.join(work_dir, latest_cell)
-        
+
+        cell_path = sorted(cell_candidates)[-1]
+
         return FileResponse(
-            cell_path,
-            media_type="text/plain",
-            filename=f"cell_{target_task.id}.txt"
+            cell_path, media_type="text/plain", filename=os.path.basename(cell_path)
         )
-    
+
     elif type == "miller":
-        output_miller = os.path.join(work_dir, "outputMiller.txt")
-        full_miller = os.path.join(work_dir, "FullMiller.txt")
-        miller_path = output_miller if os.path.exists(output_miller) else full_miller
-        
+        result_dir = os.path.join(work_dir, "result")
+        output_candidates = _existing_paths(
+            os.path.join(work_dir, "outputMiller.txt"),
+            os.path.join(result_dir, "outputMiller.txt"),
+        )
+        full_candidates = _existing_paths(
+            os.path.join(work_dir, "FullMiller.txt"),
+            os.path.join(result_dir, "FullMiller.txt"),
+        )
+        miller_path = (
+            output_candidates[0]
+            if output_candidates
+            else (full_candidates[0] if full_candidates else "")
+        )
+
         if not os.path.exists(miller_path):
             raise HTTPException(status_code=404, detail="Miller file not found")
-        
-        filename = "outputMiller.txt" if os.path.exists(output_miller) else "FullMiller.txt"
-        
+
         return FileResponse(
-            miller_path,
-            media_type="text/plain",
-            filename=f"miller_{target_task.id}.txt"
+            miller_path, media_type="text/plain", filename=os.path.basename(miller_path)
         )
-    
+
     else:
         raise HTTPException(status_code=400, detail=f"Unknown download type: {type}")

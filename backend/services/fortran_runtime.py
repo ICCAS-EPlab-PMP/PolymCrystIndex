@@ -41,7 +41,15 @@ def _update_runtime_settings(opt_path: Path, post_path: Path) -> None:
 
 
 def _configured_paths() -> Tuple[Path, Path]:
-    return Path(settings.FORTRAN_EXECUTABLE), Path(settings.FORTRAN_POSTPROCESS_EXECUTABLE)
+    return Path(settings.FORTRAN_EXECUTABLE), Path(
+        settings.FORTRAN_POSTPROCESS_EXECUTABLE
+    )
+
+
+def _prebuilt_paths() -> Tuple[Path, Path]:
+    opt_name, post_name = _binary_names()
+    runtime_dir = _fallback_output_dir()
+    return runtime_dir / opt_name, runtime_dir / post_name
 
 
 def _compile_binary(command: list[str], source_dir: Path, label: str) -> None:
@@ -64,6 +72,11 @@ def ensure_fortran_binaries() -> Tuple[Path, Path]:
         _update_runtime_settings(configured_opt, configured_post)
         return configured_opt, configured_post
 
+    prebuilt_opt, prebuilt_post = _prebuilt_paths()
+    if prebuilt_opt.exists() and prebuilt_post.exists():
+        _update_runtime_settings(prebuilt_opt, prebuilt_post)
+        return prebuilt_opt, prebuilt_post
+
     source_dir = _fortran_source_dir()
     if not source_dir.exists():
         raise RuntimeError(f"Fortran source directory not found: {source_dir}")
@@ -75,12 +88,11 @@ def ensure_fortran_binaries() -> Tuple[Path, Path]:
             "Please install gfortran or provide FORTRAN_EXECUTABLE / FORTRAN_POSTPROCESS_EXECUTABLE."
         )
 
-    opt_name, post_name = _binary_names()
     output_dir = _fallback_output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    opt_path = output_dir / opt_name
-    post_path = output_dir / post_name
+    opt_path = prebuilt_opt
+    post_path = prebuilt_post
 
     if not opt_path.exists():
         _compile_binary(

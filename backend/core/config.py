@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     """
 
     PROJECT_NAME: str = "PolymCrystIndex API"
-    VERSION: str = "1.7.0.1"
+    VERSION: str = "1.8.0"
     API_PREFIX: str = "/api"
 
     # --- Profile ---

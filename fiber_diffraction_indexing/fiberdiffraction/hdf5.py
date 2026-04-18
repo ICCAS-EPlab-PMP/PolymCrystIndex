@@ -39,7 +39,7 @@ HDF5 文件结构：
 import os
 import h5py
 import numpy as np
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 from datetime import datetime
 
 
@@ -92,9 +92,19 @@ class HDF5Manager:
         Returns:
             HDF5 组对象 / HDF5 group object
         """
+        assert self.h5file is not None
         if path in self.h5file:
-            return self.h5file[path]
+            return cast(h5py.Group, self.h5file[path])
         return self.h5file.create_group(path)
+
+    def _normalize_plot_image_name(self, name: str) -> str:
+        """规范化 PNG 名称 / Normalize PNG image name"""
+        normalized = name.strip().lower()
+        if normalized.endswith(".png"):
+            normalized = normalized[:-4]
+        if normalized == "timming":
+            return "timing"
+        return normalized
 
     def write_config(self, config_dict: Dict[str, Any]) -> None:
         """写入配置参数 / Write configuration parameters
@@ -157,7 +167,7 @@ class HDF5Manager:
             data = np.array([cell])
             grp.create_dataset(dataset_name, data=data, maxshape=(None, len(cell)))
         else:
-            ds = grp[dataset_name]
+            ds = cast(h5py.Dataset, grp[dataset_name])
             ds.resize(ds.shape[0] + 1, axis=0)
             ds[-1] = cell
 
@@ -191,7 +201,7 @@ class HDF5Manager:
         if "step_times" not in grp:
             grp.create_dataset("step_times", data=[elapsed], maxshape=(None,))
         else:
-            ds = grp["step_times"]
+            ds = cast(h5py.Dataset, grp["step_times"])
             ds.resize(ds.shape[0] + 1, axis=0)
             ds[-1] = elapsed
 
@@ -220,7 +230,7 @@ class HDF5Manager:
         if "best_errors" not in grp:
             grp.create_dataset("best_errors", data=[best_error], maxshape=(None,))
         else:
-            ds = grp["best_errors"]
+            ds = cast(h5py.Dataset, grp["best_errors"])
             ds.resize(ds.shape[0] + 1, axis=0)
             ds[-1] = best_error
 
@@ -230,11 +240,11 @@ class HDF5Manager:
                 "best_cells", data=[best_cell], maxshape=(None, len(best_cell))
             )
         else:
-            ds = grp["best_cells"]
+            ds = cast(h5py.Dataset, grp["best_cells"])
             ds.resize(ds.shape[0] + 1, axis=0)
             ds[-1] = best_cell
 
-    def write_metadata(self, version: str = "1.7.0.1") -> None:
+    def write_metadata(self, version: str = "1.8.0") -> None:
         """写入元数据 / Write metadata
 
         Args:
@@ -243,6 +253,58 @@ class HDF5Manager:
         grp = self._ensure_group("metadata")
         grp.attrs["created_at"] = datetime.now().isoformat()
         grp.attrs["version"] = version
+
+    def write_plot_image(
+        self,
+        name: str,
+        image_bytes: bytes,
+        filename: Optional[str] = None,
+        content_type: str = "image/png",
+        aliases: Optional[List[str]] = None,
+    ) -> None:
+        """写入 PNG 图片 / Write PNG image"""
+        grp = self._ensure_group("images")
+        dataset_name = self._normalize_plot_image_name(name)
+
+        if dataset_name in grp:
+            del grp[dataset_name]
+
+        dataset = grp.create_dataset(
+            dataset_name, data=np.frombuffer(image_bytes, dtype=np.uint8)
+        )
+        dataset.attrs["filename"] = filename or f"{dataset_name}.png"
+        dataset.attrs["content_type"] = content_type
+        if aliases:
+            dataset.attrs["aliases"] = np.array(aliases, dtype="S")
+
+    def read_plot_image(self, name: str) -> Optional[bytes]:
+        """读取 PNG 图片字节 / Read PNG image bytes"""
+        grp = self._ensure_group("images")
+        dataset_name = self._normalize_plot_image_name(name)
+        if dataset_name not in grp:
+            return None
+        dataset = cast(h5py.Dataset, grp[dataset_name])
+        return bytes(dataset[:])
+
+    def list_plot_images(self) -> Dict[str, Dict[str, Any]]:
+        """列出已收录 PNG / List stored PNG artifacts"""
+        grp = self._ensure_group("images")
+        images: Dict[str, Dict[str, Any]] = {}
+
+        for name in grp.keys():
+            dataset = cast(h5py.Dataset, grp[name])
+            aliases = dataset.attrs.get("aliases", [])
+            images[name] = {
+                "filename": dataset.attrs.get("filename", f"{name}.png"),
+                "content_type": dataset.attrs.get("content_type", "image/png"),
+                "size": int(dataset.shape[0]),
+                "aliases": [
+                    alias.decode("utf-8") if isinstance(alias, bytes) else str(alias)
+                    for alias in aliases
+                ],
+            }
+
+        return images
 
     def read_population(self, step: int) -> Optional[np.ndarray]:
         """读取种群数据 / Read population data
@@ -257,7 +319,8 @@ class HDF5Manager:
         dataset_name = f"step_{step}"
 
         if dataset_name in grp:
-            return grp[dataset_name][:]
+            dataset = cast(h5py.Dataset, grp[dataset_name])
+            return dataset[:]
         return None
 
     def read_config(self) -> Dict[str, Any]:
@@ -272,9 +335,10 @@ class HDF5Manager:
         for key in grp.attrs:
             config[key] = grp.attrs[key]
 
-        for key in grp:
-            if isinstance(grp[key], h5py.Dataset):
-                config[key] = grp[key][:]
+        for key in grp.keys():
+            dataset = grp[key]
+            if isinstance(dataset, h5py.Dataset):
+                config[key] = dataset[:]
 
         return config
 
@@ -288,10 +352,10 @@ class HDF5Manager:
         result = {}
 
         if "best_errors" in grp:
-            result["best_errors"] = grp["best_errors"][:]
+            result["best_errors"] = cast(h5py.Dataset, grp["best_errors"])[:]
 
         if "best_cells" in grp:
-            result["best_cells"] = grp["best_cells"][:]
+            result["best_cells"] = cast(h5py.Dataset, grp["best_cells"])[:]
 
         return result
 
@@ -305,7 +369,7 @@ class HDF5Manager:
         result = {}
 
         if "step_times" in grp:
-            result["step_times"] = grp["step_times"][:]
+            result["step_times"] = cast(h5py.Dataset, grp["step_times"])[:]
 
         if "total_time" in grp.attrs:
             result["total_time"] = grp.attrs["total_time"]
@@ -321,10 +385,11 @@ class HDF5Manager:
         grp = self._ensure_group("populations")
         steps = []
 
-        for key in grp:
-            if key.startswith("step_"):
+        for key in grp.keys():
+            key_name = str(key)
+            if key_name.startswith("step_"):
                 try:
-                    step = int(key.split("_")[1])
+                    step = int(key_name.split("_")[1])
                     steps.append(step)
                 except ValueError:
                     pass

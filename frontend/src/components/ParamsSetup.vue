@@ -93,6 +93,26 @@
               </div>
             </div>
           </div>
+
+          <div class="param-subgroup">
+            <h4>{{ t('params.fixedPeakTitle') }}</h4>
+            <label class="toggle-item">
+              <input type="checkbox" v-model="localParams.fixModeEnabled" />
+              <span class="toggle-label">{{ t('params.fixedPeakToggle') }}</span>
+            </label>
+            <div v-if="localParams.fixModeEnabled" class="param-group">
+              <label for="fixed-peak-text">{{ t('params.fixedPeakFormatLabel') }}</label>
+              <textarea
+                id="fixed-peak-text"
+                v-model="localParams.fixedPeakText"
+                class="fixed-peak-textarea"
+                spellcheck="false"
+                :placeholder="t('params.fixedPeakPlaceholder')"
+              />
+              <span class="param-hint">{{ t('params.fixedPeakHint') }}</span>
+              <span class="param-hint">{{ fixedPeakSummary }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -264,6 +284,26 @@
               <input type="checkbox" v-model="localParams.pseuOrth" />
               <span class="toggle-label">{{ t('params.pseudoOrth') }}</span>
             </label>
+
+            <div class="near-peak-config">
+              <label class="toggle-item">
+                <input type="checkbox" v-model="localParams.mergeNearbyEnabled" />
+                <span class="toggle-label">{{ t('params.nearPeakMode') }}</span>
+              </label>
+
+              <div v-if="localParams.mergeNearbyEnabled" class="near-peak-thresholds">
+                <div class="param-group threshold-group">
+                  <label>Tq</label>
+                  <input type="number" v-model.number="localParams.mergeTq" min="0" step="0.01" />
+                  <span class="param-hint">{{ t('params.nearPeakTqHint') }}</span>
+                </div>
+                <div class="param-group threshold-group">
+                  <label>Ta</label>
+                  <input type="number" v-model.number="localParams.mergeTa" min="0" step="0.1" />
+                  <span class="param-hint">{{ t('params.nearPeakTaHint') }}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -337,11 +377,17 @@ const defaultParams = {
   lmMode: true,
   tiltCheck: false,
   pseuOrth: false,
+  mergeNearbyEnabled: false,
+  mergeTq: 0.2,
+  mergeTa: 2.0,
   hklMode: 'Default',
   custH: 5,
   custK: 5,
   custL: 0,
-  ompThreads: 1
+  fixModeEnabled: false,
+  fixedPeakText: '',
+  ompThreads: 1,
+  glideBatches: []
 }
 
 const localParams = reactive({ ...props.params })
@@ -395,8 +441,35 @@ watch(() => localParams.ompThreads, (value) => {
   }
 })
 
+watch(() => localParams.mergeTq, (value) => {
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
+    localParams.mergeTq = defaultParams.mergeTq
+  }
+})
+
+watch(() => localParams.mergeTa, (value) => {
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
+    localParams.mergeTa = defaultParams.mergeTa
+  }
+})
+
 const ratioSum = computed(() => {
   return localParams.liveRatio + localParams.exchangeRatio + localParams.mutateRatio + localParams.newRatio
+})
+
+const fixedPeakCount = computed(() => {
+  const text = typeof localParams.fixedPeakText === 'string' ? localParams.fixedPeakText : ''
+  return text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .length
+})
+
+const fixedPeakSummary = computed(() => {
+  return fixedPeakCount.value > 0
+    ? t('params.fixedPeakSummaryReady', { count: fixedPeakCount.value })
+    : t('params.fixedPeakSummaryEmpty')
 })
 
 const resetParams = () => {
@@ -528,7 +601,8 @@ const saveParams = () => {
 }
 
 .param-group input[type="number"],
-.param-group input[type="text"] {
+.param-group input[type="text"],
+.fixed-peak-textarea {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -538,6 +612,18 @@ const saveParams = () => {
 }
 
 .param-group input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+}
+
+.fixed-peak-textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.fixed-peak-textarea:focus {
   outline: none;
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--primary-bg);
@@ -803,6 +889,23 @@ const saveParams = () => {
   font-weight: 600;
   margin-bottom: 12px;
   color: var(--text-secondary);
+}
+
+.near-peak-config {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.near-peak-thresholds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.threshold-group input[type="number"] {
+  width: 100%;
 }
 
 .toggle-item {

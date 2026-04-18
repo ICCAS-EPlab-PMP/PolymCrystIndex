@@ -72,6 +72,48 @@
         </div>
       </router-link>
 
+      <router-link to="/app/glide" class="feature-card">
+        <div class="card-header">
+          <div class="card-icon glide">
+            <img :src="glideIcon" alt="Glide module icon" class="module-icon-image" />
+          </div>
+          <div class="card-title">
+            <h2>{{ t('modules.glide.title') }}</h2>
+            <span v-if="!isLocal" class="badge active">{{ t('modules.active') }}</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p>{{ t('modules.glide.desc') }}</p>
+        </div>
+        <div class="card-footer">
+          <div class="feature-tags">
+            <span class="feature-tag">{{ t('modules.glide.batchInput') }}</span>
+            <span class="feature-tag">FullMiller</span>
+          </div>
+        </div>
+      </router-link>
+
+      <router-link to="/app/manual" class="feature-card">
+        <div class="card-header">
+          <div class="card-icon manual">
+            <img :src="manualIcon" alt="Manual module icon" class="module-icon-image" />
+          </div>
+          <div class="card-title">
+            <h2>{{ t('modules.manual.title') }}</h2>
+            <span v-if="!isLocal" class="badge active">{{ t('modules.active') }}</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p>{{ t('modules.manual.desc') }}</p>
+        </div>
+        <div class="card-footer">
+          <div class="feature-tags">
+            <span class="feature-tag">{{ t('modules.manual.batchInput') }}</span>
+            <span class="feature-tag">FullMiller</span>
+          </div>
+        </div>
+      </router-link>
+
       <router-link to="/app/results" class="feature-card">
         <div class="card-header">
           <div class="card-icon results">
@@ -113,6 +155,8 @@ const About = defineAsyncComponent(() => import('@/views/About.vue'))
 import peakIcon from '@icon/extract.svg'
 import indexIcon from '@icon/index.svg'
 import resultIcon from '@icon/result.svg'
+import glideIcon from '@icon/glide.svg'
+import manualIcon from '@icon/manual.svg'
 
 const isLocal = computed(() => isLocalProfile())
 </script>
@@ -413,6 +457,14 @@ const isLocal = computed(() => isLocalProfile())
 }
 
 .card-icon.peak {
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.14);
+}
+
+.card-icon.glide {
+  box-shadow: 0 12px 28px rgba(59, 130, 246, 0.16);
+}
+
+.card-icon.manual {
   box-shadow: 0 12px 28px rgba(139, 92, 246, 0.14);
 }
 

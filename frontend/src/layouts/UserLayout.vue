@@ -104,6 +104,12 @@ const currentModule = computed(() => {
   if (key === 'indexing') {
     return { label: 'Module', title: t('modules.indexing.title'), desc: t('modules.indexing.desc') }
   }
+  if (key === 'glide') {
+    return { label: 'Module', title: t('modules.glide.title'), desc: t('modules.glide.desc') }
+  }
+  if (key === 'manual') {
+    return { label: 'Module', title: t('modules.manual.title'), desc: t('modules.manual.desc') }
+  }
   if (key === 'results') {
     return { label: 'Module', title: t('modules.results.title'), desc: t('modules.results.desc') }
   }

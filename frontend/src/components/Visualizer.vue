@@ -381,6 +381,7 @@ const drag = reactive({ active: false, lastX: 0, lastY: 0, panel: '' })
 
 let rawDebTimer = null
 let intDebTimer = null
+const EXPORT_COLORMAP = '灰度'
 
 const raw = reactive({
   imageLoaded: false,
@@ -623,13 +624,51 @@ function debounceRenderRaw() {
   rawDebTimer = setTimeout(renderRaw, 300)
 }
 
-function saveRawImage() {
-  if (!raw.imageSrc) return
+function downloadBase64Image(imageSrc, filename) {
   const a = document.createElement('a')
-  a.href = 'data:image/png;base64,' + raw.imageSrc
-  a.download = 'diffraction_marked.png'
+  a.href = 'data:image/png;base64,' + imageSrc
+  a.download = filename
   a.click()
-  setStatus('Marked image saved')
+}
+
+function getExportAdjustmentsSummary(adjustments) {
+  if (!adjustments.length) return ''
+  return ` | export profile: ${adjustments.join(' + ')}`
+}
+
+async function prepareRawExportImage() {
+  const adjustments = []
+  const hasMarkers = raw.fullCount > 0 || raw.outputCount > 0
+  let needsRender = false
+
+  if (hasMarkers && raw.p.colormap !== EXPORT_COLORMAP) {
+    raw.p.colormap = EXPORT_COLORMAP
+    adjustments.push('gray colormap')
+    needsRender = true
+  }
+
+  if (hasMarkers && !raw.p.showLabels) {
+    raw.p.showLabels = true
+    adjustments.push('labels on')
+    needsRender = true
+  }
+
+  if (needsRender) {
+    await renderRaw()
+  }
+
+  return adjustments
+}
+
+async function saveRawImage() {
+  if (!raw.imageSrc) return
+  try {
+    const adjustments = await prepareRawExportImage()
+    downloadBase64Image(raw.imageSrc, 'diffraction_marked.png')
+    setStatus(`Marked image saved${getExportAdjustmentsSummary(adjustments)}`)
+  } catch(err) {
+    setStatus('Error: ' + (err.response?.data?.detail || err.message))
+  }
 }
 
 async function uploadIntImage(file) {
@@ -721,13 +760,28 @@ function debounceRenderInt() {
   intDebTimer = setTimeout(renderInt, 300)
 }
 
-function saveIntImage() {
+async function prepareIntExportImage() {
+  const adjustments = []
+  const hasMarkers = int2d.fullCount > 0 || int2d.outputCount > 0
+
+  if (hasMarkers && int2d.p.colormap !== EXPORT_COLORMAP) {
+    int2d.p.colormap = EXPORT_COLORMAP
+    adjustments.push('gray colormap')
+    await renderInt()
+  }
+
+  return adjustments
+}
+
+async function saveIntImage() {
   if (!int2d.imageSrc) return
-  const a = document.createElement('a')
-  a.href = 'data:image/png;base64,' + int2d.imageSrc
-  a.download = '2d_integrated_marked.png'
-  a.click()
-  setStatus('Marked image saved')
+  try {
+    const adjustments = await prepareIntExportImage()
+    downloadBase64Image(int2d.imageSrc, '2d_integrated_marked.png')
+    setStatus(`Marked image saved${getExportAdjustmentsSummary(adjustments)}`)
+  } catch(err) {
+    setStatus('Error: ' + (err.response?.data?.detail || err.message))
+  }
 }
 
 onMounted(async () => {

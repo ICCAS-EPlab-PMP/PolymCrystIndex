@@ -1,4 +1,27 @@
-import request from './request'
+import request from './request.js'
+
+export const buildRunAnalysisPayload = (dataFile, params = {}) => {
+  const requestParams = {
+    ...params,
+    fixedPeakText: typeof params?.fixedPeakText === 'string' ? params.fixedPeakText : '',
+    mergeNearbyEnabled: Boolean(params?.mergeNearbyEnabled),
+    mergeTq: typeof params?.mergeTq === 'number' && !Number.isNaN(params.mergeTq) ? params.mergeTq : 0.2,
+    mergeTa: typeof params?.mergeTa === 'number' && !Number.isNaN(params.mergeTa) ? params.mergeTa : 2.0,
+    glideBatches: Array.isArray(params?.glideBatches)
+      ? params.glideBatches.filter(b => b && Math.abs(Number(b.l0) || 0) > 1e-12).map(b => ({
+          label: String(b.label || '').trim(),
+          nA: Number(b.nA) || 0,
+          nB: Number(b.nB) || 0,
+          l0: Number(b.l0)
+        }))
+      : []
+  }
+
+  return {
+    dataFile,
+    params: requestParams
+  }
+}
 
 export const api = {
   async login(username, password) {
@@ -28,10 +51,7 @@ export const api = {
   },
 
   async runAnalysis(dataFile, params) {
-    return request.post('/analysis/run', {
-      dataFile,
-      params
-    })
+    return request.post('/analysis/run', buildRunAnalysisPayload(dataFile, params))
   },
 
   async getAnalysisStatus(taskId) {
@@ -232,6 +252,20 @@ export const api = {
 
   async intRender(params) {
     return request.post('/visualizer/int/render', params)
+  },
+
+  async manualFullmiller(a, b, c, alpha, beta, gamma, wavelength) {
+    return request.post('/analysis/manual-fullmiller', { a, b, c, alpha, beta, gamma, wavelength })
+  },
+
+  async manualBatchFullmiller(groups) {
+    return request.post('/analysis/manual-batch', { groups })
+  },
+
+  async glideBatchFullmiller(a, b, c, alpha, beta, gamma, wavelength, glideGroups) {
+    return request.post('/analysis/glide-batch', {
+      a, b, c, alpha, beta, gamma, wavelength, glideGroups
+    })
   }
 }
 

@@ -184,6 +184,57 @@ const statusPollingTimer = ref(null)
 const logsPollingTimer = ref(null)
 const logMode = ref('summary')
 
+const buildNearPeakSummaryLines = (resultData) => {
+  const groups = Array.isArray(resultData?.nearPeakGroups) ? resultData.nearPeakGroups : []
+  const twoPeakCount = groups.filter(group => group?.groupType === '2-peak').length
+  const fourPeakCount = groups.filter(group => group?.groupType === '4-peak').length
+  const enabled = Boolean(resultData?.nearPeakConfig?.enabled)
+
+  if (!enabled) {
+    return ['[System] Near-peak discussion mode: disabled']
+  }
+
+  return [
+    `[System] Near-peak discussion mode: enabled (Tq=${resultData?.nearPeakConfig?.mergeTq ?? 0.2}, Ta=${resultData?.nearPeakConfig?.mergeTa ?? 2.0})`,
+    `[System] Near-peak groups summary: 2-peak=${twoPeakCount}, 4-peak=${fourPeakCount}, total=${groups.length}`
+  ]
+}
+
+const buildGlideSummaryLines = (resultData) => {
+  const glide = resultData?.glideBatchOutputs || { enabled: false, groups: [] }
+  const groups = Array.isArray(glide.groups) ? glide.groups : []
+  if (!glide.enabled) {
+    return ['[System] Glide-shear batches: disabled']
+  }
+
+  return [
+    `[System] Glide-shear batches: enabled (${groups.length} group${groups.length === 1 ? '' : 's'})`,
+    `[System] Glide batch root: ${glide.batchRoot || '—'}`,
+  ]
+}
+
+const appendResultSummaryLogs = async () => {
+  try {
+    const result = await api.getResults()
+    if (!result.success || !result.data) {
+      return
+    }
+
+    const summaryLines = [
+      ...buildNearPeakSummaryLines(result.data),
+      ...buildGlideSummaryLines(result.data),
+    ]
+    for (const line of summaryLines) {
+      if (!logs.value.includes(line)) {
+        logs.value.push(line)
+      }
+    }
+    await scrollToBottom()
+  } catch (error) {
+    console.error('Result summary load error:', error)
+  }
+}
+
 const handleServerStatus = (status) => {
   serverAvailable.value = status.available
 }
@@ -286,6 +337,7 @@ const startStatusPolling = () => {
         logs.value.push('[System] Analysis completed successfully')
         isRunning.value = false
         analysisComplete.value = true
+        await appendResultSummaryLogs()
         stopStatusPolling()
         stopLogsPolling()
       } else if (status === 'failed') {

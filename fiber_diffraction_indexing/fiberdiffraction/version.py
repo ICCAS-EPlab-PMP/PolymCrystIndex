@@ -2,7 +2,7 @@
 Fiber Diffraction Indexing 版本信息。
 """
 
-VERSION = "1.7.0.1"
+VERSION = "1.8.0"
 RELEASE_DATE = "2026.02.28"
 PROGRAM_NAME = "POLYCRYSTINDEX"
 

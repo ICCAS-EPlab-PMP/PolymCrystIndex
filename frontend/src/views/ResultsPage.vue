@@ -1,15 +1,29 @@
 <template>
   <div class="results-page">
     <main class="main-content">
-      <Visualizer />
+      <section class="results-section visualizer-section">
+        <Visualizer />
+      </section>
+      <section class="results-section export-section">
+        <ResultExport @navigate="handleNavigate" />
+      </section>
     </main>
   </div>
 </template>
 
 <script setup>
 import { defineAsyncComponent } from 'vue'
+import { useRouter } from 'vue-router'
 
 const Visualizer = defineAsyncComponent(() => import('@/components/Visualizer.vue'))
+const ResultExport = defineAsyncComponent(() => import('@/components/ResultExport.vue'))
+const router = useRouter()
+
+const handleNavigate = (target) => {
+  if (target === 'console') {
+    router.push('/app/indexing')
+  }
+}
 </script>
 
 <style scoped>
@@ -23,6 +37,15 @@ const Visualizer = defineAsyncComponent(() => import('@/components/Visualizer.vu
   padding: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: 20px;
+  overflow: auto;
+}
+
+.results-section {
+  min-width: 0;
+}
+
+.export-section {
+  padding-bottom: 8px;
 }
 </style>

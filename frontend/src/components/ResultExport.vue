@@ -15,7 +15,7 @@
       </div>
       <h3>{{ t('results.noResults') }}</h3>
       <p>{{ t('results.noResultsDesc') }}</p>
-      <button class="btn-start" @click="$emit('navigate', 'console')">
+      <button class="btn-start" @click="startAnalysis">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5,3 19,12 5,21 5,3"/>
         </svg>
@@ -75,6 +75,11 @@
               <span class="param-label">{{ t('results.tiltAngle') }}</span>
               <span class="param-value">{{ cellParams.tilt.toFixed(2) }}</span>
               <span class="param-unit">°</span>
+            </div>
+            <div v-if="cellParams.volume !== undefined && cellParams.volume !== null" class="param-item volume-param">
+      <span class="param-label">{{ t('params.volume') }}</span>
+              <span class="param-value">{{ cellParams.volume.toFixed(3) }}</span>
+              <span class="param-unit">Å³</span>
             </div>
           </div>
         </div>
@@ -188,6 +193,87 @@
         </div>
       </div>
 
+      <div class="near-peak-section">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M7 7h10v10H7z"/>
+            <path d="M3 12h4M17 12h4M12 3v4M12 17v4"/>
+          </svg>
+          {{ t('results.nearPeakTitle') }}
+        </h3>
+        <div class="near-peak-summary" :class="{ disabled: !nearPeakEnabled }">
+          <div class="near-peak-summary-item">
+            <span class="summary-label">{{ t('results.mode') }}</span>
+            <span class="summary-value">{{ nearPeakEnabled ? t('results.enabled') : t('results.disabled') }}</span>
+          </div>
+          <div class="near-peak-summary-item">
+            <span class="summary-label">Tq</span>
+            <span class="summary-value">{{ nearPeakTq.toFixed(2) }}</span>
+          </div>
+          <div class="near-peak-summary-item">
+            <span class="summary-label">Ta</span>
+            <span class="summary-value">{{ nearPeakTa.toFixed(1) }}</span>
+          </div>
+          <div class="near-peak-summary-item">
+            <span class="summary-label">{{ t('results.twoPeakGroups') }}</span>
+            <span class="summary-value">{{ twoPeakGroupCount }}</span>
+          </div>
+          <div class="near-peak-summary-item">
+            <span class="summary-label">{{ t('results.fourPeakGroups') }}</span>
+            <span class="summary-value">{{ fourPeakGroupCount }}</span>
+          </div>
+        </div>
+
+        <div v-if="nearPeakEnabled && nearPeakGroups.length" class="near-peak-list">
+          <div v-for="(group, index) in nearPeakGroups" :key="`${group.groupType}-${index}`" class="near-peak-group-card">
+            <div class="near-peak-group-header">
+              <span class="group-badge">{{ group.groupType }}</span>
+              <span class="group-members">{{ t('results.peaksLabel', { indices: formatPeakIndices(group.memberPeakIndices) }) }}</span>
+            </div>
+            <div class="near-peak-group-meta">
+              <span>Δq max {{ formatMetric(group.withinThreshold?.deltaQMax, 3) }}</span>
+              <span>Δangle max {{ formatMetric(group.withinThreshold?.deltaAngleMax, 2) }}°</span>
+              <span>{{ t('results.hkRuleLabel') }} {{ group.hkRulePassed ? t('results.passed') : t('results.failed') }}</span>
+            </div>
+          </div>
+        </div>
+        <p v-else-if="nearPeakEnabled" class="near-peak-empty">{{ t('results.noNearPeakGroups') }}</p>
+      </div>
+
+      <div v-if="glideBatchOutputs.enabled" class="glide-batch-section">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+          {{ t('results.glideTitle') }}
+        </h3>
+        <div class="glide-batch-summary">
+          <div class="glide-batch-summary-item">
+            <span class="summary-label">{{ t('results.groupsLabel') }}</span>
+            <span class="summary-value">{{ glideBatchOutputs.groups.length }}</span>
+          </div>
+          <div class="glide-batch-summary-item">
+            <span class="summary-label">{{ t('results.batchRootLabel') }}</span>
+            <span class="summary-value">{{ glideBatchOutputs.batchRoot || '—' }}</span>
+          </div>
+        </div>
+        <div v-if="glideBatchOutputs.groups.length" class="glide-batch-list">
+          <div v-for="g in glideBatchOutputs.groups" :key="g.label" class="glide-batch-card">
+            <div class="glide-batch-card-header">
+              <span class="group-badge">{{ g.label }}</span>
+              <span class="glide-dir">{{ g.directory }}</span>
+            </div>
+            <div class="glide-batch-card-meta">
+              <span v-if="g.fullMillerFile">{{ t('results.fullMillerLabel') }}: {{ g.fullMillerFile }} ({{ g.fullMillerSize }} B)</span>
+              <span v-else>{{ t('results.fullMillerLabel') }}: —</span>
+              <span v-if="g.outputMillerFile">{{ t('results.outputMillerLabel') }}: {{ g.outputMillerFile }} ({{ g.outputMillerSize }} B)</span>
+              <span v-if="g.cellParams" class="glide-cell">{{ t('results.cellLabel') }}: {{ g.cellParams.a.toFixed(3) }}, {{ g.cellParams.b.toFixed(3) }}, {{ g.cellParams.c.toFixed(3) }}, {{ g.cellParams.alpha.toFixed(2) }}, {{ g.cellParams.beta.toFixed(2) }}, {{ g.cellParams.gamma.toFixed(2) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="export-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -242,11 +328,14 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/index'
 
 const { t } = useI18n()
-defineEmits(['navigate'])
+const emit = defineEmits(['navigate'])
+const router = useRouter()
+const route = useRoute()
 
 const hasResults = ref(false)
 const cellParams = ref({
@@ -255,7 +344,8 @@ const cellParams = ref({
   c: 7.215,
   alpha: 90.0,
   beta: 95.12,
-  gamma: 90.0
+  gamma: 90.0,
+  volume: null
 })
 const millerData = ref([])
 const totalReflections = ref(0)
@@ -276,6 +366,27 @@ const maxDeviationKPsi = ref(1)
 const maxDeviationLPsi = ref(1)
 const currentTaskId = ref(null)
 const currentView = ref('reset')
+const nearPeakGroups = ref([])
+const nearPeakConfig = ref({ enabled: false, mergeTq: 0.2, mergeTa: 2.0 })
+const glideBatchOutputs = ref({ enabled: false, batchRoot: '', groups: [] })
+
+const nearPeakEnabled = computed(() => Boolean(nearPeakConfig.value?.enabled))
+const nearPeakTq = computed(() => Number(nearPeakConfig.value?.mergeTq ?? 0.2))
+const nearPeakTa = computed(() => Number(nearPeakConfig.value?.mergeTa ?? 2.0))
+const twoPeakGroupCount = computed(() => nearPeakGroups.value.filter(group => group?.groupType === '2-peak').length)
+const fourPeakGroupCount = computed(() => nearPeakGroups.value.filter(group => group?.groupType === '4-peak').length)
+
+const formatMetric = (value, digits) => Number(value ?? 0).toFixed(digits)
+const formatPeakIndices = (indices) => Array.isArray(indices) ? indices.join(', ') : ''
+const getMillerQ = (m) => Number(m?.qcalc ?? m?.q ?? 0)
+const getMillerPsi = (m) => Number(m?.psicalc ?? m?.psi ?? 0)
+
+const startAnalysis = () => {
+  emit('navigate', 'console')
+  if (route.path === '/app/results') {
+    router.push('/app/indexing')
+  }
+}
 
 const setView = (view) => {
   currentView.value = view
@@ -332,7 +443,10 @@ const loadResults = async () => {
       totalReflections.value = result.data.totalReflections || 0
       indexedPeaks.value = result.data.indexedPeaks || millerData.value.length
       currentTaskId.value = result.data.taskId || null
-      
+      nearPeakGroups.value = Array.isArray(result.data.nearPeakGroups) ? result.data.nearPeakGroups : []
+      nearPeakConfig.value = result.data.nearPeakConfig || nearPeakConfig.value
+      glideBatchOutputs.value = result.data.glideBatchOutputs || glideBatchOutputs.value
+
       if (result.data.qualityMetrics) {
         rFactor.value = result.data.qualityMetrics.r_factor || 0
         rFactorQ.value = result.data.qualityMetrics.r_factor_q || 0
@@ -485,7 +599,7 @@ const exportMiller = async () => {
   } catch (error) {
     let content = 'h    k    l    q        psi\n'
     millerData.value.forEach(m => {
-      content += `${m.h}   ${m.k}   ${m.l}   ${m.q.toFixed(4)}   ${m.psi.toFixed(2)}\n`
+      content += `${m.h}   ${m.k}   ${m.l}   ${getMillerQ(m).toFixed(4)}   ${getMillerPsi(m).toFixed(2)}\n`
     })
     downloadFile(content, 'miller_indices.txt', 'text/plain')
   }
@@ -502,18 +616,24 @@ const exportHDF5 = async () => {
     URL.revokeObjectURL(url)
   } catch (error) {
     const hdf5Data = {
-      version: '1.7.0.1',
+      version: '1.8.0',
       timestamp: new Date().toISOString(),
       cellParameters: cellParams.value,
       millerIndices: millerData.value,
       qualityMetrics: {
         rFactor: rFactor.value,
         maxDeviation: maxDeviation.value,
-        maxDeviationPoint: {
-          h: maxDeviationH.value,
-          k: maxDeviationK.value,
-          l: maxDeviationL.value,
+        maxDeviationQPoint: {
+          h: maxDeviationHQ.value,
+          k: maxDeviationKQ.value,
+          l: maxDeviationLQ.value,
           q: maxDeviationQ.value
+        },
+        maxDeviationPsiPoint: {
+          h: maxDeviationHPsi.value,
+          k: maxDeviationKPsi.value,
+          l: maxDeviationLPsi.value,
+          psi: maxDeviationPsi.value
         }
       },
       metadata: {
@@ -522,7 +642,7 @@ const exportHDF5 = async () => {
       }
     }
     const content = JSON.stringify(hdf5Data, null, 2)
-    downloadFile(content, 'polymcryst_results.hdf5', 'application/octet-stream')
+    downloadFile(content, 'polymcryst_results_fallback.json', 'application/json')
   }
 }
 
@@ -659,6 +779,7 @@ onMounted(async () => {
 
 .cell-params-card h3,
 .miller-info-card h3,
+.near-peak-section h3,
 .visualization-section h3,
 .export-section h3 {
   display: flex;
@@ -671,11 +792,157 @@ onMounted(async () => {
 
 .cell-params-card h3 svg,
 .miller-info-card h3 svg,
+.near-peak-section h3 svg,
 .visualization-section h3 svg,
 .export-section h3 svg {
   width: 20px;
   height: 20px;
   color: var(--primary);
+}
+
+.near-peak-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.near-peak-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.near-peak-summary.disabled {
+  opacity: 0.75;
+}
+
+.near-peak-summary-item,
+.near-peak-group-card {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.summary-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.summary-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.near-peak-list {
+  display: grid;
+  gap: 12px;
+}
+
+.near-peak-group-header,
+.near-peak-group-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.near-peak-group-header {
+  margin-bottom: 8px;
+}
+
+.group-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.group-members,
+.near-peak-group-meta,
+.near-peak-empty {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.glide-batch-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.glide-batch-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.glide-batch-section h3 svg {
+  width: 20px;
+  height: 20px;
+  color: var(--primary);
+}
+
+.glide-batch-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.glide-batch-summary-item {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.glide-batch-list {
+  display: grid;
+  gap: 12px;
+}
+
+.glide-batch-card {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.glide-batch-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.glide-dir {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.glide-batch-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.glide-cell {
+  font-family: 'Fira Code', monospace;
 }
 
 .params-grid {

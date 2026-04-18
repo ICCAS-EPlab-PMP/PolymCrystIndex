@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.7.0.1'
+    version: 'v1.8.0'
   },
   home: {
     selectModule: 'Select Module',
@@ -28,6 +28,16 @@ export default {
       title: 'Indexing Program',
       desc: 'Crystal structure indexing and unit cell optimization based on genetic algorithm'
     },
+    glide: {
+      title: 'GLIDE Shear Analysis',
+      desc: 'Apply glide-shear transformations to unit cells and generate FullMiller results for multiple groups',
+      batchInput: 'Batch Input'
+    },
+    manual: {
+      title: 'Manual Cell Parameters',
+      desc: 'Enter unit cell parameters and wavelength directly to generate FullMiller results',
+      batchInput: 'Batch Input'
+    },
     results: {
       title: 'Results & Processing',
       desc: 'Visualize analysis results with Miller index overlay',
@@ -45,6 +55,9 @@ export default {
   },
   nav: {
     return: 'Return',
+    index: 'Indexing',
+    glide: 'GLIDE',
+    manual: 'Manual',
     dataImport: 'Data Import',
     parameters: 'Parameters',
     analysis: 'Analysis',
@@ -153,6 +166,25 @@ export default {
     azimuth: 'Azimuth (E1)',
     qValue: 'Q-value (E2)',
     volume: 'Volume (E3)',
+    glideTitle: 'Glide-shear batches',
+    glideHint: 'Add one or more glide groups. Each group applies a shear transform to the optimized cell and generates its own FullMiller.txt. l0 must be non-zero.',
+    glideLabelPlaceholder: 'e.g. glide_01',
+    addGlideGroup: 'Add glide group',
+    fixedPeakTitle: 'Fixed Peak Constraints',
+    fixedPeakToggle: 'Enable fixed peak mode',
+    fixedPeakFormatLabel: 'peak_index h k l',
+    fixedPeakPlaceholder: '1 1 1 0\n3 2 0 1',
+    fixedPeakHint: 'One peak per line. Format must be peak_index h k l and peak_index matches observed_diffraction order.',
+    nearPeakMode: 'Near-peak discussion mode',
+    nearPeakTqHint: 'Default 0.2. Max Δq allowed inside a near-peak group.',
+    nearPeakTaHint: 'Default 2.0. Max Δangle allowed inside a near-peak group.',
+    fixedPeakSummaryReady: '{count} fixed peaks ready to submit.',
+    fixedPeakSummaryEmpty: 'No fixed peaks provided. Leave blank to disable fixhkl.txt.',
+    glideSummaryEmpty: 'No glide groups configured. Analysis will run without glide-shear batches.',
+    glideSummaryReady: '{count} glide groups configured.',
+    glideSummaryInvalid: 'Warning: {count} group(s) have l0 = 0 (invalid).',
+    label: 'Label',
+    remove: 'Remove',
     lmOptimization: 'LM Optimization',
     pseudoOrth: 'Pseudo-orthogonal Constraint',
     tiltOpt: 'Tilt Optimization',
@@ -227,7 +259,24 @@ export default {
     maxDeviationQ: 'Max Δq',
     maxDeviationQPoint: 'Δq Max Point (hkl)',
     maxDeviationPsi: 'Max Δψ',
-    maxDeviationPsiPoint: 'Δψ Max Point (hkl)'
+    maxDeviationPsiPoint: 'Δψ Max Point (hkl)',
+    nearPeakTitle: 'Near-peak discussion',
+    mode: 'Mode',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    twoPeakGroups: '2-peak groups',
+    fourPeakGroups: '4-peak groups',
+    peaksLabel: 'Peaks {indices}',
+    hkRuleLabel: 'HK rule',
+    passed: 'passed',
+    failed: 'failed',
+    noNearPeakGroups: 'No 2-peak or 4-peak groups matched the current thresholds.',
+    glideTitle: 'Glide-shear batches',
+    groupsLabel: 'Groups',
+    batchRootLabel: 'Batch root',
+    fullMillerLabel: 'FullMiller',
+    outputMillerLabel: 'outputMiller',
+    cellLabel: 'Cell'
   },
   visualizer: {
     title: 'Miller Index Visualizer',
@@ -625,5 +674,47 @@ export default {
     refresh: 'Refresh',
     retry: 'Retry',
     localMode: 'Local Research Mode'
+  },
+  glide: {
+    title: 'GLIDE Shear Analysis',
+    subtitle: 'Enter base cell parameters and multiple glide shear groups to generate FullMiller results.',
+    baseCellParams: 'Base Cell Parameters',
+    glideShearGroups: 'Glide Shear Groups',
+    label: 'Label',
+    labelPlaceholder: 'e.g. glide_01',
+    nA: 'nA',
+    nATip: 'Glide shear component along a-axis (integer, can be negative)',
+    nB: 'nB',
+    nBTip: 'Glide shear component along b-axis (integer, can be negative)',
+    l0: 'l₀',
+    l0Tip: 'Glide layer number (integer, can be negative, must be non-zero)',
+    removeGroup: 'Remove group',
+    addGroup: 'Add Glide Group',
+    generate: 'Generate GLIDE Results',
+    generating: 'Generating...',
+    errorNoGroup: 'At least one glide group with non-zero l₀ is required',
+    analysisComplete: 'GLIDE analysis complete: {count} group(s)',
+    baseCell: 'Base Cell',
+    cell: 'Cell',
+    volume: 'Volume',
+    reflections: 'reflections',
+    download: 'Download FullMiller.txt',
+    generationFailed: 'GLIDE generation failed',
+    requestFailed: 'Request failed'
+  },
+  manual: {
+    title: 'Manual Cell Parameters',
+    subtitle: 'Enter one or more groups of unit cell parameters and wavelength to generate FullMiller.txt results.',
+    group: 'Group',
+    addGroup: 'Add Group',
+    generate: 'Generate FullMiller ({count} group{plural})',
+    generating: 'Generating...',
+    download: 'Download FullMiller.txt',
+    generationFailed: 'Generation failed',
+    requestFailed: 'Request failed',
+    someGroupsFailed: 'Some groups failed',
+    volume: 'Volume',
+    cell: 'Cell',
+    reflections: 'reflections'
   }
 }

@@ -4,15 +4,26 @@
       <aside class="sidebar">
         <nav class="tab-nav">
           <button
-            v-for="tab in tabs"
+            v-for="tab in mainTabs"
             :key="tab.id"
-            :class="['tab-item', { active: activeTab === tab.id }]"
-            @click="activeTab = tab.id"
+            :class="['tab-item', { active: true }]"
+            style="pointer-events: none;"
           >
             <component :is="tab.icon" class="tab-icon" />
             <span class="tab-label">{{ getTabLabel(tab.id) }}</span>
-            <span v-if="tab.badge" class="tab-badge">{{ tab.badge }}</span>
           </button>
+
+          <div class="tab-sub-group">
+            <button
+              v-for="sub in indexSubTabs"
+              :key="sub.id"
+              :class="['tab-item', 'tab-sub', { active: activeSubTab === sub.id }]"
+              @click="activeSubTab = sub.id"
+            >
+              <component :is="sub.icon" class="tab-icon" />
+              <span class="tab-label">{{ getTabLabel(sub.id) }}</span>
+            </button>
+          </div>
         </nav>
 
         <div class="sidebar-footer">
@@ -20,15 +31,15 @@
             <span class="status-dot" :class="statusClass"></span>
             <span class="status-text">{{ t(`status.${runStatus}`) }}</span>
           </div>
-</div>
+        </div>
       </aside>
 
       <main class="content">
         <transition name="fade" mode="out-in">
-          <DataImport v-if="activeTab === 'data'" :uploaded-file-data="dataFile" @data-loaded="handleDataLoaded" @file-removed="handleFileRemoved" />
-          <ParamsSetup v-else-if="activeTab === 'params'" :params="gaParams" />
-          <Console v-else-if="activeTab === 'console'" :params="gaParams" :data-file="dataFile" @navigate="handleNavigate" />
-          <ResultExport v-else-if="activeTab === 'results'" @navigate="handleNavigate" />
+          <DataImport v-if="activeSubTab === 'data'" :uploaded-file-data="dataFile" @data-loaded="handleDataLoaded" @file-removed="handleFileRemoved" />
+          <ParamsSetup v-else-if="activeSubTab === 'params'" :params="gaParams" />
+          <Console v-else-if="activeSubTab === 'console'" :params="gaParams" :data-file="dataFile" @navigate="handleNavigate" />
+          <ResultExport v-else-if="activeSubTab === 'results'" @navigate="handleNavigate" />
         </transition>
       </main>
     </div>
@@ -36,64 +47,78 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, markRaw, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, markRaw, h, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const DataImport = defineAsyncComponent(() => import('@/components/DataImport.vue'))
 const ParamsSetup = defineAsyncComponent(() => import('@/components/ParamsSetup.vue'))
 const Console = defineAsyncComponent(() => import('@/components/Console.vue'))
 const ResultExport = defineAsyncComponent(() => import('@/components/ResultExport.vue'))
 
+const IconIndex = {
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+      h('polygon', { points: '12,2 2,7 12,12 22,7' }),
+      h('path', { d: 'M2 17l10 5 10-5' }),
+      h('path', { d: 'M2 12l10 5 10-5' }),
+    ])
+  }
+}
+
 const IconFileUpload = {
-  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-    <polyline points="17,8 12,3 7,8"/>
-    <line x1="12" y1="3" x2="12" y2="15"/>
-  </svg>`
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+      h('path', { d: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4' }),
+      h('polyline', { points: '17,8 12,3 7,8' }),
+      h('line', { x1: 12, y1: 3, x2: 12, y2: 15 }),
+    ])
+  }
 }
 
 const IconSettings = {
-  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <circle cx="12" cy="12" r="3"/>
-    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010-2.83l-.06-.06a1.65 1.65 0 00.33-1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-  </svg>`
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+      h('circle', { cx: 12, cy: 12, r: 3 }),
+      h('path', { d: 'M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z' }),
+    ])
+  }
 }
 
 const IconRocket = {
-  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/>
-    <path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/>
-    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/>
-    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
-  </svg>`
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+      h('path', { d: 'M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z' }),
+      h('path', { d: 'M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z' }),
+      h('path', { d: 'M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0' }),
+      h('path', { d: 'M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5' }),
+    ])
+  }
 }
 
 const IconChartBar = {
-  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <line x1="12" y1="20" x2="12" y2="10"/>
-    <line x1="18" y1="20" x2="18" y2="4"/>
-    <line x1="6" y1="20" x2="6" y2="16"/>
-  </svg>`
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+      h('line', { x1: 12, y1: 20, x2: 12, y2: 10 }),
+      h('line', { x1: 18, y1: 20, x2: 18, y2: 4 }),
+      h('line', { x1: 6, y1: 20, x2: 6, y2: 16 }),
+    ])
+  }
 }
 
-const IconInfo = {
-  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <circle cx="12" cy="12" r="10"/>
-    <line x1="12" y1="16" x2="12" y2="12"/>
-    <line x1="12" y1="8" x2="12.01" y2="8"/>
-  </svg>`
-}
+const mainTabs = [
+  { id: 'index', label: 'Indexing', icon: markRaw(IconIndex) },
+]
 
-const tabs = [
+const indexSubTabs = [
   { id: 'data', label: 'Data Import', icon: markRaw(IconFileUpload) },
   { id: 'params', label: 'Parameters', icon: markRaw(IconSettings) },
   { id: 'console', label: 'Analysis', icon: markRaw(IconRocket) },
-  { id: 'results', label: 'Results', icon: markRaw(IconChartBar) }
+  { id: 'results', label: 'Results', icon: markRaw(IconChartBar) },
 ]
 
-const activeTab = ref('data')
+const activeSubTab = ref('data')
 const dataFile = ref(null)
 const runStatus = ref('idle')
 
@@ -126,26 +151,39 @@ const gaParams = reactive({
   lmMode: true,
   tiltCheck: false,
   pseuOrth: false,
+  mergeNearbyEnabled: false,
+  mergeTq: 0.2,
+  mergeTa: 2.0,
   hklMode: 'Default',
   custH: 5,
   custK: 5,
   custL: 0,
-  ompThreads: 1
+  fixedPeakText: '',
+  ompThreads: 1,
+  glideBatches: []
 })
 
 const statusClass = computed(() => runStatus.value)
 
+const LABEL_FALLBACKS = {
+  index: 'Indexing',
+  data: 'Data Import',
+  params: 'Parameters',
+  console: 'Analysis',
+  results: 'Results',
+}
+
 const getTabLabel = (tabId) => {
-  if (tabId === 'data') return t('nav.dataImport')
-  if (tabId === 'params') return t('nav.parameters')
-  if (tabId === 'console') return t('nav.analysis')
-  if (tabId === 'results') return t('nav.results')
-  return tabId
+  const key = `nav.${tabId === 'console' ? 'analysis' : tabId === 'data' ? 'dataImport' : tabId === 'params' ? 'parameters' : tabId}`
+  const translated = t(key)
+  // vue-i18n returns the key string itself when no translation is found
+  if (translated !== key) return translated
+  return LABEL_FALLBACKS[tabId] || tabId
 }
 
 const handleDataLoaded = (data) => {
   dataFile.value = data
-  activeTab.value = 'params'
+  activeSubTab.value = 'params'
 }
 
 const handleFileRemoved = () => {
@@ -153,7 +191,7 @@ const handleFileRemoved = () => {
 }
 
 const handleNavigate = (tab) => {
-  activeTab.value = tab
+  activeSubTab.value = tab
 }
 
 </script>
@@ -227,6 +265,25 @@ const handleNavigate = (tab) => {
   height: 24px;
   background: var(--primary);
   border-radius: 0 2px 2px 0;
+}
+
+.tab-sub-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding-left: 16px;
+}
+
+.tab-sub {
+  padding: 8px 16px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.tab-sub::before {
+  height: 18px;
+  width: 2px;
 }
 
 .tab-icon {
@@ -311,7 +368,8 @@ const handleNavigate = (tab) => {
 
   .tab-label,
   .tab-badge,
-  .sidebar-footer {
+  .sidebar-footer,
+  .tab-sub-group {
     display: none;
   }
 

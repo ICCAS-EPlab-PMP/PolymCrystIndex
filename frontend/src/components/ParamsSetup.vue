@@ -285,24 +285,14 @@
               <span class="toggle-label">{{ t('params.pseudoOrth') }}</span>
             </label>
 
-            <div class="near-peak-config">
-              <label class="toggle-item">
-                <input type="checkbox" v-model="localParams.mergeNearbyEnabled" />
-                <span class="toggle-label">{{ t('params.nearPeakMode') }}</span>
+            <!-- Grey release: peak symmetry merge disabled until next minor version -->
+            <div class="peak-symmetry-config peak-symmetry-disabled">
+              <label class="toggle-item" :aria-disabled="true">
+                <input type="checkbox" disabled :checked="false" />
+                <span class="toggle-label">{{ t('params.peakSymmetryMode') }}</span>
+                <span class="grey-release-badge">{{ t('params.peakSymmetryComingSoon') }}</span>
               </label>
-
-              <div v-if="localParams.mergeNearbyEnabled" class="near-peak-thresholds">
-                <div class="param-group threshold-group">
-                  <label>Tq</label>
-                  <input type="number" v-model.number="localParams.mergeTq" min="0" step="0.01" />
-                  <span class="param-hint">{{ t('params.nearPeakTqHint') }}</span>
-                </div>
-                <div class="param-group threshold-group">
-                  <label>Ta</label>
-                  <input type="number" v-model.number="localParams.mergeTa" min="0" step="0.1" />
-                  <span class="param-hint">{{ t('params.nearPeakTaHint') }}</span>
-                </div>
-              </div>
+              <p class="grey-release-hint">{{ t('params.peakSymmetryGreyHint') }}</p>
             </div>
           </div>
         </div>
@@ -377,9 +367,11 @@ const defaultParams = {
   lmMode: true,
   tiltCheck: false,
   pseuOrth: false,
-  mergeNearbyEnabled: false,
-  mergeTq: 0.2,
-  mergeTa: 2.0,
+  peakSymmetryEnabled: false,
+  symmetryTq: 0.2,
+  symmetryTa: 2.0,
+  mergeGradientEnabled: false,
+  mergeGradientThreshold: 0.0,
   hklMode: 'Default',
   custH: 5,
   custK: 5,
@@ -441,15 +433,21 @@ watch(() => localParams.ompThreads, (value) => {
   }
 })
 
-watch(() => localParams.mergeTq, (value) => {
+watch(() => localParams.symmetryTq, (value) => {
   if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
-    localParams.mergeTq = defaultParams.mergeTq
+    localParams.symmetryTq = defaultParams.symmetryTq
   }
 })
 
-watch(() => localParams.mergeTa, (value) => {
+watch(() => localParams.symmetryTa, (value) => {
   if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
-    localParams.mergeTa = defaultParams.mergeTa
+    localParams.symmetryTa = defaultParams.symmetryTa
+  }
+})
+
+watch(() => localParams.mergeGradientThreshold, (value) => {
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
+    localParams.mergeGradientThreshold = defaultParams.mergeGradientThreshold
   }
 })
 
@@ -477,6 +475,10 @@ const resetParams = () => {
 }
 
 const saveParams = () => {
+  // Grey release: force peak symmetry merge disabled
+  localParams.peakSymmetryEnabled = false
+  localParams.mergeGradientEnabled = false
+
   Object.assign(props.params, localParams)
   saveNotice.value = t('params.saved')
   if (typeof window !== 'undefined') {
@@ -891,13 +893,42 @@ const saveParams = () => {
   color: var(--text-secondary);
 }
 
-.near-peak-config {
+.peak-symmetry-config {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
 
-.near-peak-thresholds {
+.peak-symmetry-config.peak-symmetry-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+.peak-symmetry-config.peak-symmetry-disabled .toggle-item {
+  cursor: not-allowed;
+}
+
+.grey-release-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-left: 8px;
+}
+
+.grey-release-hint {
+  margin: 6px 0 0 28px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.peak-symmetry-thresholds {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;

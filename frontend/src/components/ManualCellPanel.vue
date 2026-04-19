@@ -107,14 +107,78 @@
           <span class="failed-msg">{{ res.message || t('manual.generationFailed') }}</span>
         </div>
       </div>
+
+      <div v-if="browsableResults.length" class="quick-browse-section">
+        <button class="quick-browse-toggle" @click="browseExpanded = !browseExpanded">
+          <svg class="chevron-icon" :class="{ expanded: browseExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6,9 12,15 18,9"/>
+          </svg>
+          {{ browseExpanded ? t('manual.quickBrowseCollapse') : t('manual.quickBrowseExpand') }}
+        </button>
+
+        <div v-if="browseExpanded" class="quick-browse-content">
+          <div class="browse-mode-switch">
+            <label class="mode-option">
+              <input v-model="browseMode" type="radio" value="single" />
+              <span>{{ t('manual.browseModeSingle') }}</span>
+            </label>
+            <label class="mode-option">
+              <input v-model="browseMode" type="radio" value="overlay" />
+              <span>{{ t('manual.browseModeOverlay') }}</span>
+            </label>
+          </div>
+
+          <div v-if="browseMode === 'single'" class="selection-panel">
+            <label class="selection-label">{{ t('manual.selectGroup') }}</label>
+            <select v-model="selectedSingleLabel" class="group-select">
+              <option v-for="group in browsableResults" :key="group.label" :value="group.label">
+                {{ group.label }} · {{ group.totalReflections || 0 }}
+              </option>
+            </select>
+          </div>
+
+          <div v-else class="selection-panel">
+            <label class="selection-label">{{ t('manual.overlaySelectionTitle') }}</label>
+            <p class="quick-browse-hint">{{ t('manual.overlayHint') }}</p>
+            <div class="overlay-checklist">
+              <label v-for="group in browsableResults" :key="group.label" class="overlay-item" :class="{ active: selectedOverlayLabels.includes(group.label) }">
+                <input
+                  type="checkbox"
+                  :checked="selectedOverlayLabels.includes(group.label)"
+                  :disabled="!selectedOverlayLabels.includes(group.label) && selectedOverlayLabels.length >= 5"
+                  @change="toggleOverlayGroup(group.label)"
+                />
+                <span>{{ group.label }}</span>
+                <span class="chip-count">{{ group.totalReflections || 0 }}</span>
+              </label>
+            </div>
+            <span class="overlay-limit">{{ t('manual.selectedCount', { count: selectedGroups.length }) }}</span>
+            <span v-if="selectedOverlayLabels.length >= 5" class="overlay-limit warning">{{ t('manual.overlayLimit') }}</span>
+          </div>
+
+          <p class="quick-browse-hint">{{ t('manual.liveSyncHint') }}</p>
+
+          <div v-if="selectedGroups.length > 0" class="shared-visualizer">
+            <Visualizer
+              resultType="manual"
+              :overlayGroups="selectedGroups"
+              :importRequestKey="importSelectionKey"
+              @raw-session-ready="handleVisualizerReady"
+              compact
+            />
+          </div>
+          <p v-else class="quick-browse-empty">{{ t('manual.selectGroup') }}</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/index'
+import Visualizer from '@/components/Visualizer.vue'
 
 const { t } = useI18n()
 
@@ -128,6 +192,55 @@ const groups = reactive([defaultGroup()])
 const generating = ref(false)
 const error = ref(null)
 const batchResults = ref([])
+const browseExpanded = ref(false)
+const browseMode = ref('single')
+const selectedSingleLabel = ref('')
+const selectedOverlayLabels = ref([])
+const importSelectionKey = ref(0)
+const visualizerReady = ref(false)
+
+const browsableResults = computed(() => {
+  return batchResults.value
+    .filter(r => r.success && (r.data?.workDir || r.data?.fullMillerContent))
+    .map(r => ({
+      label: r.label || r.data?.label || '',
+      fullMillerContent: r.data?.fullMillerContent || '',
+      workDir: r.data?.workDir || '',
+      totalReflections: r.data?.totalReflections || 0,
+    }))
+})
+
+const selectedGroups = computed(() => {
+  if (browseMode.value === 'overlay') {
+    return browsableResults.value.filter(group => selectedOverlayLabels.value.includes(group.label)).slice(0, 5)
+  }
+  return browsableResults.value.filter(group => group.label === selectedSingleLabel.value).slice(0, 1)
+})
+
+const toggleOverlayGroup = (label) => {
+  if (selectedOverlayLabels.value.includes(label)) {
+    selectedOverlayLabels.value = selectedOverlayLabels.value.filter(item => item !== label)
+    return
+  }
+  if (selectedOverlayLabels.value.length >= 5) return
+  selectedOverlayLabels.value = [...selectedOverlayLabels.value, label]
+}
+
+const handleVisualizerReady = () => {
+  visualizerReady.value = true
+  if (selectedGroups.value.length > 0) {
+    importSelectionKey.value += 1
+  }
+}
+
+watch(selectedGroups, (groups, previousGroups) => {
+  if (!visualizerReady.value || groups.length === 0) return
+  const currentKey = groups.map(group => group.label).join('|')
+  const previousKey = (previousGroups || []).map(group => group.label).join('|')
+  if (currentKey !== previousKey) {
+    importSelectionKey.value += 1
+  }
+})
 
 const addGroup = () => {
   groups.push(defaultGroup())
@@ -139,7 +252,6 @@ const removeGroup = (idx) => {
 
 const generate = async () => {
   error.value = null
-  batchResults.value = []
   generating.value = true
 
   try {
@@ -156,6 +268,16 @@ const generate = async () => {
         ...item,
         label: item.label || item.data?.label || payload[i]?.label || `${t('manual.group', { index: i + 1 })}`,
       }))
+      const firstGroup = batchResults.value.find(item => item.success && (item.data?.workDir || item.data?.fullMillerContent))
+      selectedSingleLabel.value = firstGroup?.label || ''
+      selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
+      browseMode.value = 'single'
+      browseExpanded.value = true
+      if (visualizerReady.value && firstGroup) {
+        importSelectionKey.value += 1
+      } else {
+        importSelectionKey.value = 0
+      }
       if (!res.success) {
         error.value = res.message || t('manual.someGroupsFailed')
       }
@@ -495,5 +617,178 @@ const downloadResult = (data, idx) => {
 .failed-msg {
   font-size: 0.875rem;
   color: var(--status-error);
+}
+
+.quick-browse-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.browse-mode-switch {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-alt);
+  color: var(--text-primary);
+}
+
+.selection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.selection-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.group-select {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-alt);
+  color: var(--text-primary);
+}
+
+.quick-browse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.quick-browse-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.chevron-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: transform var(--transition-normal);
+}
+
+.chevron-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.quick-browse-content {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quick-browse-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.overlay-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.overlay-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-alt);
+}
+
+.overlay-item.active {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.group-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.group-chip.selected {
+  background: var(--primary-bg);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.chip-count {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.group-chip.selected .chip-count {
+  color: var(--primary);
+}
+
+.overlay-limit {
+  font-size: 0.75rem;
+  color: var(--cta);
+  font-weight: 500;
+}
+
+.overlay-limit.warning {
+  color: var(--status-warning, #f59e0b);
+}
+
+.shared-visualizer {
+  margin-top: 4px;
+}
+
+.quick-browse-empty {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 0;
+  margin: 0;
 }
 </style>

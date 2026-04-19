@@ -163,6 +163,44 @@ class MillerFileParser:
             return []
 
 
+def parse_fullmiller_to_miller_data(fullmiller_content: str) -> list[dict]:
+    """Parse FullMiller text content into structured millerData array.
+
+    FullMiller format: text file with Miller index data, one line per reflection.
+    Each line: H K L q ψ
+    Returns list of dicts with keys: h, k, l, qcalc, psicalc, psiRootCalc, qobs, psiobs.
+    Compatible with standard indexing result millerData structure.
+    """
+    from typing import List, Dict, Any
+    result: List[Dict[str, Any]] = []
+    if not fullmiller_content:
+        return result
+    for line in fullmiller_content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(('H', 'h', 'v', 'V', 'volume')):
+            continue
+        parts = stripped.split()
+        if len(parts) < 5:
+            continue
+        try:
+            entry = {
+                'h': int(float(parts[0])),
+                'k': int(float(parts[1])),
+                'l': int(float(parts[2])),
+                'qcalc': float(parts[3]),
+                'psicalc': float(parts[4]),
+                'psiRootCalc': None,
+                'qobs': float(parts[3]),
+                'psiobs': float(parts[4]),
+            }
+            result.append(entry)
+        except (ValueError, IndexError):
+            continue
+    return result
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 坐标信息文件解析
 # ═══════════════════════════════════════════════════════════════════════════
@@ -328,8 +366,8 @@ class PixelCoordinateCalculator:
             if shape is None:
                 print("[PixelCalc] Detector shape is None")
                 return
-            q_array = ai.qArray(shape)
-            chi_array = ai.chiArray(shape)
+            q_array = ai.q_array(shape)
+            chi_array = ai.chi_array(shape)
             self._q_array = q_array
             self._chi_array = chi_array
             self._ai = ai
@@ -509,8 +547,14 @@ def draw_raw_markers(
     draw.line([(x0 - 14, y0), (x0 + 14, y0)], fill=(255, 255, 0), width=2)
     draw.line([(x0, y0 - 14), (x0, y0 + 14)], fill=(255, 255, 0), width=2)
 
-    # ── FullMiller 青色方块 ──────────────────────────────────────────────
-    CYAN   = (0, 210, 230)
+    # ── FullMiller 多组叠加色板 / outputMiller 橙色 ───────────────────────
+    OVERLAY_COLORS = [
+        (0, 210, 230),
+        (140, 90, 255),
+        (30, 200, 120),
+        (255, 80, 120),
+        (255, 210, 0),
+    ]
     ORANGE = (255, 140, 0)
 
     def draw_square(x, y, color):
@@ -531,6 +575,14 @@ def draw_raw_markers(
                     lbl = f"[{pt['h']}{pt['k']}{pt['l']}]"
                     draw.text((x - 14, y - 20 - i * 16), lbl, fill=color, font=font)
 
-    draw_group(full_pts,   CYAN,   draw_square)
+    full_overlay_groups: dict = {}
+    for pt in full_pts:
+        overlay_index = int(pt.get('overlay_index', 0) or 0)
+        full_overlay_groups.setdefault(overlay_index, []).append(pt)
+
+    for overlay_index, pts in sorted(full_overlay_groups.items()):
+        color = OVERLAY_COLORS[overlay_index % len(OVERLAY_COLORS)]
+        draw_group(pts, color, draw_square)
+
     draw_group(output_pts, ORANGE, draw_diamond)
     return img

@@ -8,11 +8,18 @@ import os
 import re
 import shutil
 import subprocess
+import time
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from services.fortran_runtime import ensure_fortran_binaries
+
+
+class TaskCancelledException(Exception):
+    """Custom exception for task cancellation."""
+    pass
 
 
 def resolve_cell_file(work_dir: str, step: int) -> Optional[str]:
@@ -181,7 +188,7 @@ def build_glide_batch_payload(raw_batches: Optional[List[Any]]) -> List[Dict[str
     return payload
 
 
-def run_miller_postprocess(work_dir: str, step: int) -> bool:
+def run_miller_postprocess(work_dir: str, step: int, stop_event: Optional[threading.Event] = None) -> bool:
     """Run Fortran Miller post-process in a prepared work directory."""
     _, postprocess_path = ensure_fortran_binaries()
     postprocess_exe = str(postprocess_path)
@@ -223,12 +230,21 @@ def run_miller_postprocess(work_dir: str, step: int) -> bool:
     if os.path.dirname(cell_file) != work_dir:
         shutil.copy2(cell_file, os.path.join(work_dir, cell_file_name))
 
-    result = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True)
+    process = subprocess.Popen(cmd, cwd=work_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    while process.poll() is None:
+        if stop_event and stop_event.is_set():
+            process.kill()
+            process.wait()
+            raise TaskCancelledException("Task cancelled during miller postprocess")
+        time.sleep(0.1)
+    stdout, stderr = process.communicate()
+    returncode = process.returncode
+
     output_miller_file = os.path.join(work_dir, "outputMiller.txt")
     full_miller_file = os.path.join(work_dir, "FullMiller.txt")
 
     if (
-        result.returncode == 0
+        returncode == 0
         and os.path.exists(output_miller_file)
         and os.path.exists(full_miller_file)
     ):
@@ -237,12 +253,12 @@ def run_miller_postprocess(work_dir: str, step: int) -> bool:
         )
         return True
 
-    print(f"[PostProcess] Warning: Post-process returned code {result.returncode}")
-    if result.stdout:
-        print(f"[PostProcess] stdout: {result.stdout}")
-    if result.stderr:
-        print(f"[PostProcess] stderr: {result.stderr}")
-    if result.returncode == 0:
+    print(f"[PostProcess] Warning: Post-process returned code {returncode}")
+    if stdout:
+        print(f"[PostProcess] stdout: {stdout}")
+    if stderr:
+        print(f"[PostProcess] stderr: {stderr}")
+    if returncode == 0:
         print(
             "[PostProcess] Warning: Post-process exited successfully but output files were not generated"
         )

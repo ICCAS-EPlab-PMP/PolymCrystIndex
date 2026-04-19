@@ -244,7 +244,7 @@ class HDF5Manager:
             ds.resize(ds.shape[0] + 1, axis=0)
             ds[-1] = best_cell
 
-    def write_metadata(self, version: str = "1.8.0") -> None:
+    def write_metadata(self, version: str = "1.8.1") -> None:
         """写入元数据 / Write metadata
 
         Args:

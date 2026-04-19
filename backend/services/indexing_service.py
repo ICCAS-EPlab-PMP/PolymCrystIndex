@@ -44,11 +44,11 @@ def _load_peak_merge_helper():
 
 
 _peak_merge_helper = _load_peak_merge_helper()
-build_near_peak_groups_from_results = (
-    _peak_merge_helper.build_near_peak_groups_from_results
+build_peak_symmetry_groups_from_results = (
+    _peak_merge_helper.build_peak_symmetry_groups_from_results
 )
-DEFAULT_NEAR_PEAK_Q_THRESHOLD = _peak_merge_helper.DEFAULT_NEAR_PEAK_Q_THRESHOLD
-DEFAULT_NEAR_PEAK_ANGLE_THRESHOLD = _peak_merge_helper.DEFAULT_NEAR_PEAK_ANGLE_THRESHOLD
+DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD = _peak_merge_helper.DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD
+DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD = _peak_merge_helper.DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD
 
 
 def _load_postprocess_core_helper():
@@ -64,7 +64,21 @@ def _load_postprocess_core_helper():
     return module
 
 
+def _load_diffraction_utils_helper():
+    helper_path = Path(__file__).with_name("diffraction_utils.py")
+    spec = importlib.util.spec_from_file_location(
+        "services_diffraction_utils", helper_path
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load diffraction_utils helper from {helper_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 postprocess_core = _load_postprocess_core_helper()
+diffraction_utils = _load_diffraction_utils_helper()
 
 
 class ProgressTracker:
@@ -272,7 +286,7 @@ def _build_task_paths(work_dir: str) -> dict:
         "hdf5_file": os.path.join(work_dir, "results.h5"),
         "output_miller_file": os.path.join(work_dir, "outputMiller.txt"),
         "full_miller_file": os.path.join(work_dir, "FullMiller.txt"),
-        "near_peak_groups_file": os.path.join(work_dir, "near_peak_groups.json"),
+        "peak_symmetry_groups_file": os.path.join(work_dir, "peak_symmetry_groups.json"),
     }
 
 
@@ -331,49 +345,60 @@ class IndexingService:
         except Exception:
             return 62
 
-    def _get_near_peak_config(self, params: Optional[AnalysisParams]) -> Dict[str, Any]:
-        enabled = bool(getattr(params, "mergeNearbyEnabled", False))
-        merge_tq = getattr(params, "mergeTq", DEFAULT_NEAR_PEAK_Q_THRESHOLD)
-        merge_ta = getattr(params, "mergeTa", DEFAULT_NEAR_PEAK_ANGLE_THRESHOLD)
+    def _get_peak_symmetry_config(self, params: Optional[AnalysisParams]) -> Dict[str, Any]:
+        enabled = bool(
+            getattr(params, "peakSymmetryEnabled",
+                    getattr(params, "mergeNearbyEnabled", False))
+        )
+        symmetry_tq = getattr(params, "symmetryTq",
+                              getattr(params, "mergeTq", DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD))
+        symmetry_ta = getattr(params, "symmetryTa",
+                              getattr(params, "mergeTa", DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD))
+        merge_gradient_enabled = getattr(params, "mergeGradientEnabled", False)
+        merge_gradient_threshold = float(getattr(params, "mergeGradientThreshold", 0.0) or 0.0)
         return {
             "enabled": enabled,
-            "mergeTq": float(
-                DEFAULT_NEAR_PEAK_Q_THRESHOLD if merge_tq is None else merge_tq
+            "symmetryTq": float(
+                DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD if symmetry_tq is None else symmetry_tq
             ),
-            "mergeTa": float(
-                DEFAULT_NEAR_PEAK_ANGLE_THRESHOLD if merge_ta is None else merge_ta
+            "symmetryTa": float(
+                DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD if symmetry_ta is None else symmetry_ta
             ),
+            "mergeGradientEnabled": merge_gradient_enabled,
+            "mergeGradientThreshold": merge_gradient_threshold,
         }
 
-    def _format_near_peak_summary_log(
-        self, near_peak_groups: List[Dict[str, Any]]
+    def _format_peak_symmetry_summary_log(
+        self, peak_symmetry_groups: List[Dict[str, Any]]
     ) -> str:
         two_peak_count = sum(
-            1 for group in near_peak_groups if group.get("groupType") == "2-peak"
+            1 for group in peak_symmetry_groups if group.get("groupType") == "2-peak"
         )
         four_peak_count = sum(
-            1 for group in near_peak_groups if group.get("groupType") == "4-peak"
+            1 for group in peak_symmetry_groups if group.get("groupType") == "4-peak"
         )
         return (
-            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Near-peak groups: "
-            f"2-peak={two_peak_count}, 4-peak={four_peak_count}, total={len(near_peak_groups)}"
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Peak symmetry groups: "
+            f"2-peak={two_peak_count}, 4-peak={four_peak_count}, total={len(peak_symmetry_groups)}"
         )
 
-    def _build_near_peak_groups(
+    def _build_peak_symmetry_groups(
         self,
         diffraction_data: List[Dict[str, Any]],
         miller_data: List[Dict[str, Any]],
         params: Optional[AnalysisParams],
     ) -> List[Dict[str, Any]]:
-        config = self._get_near_peak_config(params)
+        config = self._get_peak_symmetry_config(params)
         if not config["enabled"]:
             return []
 
-        return build_near_peak_groups_from_results(
+        return build_peak_symmetry_groups_from_results(
             diffraction_data,
             miller_data,
-            q_threshold=config["mergeTq"],
-            angle_threshold=config["mergeTa"],
+            q_threshold=config["symmetryTq"],
+            angle_threshold=config["symmetryTa"],
+            merge_gradient_enabled=config["mergeGradientEnabled"],
+            merge_gradient_threshold=config["mergeGradientThreshold"],
         )
 
     def _read_diffraction_data(self, diffraction_file: str) -> List[Dict[str, Any]]:
@@ -472,12 +497,12 @@ class IndexingService:
     def _read_glide_batch_artifact(self, work_dir: str) -> Dict[str, Any]:
         return postprocess_core.read_glide_batch_artifact(work_dir)
 
-    def _persist_near_peak_artifact(
+    def _persist_peak_symmetry_artifact(
         self, work_dir: str, params: Optional[AnalysisParams]
     ) -> Dict[str, Any]:
         task_paths = _build_task_paths(work_dir)
-        artifact_path = task_paths["near_peak_groups_file"]
-        config = self._get_near_peak_config(params)
+        artifact_path = task_paths["peak_symmetry_groups_file"]
+        config = self._get_peak_symmetry_config(params)
 
         if not config["enabled"]:
             if os.path.exists(artifact_path):
@@ -486,15 +511,15 @@ class IndexingService:
 
         diffraction_data = self._read_diffraction_data(task_paths["diffraction_file"])
         miller_data = self._read_miller_data(task_paths["output_miller_file"])
-        near_peak_groups = self._build_near_peak_groups(
+        peak_symmetry_groups = self._build_peak_symmetry_groups(
             diffraction_data,
             miller_data,
             params,
         )
 
         payload = {
-            "nearPeakConfig": config,
-            "nearPeakGroups": near_peak_groups,
+            "peakSymmetryConfig": config,
+            "peakSymmetryGroups": peak_symmetry_groups,
             "generatedDuringRun": True,
             "source": "run_indexing",
             "generatedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -505,12 +530,12 @@ class IndexingService:
         return {
             "enabled": True,
             "artifactPath": artifact_path,
-            "groupCount": len(near_peak_groups),
-            "nearPeakGroups": near_peak_groups,
+            "groupCount": len(peak_symmetry_groups),
+            "peakSymmetryGroups": peak_symmetry_groups,
         }
 
-    def _read_near_peak_artifact(self, work_dir: str) -> Dict[str, Any]:
-        artifact_path = _build_task_paths(work_dir)["near_peak_groups_file"]
+    def _read_peak_symmetry_artifact(self, work_dir: str) -> Dict[str, Any]:
+        artifact_path = _build_task_paths(work_dir)["peak_symmetry_groups_file"]
         if not os.path.exists(artifact_path):
             return {}
 
@@ -640,8 +665,8 @@ class IndexingService:
 
         return input_file
 
-    def _run_miller_postprocess(self, work_dir: str, step: int) -> bool:
-        return postprocess_core.run_miller_postprocess(work_dir, step)
+    def _run_miller_postprocess(self, work_dir: str, step: int, stop_event: Optional[threading.Event] = None) -> bool:
+        return postprocess_core.run_miller_postprocess(work_dir, step, stop_event)
 
     async def run_indexing(
         self, task_id: str, data_file: str, params: AnalysisParams
@@ -794,7 +819,10 @@ class IndexingService:
                         callback=callback,
                         use_hdf5=True,
                         hdf5_file=hdf5_file,
+                        stop_event=stop_event,
                     )
+
+                    self._running_tasks[task_id]["indexer"] = indexer
 
                     indexer.run()
 
@@ -847,7 +875,7 @@ class IndexingService:
 
                 loop = asyncio.get_running_loop()
                 postprocess_success = await loop.run_in_executor(
-                    executor, lambda: self._run_miller_postprocess(work_dir, final_step)
+                    executor, lambda: self._run_miller_postprocess(work_dir, final_step, stop_event)
                 )
 
                 if postprocess_success:
@@ -855,23 +883,23 @@ class IndexingService:
                         f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Miller indices generated successfully"
                     )
                     try:
-                        near_peak_result = self._persist_near_peak_artifact(
+                        peak_symmetry_result = self._persist_peak_symmetry_artifact(
                             work_dir,
                             params,
                         )
-                        near_peak_groups = (
-                            near_peak_result.get("nearPeakGroups", []) or []
+                        peak_symmetry_groups = (
+                            peak_symmetry_result.get("peakSymmetryGroups", []) or []
                         )
-                        if near_peak_result.get("enabled"):
+                        if peak_symmetry_result.get("enabled"):
                             tracker.append_log(
-                                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Near-peak artifact written: {os.path.basename(near_peak_result['artifactPath'])}"
+                                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Peak symmetry merge artifact written: {os.path.basename(peak_symmetry_result['artifactPath'])}"
                             )
                         else:
                             tracker.append_log(
-                                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Near-peak discussion disabled; execution artifact skipped"
+                                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Peak symmetry merge disabled; execution artifact skipped"
                             )
                         tracker.append_log(
-                            self._format_near_peak_summary_log(near_peak_groups)
+                            self._format_peak_symmetry_summary_log(peak_symmetry_groups)
                         )
                         await self.task_manager.update_task_progress(
                             task_id,
@@ -881,7 +909,7 @@ class IndexingService:
                         )
                     except Exception as exc:
                         tracker.append_log(
-                            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [Warning] Near-peak summary skipped: {exc}"
+                            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [Warning] Peak symmetry summary skipped: {exc}"
                         )
                 else:
                     tracker.append_log(
@@ -988,6 +1016,8 @@ class IndexingService:
             return {
                 "success": True,
                 "data": {
+                    "resultType": "manual",
+                    "workDir": work_dir,
                     "cellParams": bundle["cellParams"]
                     or postprocess_core.cell_values_to_dict(
                         [a, b, c, alpha, beta, gamma]
@@ -996,6 +1026,9 @@ class IndexingService:
                     "fullMillerContent": bundle["fullMillerContent"],
                     "outputMillerContent": bundle["outputMillerContent"],
                     "totalReflections": bundle["totalReflections"],
+                    "millerData": diffraction_utils.parse_fullmiller_to_miller_data(
+                        bundle.get("fullMillerContent", "")
+                    ),
                 },
             }
 
@@ -1093,8 +1126,10 @@ class IndexingService:
                 bundle = postprocess_core.read_postprocess_bundle(batch_dir, 0)
                 groups_out.append(
                     {
+                        "resultType": "glide",
                         "label": grp["label"],
                         "directory": grp["directory"],
+                        "workDir": batch_dir,
                         "fullMillerFile": grp.get("fullMillerFile"),
                         "outputMillerFile": grp.get("outputMillerFile"),
                         "fullMillerSize": grp.get("fullMillerSize", 0),
@@ -1105,6 +1140,9 @@ class IndexingService:
                         "totalReflections": bundle.get("totalReflections", 0),
                         "volume": bundle.get("volume"),
                         "input": grp.get("input"),
+                        "millerData": diffraction_utils.parse_fullmiller_to_miller_data(
+                            bundle.get("fullMillerContent", "")
+                        ),
                     }
                 )
 
@@ -1132,6 +1170,10 @@ class IndexingService:
 
                 if future:
                     future.cancel()
+
+                indexer = task_info.get("indexer")
+                if indexer is not None:
+                    indexer.fortran_caller.kill_current_process()
 
                 return True
 
@@ -1300,10 +1342,10 @@ class IndexingService:
 
                 diffraction_file = os.path.join(work_dir, "observed_diffraction.txt")
                 diffraction_data = self._read_diffraction_data(diffraction_file)
-                near_peak_artifact = self._read_near_peak_artifact(work_dir)
-                near_peak_groups = near_peak_artifact.get("nearPeakGroups", []) or []
-                near_peak_config = near_peak_artifact.get(
-                    "nearPeakConfig", self._get_near_peak_config(task.params)
+                peak_symmetry_artifact = self._read_peak_symmetry_artifact(work_dir)
+                peak_symmetry_groups = peak_symmetry_artifact.get("peakSymmetryGroups", []) or []
+                peak_symmetry_config = peak_symmetry_artifact.get(
+                    "peakSymmetryConfig", self._get_peak_symmetry_config(task.params)
                 )
                 glide_batch_artifact = self._read_glide_batch_artifact(work_dir)
 
@@ -1355,6 +1397,7 @@ class IndexingService:
                     cell_params["volume"] = volume
 
                 return {
+                    "resultType": "indexing",
                     "cellParams": cell_params,
                     "millerData": miller_data,
                     "qualityMetrics": {
@@ -1369,8 +1412,8 @@ class IndexingService:
                     "taskId": task_id,
                     "totalReflections": full_miller_count,
                     "indexedPeaks": len(miller_data),
-                    "nearPeakConfig": near_peak_config,
-                    "nearPeakGroups": near_peak_groups,
+                    "peakSymmetryConfig": peak_symmetry_config,
+                    "peakSymmetryGroups": peak_symmetry_groups,
                     "glideBatchOutputs": glide_batch_artifact,
                     "files": {
                         "cell_file": f"cell_{task.total_steps - 1}.txt",

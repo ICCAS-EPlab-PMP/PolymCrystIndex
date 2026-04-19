@@ -184,19 +184,19 @@ const statusPollingTimer = ref(null)
 const logsPollingTimer = ref(null)
 const logMode = ref('summary')
 
-const buildNearPeakSummaryLines = (resultData) => {
-  const groups = Array.isArray(resultData?.nearPeakGroups) ? resultData.nearPeakGroups : []
+const buildPeakSymmetrySummaryLines = (resultData) => {
+  const groups = Array.isArray(resultData?.peakSymmetryGroups) ? resultData.peakSymmetryGroups : []
   const twoPeakCount = groups.filter(group => group?.groupType === '2-peak').length
   const fourPeakCount = groups.filter(group => group?.groupType === '4-peak').length
-  const enabled = Boolean(resultData?.nearPeakConfig?.enabled)
+  const enabled = Boolean(resultData?.peakSymmetryConfig?.enabled)
 
   if (!enabled) {
-    return ['[System] Near-peak discussion mode: disabled']
+    return ['[System] Peak symmetry merge mode: disabled']
   }
 
   return [
-    `[System] Near-peak discussion mode: enabled (Tq=${resultData?.nearPeakConfig?.mergeTq ?? 0.2}, Ta=${resultData?.nearPeakConfig?.mergeTa ?? 2.0})`,
-    `[System] Near-peak groups summary: 2-peak=${twoPeakCount}, 4-peak=${fourPeakCount}, total=${groups.length}`
+    `[System] Peak symmetry merge mode: enabled (Tq=${resultData?.peakSymmetryConfig?.mergeTq ?? 0.2}, Ta=${resultData?.peakSymmetryConfig?.mergeTa ?? 2.0})`,
+    `[System] Peak symmetry groups summary: 2-peak=${twoPeakCount}, 4-peak=${fourPeakCount}, total=${groups.length}`
   ]
 }
 
@@ -221,7 +221,7 @@ const appendResultSummaryLogs = async () => {
     }
 
     const summaryLines = [
-      ...buildNearPeakSummaryLines(result.data),
+      ...buildPeakSymmetrySummaryLines(result.data),
       ...buildGlideSummaryLines(result.data),
     ]
     for (const line of summaryLines) {

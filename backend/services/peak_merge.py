@@ -1,11 +1,11 @@
-"""Helpers for nearby-peak joint candidate grouping."""
+"""Helpers for peak symmetry merge grouping."""
 
 from itertools import combinations
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 
-DEFAULT_NEAR_PEAK_Q_THRESHOLD = 0.2
-DEFAULT_NEAR_PEAK_ANGLE_THRESHOLD = 2.0
+DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD = 0.2
+DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD = 2.0
 
 
 def _get_peak_q(peak: Dict[str, Any]) -> float:
@@ -77,6 +77,19 @@ def _sign(value: int) -> int:
     return 0
 
 
+def _check_merge_gradient(peaks: Sequence[Dict[str, Any]], threshold: float) -> bool:
+    """Check if candidate peaks have merge gradient (converging toward same position).
+
+    Algorithm TBD - current framework:
+    - threshold=0: skip check (pass)
+    - threshold>0: check gradient convergence
+    TODO: Fill in when user defines specific gradient calculation
+    """
+    if threshold <= 0:
+        return True
+    return True
+
+
 def _hk_rule_details(peaks: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     abs_h_values = {abs(peak["h"]) for peak in peaks}
     abs_k_values = {abs(peak["k"]) for peak in peaks}
@@ -88,38 +101,51 @@ def _hk_rule_details(peaks: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     same_hk_magnitude = len(abs_h_values) == 1 and len(abs_k_values) == 1
     same_l = len(l_values) == 1
     unique_sign_count_matches = len(unique_sign_variants) == member_count
+
+    abs_h = next(iter(abs_h_values)) if len(abs_h_values) == 1 else None
+    abs_k = next(iter(abs_k_values)) if len(abs_k_values) == 1 else None
+
+    h_signs = {0} if abs_h == 0 else ({1, -1} if abs_h is not None else set())
+    k_signs = {0} if abs_k == 0 else ({1, -1} if abs_k is not None else set())
+    expected_variants = {(hs, ks) for hs in h_signs for ks in k_signs}
+
     opposite_sign_present = any(
         first[0] == -second[0] or first[1] == -second[1]
         for first, second in combinations(unique_sign_variants, 2)
     )
 
     member_count_supported = member_count in (2, 4)
-    if member_count == 4:
-        expected_variants = {
-            (1, 1),
-            (1, -1),
-            (-1, 1),
-            (-1, -1),
-        }
+
+    if abs_h == 0 and abs_k == 0:
+        sign_pattern_ok = False
+    elif member_count == 4:
         sign_pattern_ok = set(unique_sign_variants) == expected_variants
     else:
         sign_pattern_ok = len(unique_sign_variants) == 2 and opposite_sign_present
 
-    hk_rule_passed = (
-        member_count_supported
-        and same_hk_magnitude
-        and same_l
-        and unique_sign_count_matches
-        and sign_pattern_ok
-    )
+    if member_count == 4:
+        hk_rule_passed = (
+            member_count_supported
+            and same_hk_magnitude
+            and same_l
+            and sign_pattern_ok
+        )
+    else:
+        hk_rule_passed = (
+            member_count_supported
+            and same_hk_magnitude
+            and same_l
+            and unique_sign_count_matches
+            and sign_pattern_ok
+        )
 
     return {
         "hkRulePassed": hk_rule_passed,
         "sameAbsH": len(abs_h_values) == 1,
         "sameAbsK": len(abs_k_values) == 1,
         "sameL": same_l,
-        "absH": next(iter(abs_h_values)) if len(abs_h_values) == 1 else None,
-        "absK": next(iter(abs_k_values)) if len(abs_k_values) == 1 else None,
+        "absH": abs_h,
+        "absK": abs_k,
         "l": next(iter(l_values)) if len(l_values) == 1 else None,
         "signVariants": [list(item) for item in unique_sign_variants],
         "requiresSupportedMemberCount": member_count_supported,
@@ -128,7 +154,11 @@ def _hk_rule_details(peaks: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _build_group(
-    peaks: Sequence[Dict[str, Any]], q_threshold: float, angle_threshold: float
+    peaks: Sequence[Dict[str, Any]],
+    q_threshold: float,
+    angle_threshold: float,
+    merge_gradient_enabled: bool = False,
+    merge_gradient_threshold: float = 0.0,
 ) -> Dict[str, Any]:
     normalized_peaks = sorted(peaks, key=lambda item: item["peakIndex"])
     within_threshold, max_delta_q, max_delta_angle, pair_checks = (
@@ -136,6 +166,10 @@ def _build_group(
     )
     hk_details = _hk_rule_details(normalized_peaks)
     member_count = len(normalized_peaks)
+
+    gradient_passed = False
+    if merge_gradient_enabled:
+        gradient_passed = _check_merge_gradient(normalized_peaks, merge_gradient_threshold)
 
     return {
         "groupType": f"{member_count}-peak",
@@ -151,16 +185,23 @@ def _build_group(
         },
         "hkRulePassed": hk_details["hkRulePassed"],
         "hkRule": hk_details,
+        "mergeGradient": {
+            "enabled": merge_gradient_enabled,
+            "passed": gradient_passed,
+            "threshold": merge_gradient_threshold,
+        },
         "members": normalized_peaks,
     }
 
 
-def identify_near_peak_groups(
+def identify_peak_symmetry_groups(
     peaks: Iterable[Dict[str, Any]],
-    q_threshold: float = DEFAULT_NEAR_PEAK_Q_THRESHOLD,
-    angle_threshold: float = DEFAULT_NEAR_PEAK_ANGLE_THRESHOLD,
+    q_threshold: float = DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD,
+    angle_threshold: float = DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD,
+    merge_gradient_enabled: bool = False,
+    merge_gradient_threshold: float = 0.0,
 ) -> List[Dict[str, Any]]:
-    """Build nearby 2-peak / 4-peak joint candidate groups.
+    """Build symmetric 2-peak / 4-peak joint candidate groups.
 
     Peaks are kept as separate members. Grouping requires all member pairs to satisfy
     both thresholds simultaneously, and the hk rule requires equal |h|/|k|, equal l,
@@ -190,7 +231,13 @@ def identify_near_peak_groups(
                 ]
                 matched_group = None
                 for combo in combinations(candidate_pool, target_size):
-                    group = _build_group(combo, q_threshold, angle_threshold)
+                    group = _build_group(
+                        combo,
+                        q_threshold,
+                        angle_threshold,
+                        merge_gradient_enabled,
+                        merge_gradient_threshold,
+                    )
                     if group["withinThreshold"]["passed"] and group["hkRulePassed"]:
                         matched_group = group
                         break
@@ -201,17 +248,17 @@ def identify_near_peak_groups(
                 groups.append(matched_group)
                 used_peak_indices.update(matched_group["memberPeakIndices"])
 
-        # 保持输出稳定，避免同一桶里已使用成员再次参与后续组合。
-
     groups.sort(key=lambda item: (item["memberCount"], item["memberPeakIndices"]))
     return groups
 
 
-def build_near_peak_groups_from_results(
+def build_peak_symmetry_groups_from_results(
     diffraction_data: Sequence[Dict[str, Any]],
     miller_data: Sequence[Dict[str, Any]],
-    q_threshold: float = DEFAULT_NEAR_PEAK_Q_THRESHOLD,
-    angle_threshold: float = DEFAULT_NEAR_PEAK_ANGLE_THRESHOLD,
+    q_threshold: float = DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD,
+    angle_threshold: float = DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD,
+    merge_gradient_enabled: bool = False,
+    merge_gradient_threshold: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """Zip observed peaks with parsed Miller assignments and build joint groups."""
 
@@ -230,8 +277,10 @@ def build_near_peak_groups_from_results(
             }
         )
 
-    return identify_near_peak_groups(
+    return identify_peak_symmetry_groups(
         paired_peaks,
         q_threshold=q_threshold,
         angle_threshold=angle_threshold,
+        merge_gradient_enabled=merge_gradient_enabled,
+        merge_gradient_threshold=merge_gradient_threshold,
     )

@@ -72,23 +72,24 @@
         </div>
       </router-link>
 
-      <router-link to="/app/glide" class="feature-card">
+      <router-link to="/app/results" class="feature-card">
         <div class="card-header">
-          <div class="card-icon glide">
-            <img :src="glideIcon" alt="Glide module icon" class="module-icon-image" />
+          <div class="card-icon results">
+            <img :src="resultIcon" alt="Results module icon" class="module-icon-image" />
           </div>
           <div class="card-title">
-            <h2>{{ t('modules.glide.title') }}</h2>
+            <h2>{{ t('modules.results.title') }}</h2>
             <span v-if="!isLocal" class="badge active">{{ t('modules.active') }}</span>
           </div>
         </div>
         <div class="card-body">
-          <p>{{ t('modules.glide.desc') }}</p>
+          <p>{{ t('modules.results.desc') }}</p>
         </div>
         <div class="card-footer">
           <div class="feature-tags">
-            <span class="feature-tag">{{ t('modules.glide.batchInput') }}</span>
-            <span class="feature-tag">FullMiller</span>
+            <span class="feature-tag">{{ t('modules.results.visualization') }}</span>
+            <span class="feature-tag">{{ t('modules.results.export') }}</span>
+            <span v-if="isLocal" class="feature-tag">HDF5</span>
           </div>
         </div>
       </router-link>
@@ -114,28 +115,61 @@
         </div>
       </router-link>
 
-      <router-link to="/app/results" class="feature-card">
+      <router-link to="/app/glide" class="feature-card">
         <div class="card-header">
-          <div class="card-icon results">
-            <img :src="resultIcon" alt="Results module icon" class="module-icon-image" />
+          <div class="card-icon glide">
+            <img :src="glideIcon" alt="Glide module icon" class="module-icon-image" />
           </div>
           <div class="card-title">
-            <h2>{{ t('modules.results.title') }}</h2>
+            <h2>{{ t('modules.glide.title') }}</h2>
             <span v-if="!isLocal" class="badge active">{{ t('modules.active') }}</span>
           </div>
         </div>
         <div class="card-body">
-          <p>{{ t('modules.results.desc') }}</p>
+          <p>{{ t('modules.glide.desc') }}</p>
         </div>
         <div class="card-footer">
           <div class="feature-tags">
-            <span class="feature-tag">{{ t('modules.results.visualization') }}</span>
-            <span class="feature-tag">{{ t('modules.results.export') }}</span>
-            <span v-if="isLocal" class="feature-tag">HDF5</span>
+            <span class="feature-tag">{{ t('modules.glide.batchInput') }}</span>
+            <span class="feature-tag">FullMiller</span>
           </div>
         </div>
       </router-link>
     </div>
+
+    <section class="home-updates" :class="{ collapsed: !updatesExpanded }">
+      <div class="updates-header">
+        <div class="updates-inline-head">
+          <span class="updates-eyebrow">{{ t('home.recentUpdates.eyebrow') }}</span>
+          <div class="updates-inline-lines">
+            <div class="updates-inline-tags">
+              <span class="feature-tag">{{ t('home.recentUpdates.versionValue') }}</span>
+            </div>
+            <div class="updates-inline-tags">
+              <span v-for="keyword in updateKeywordKeys" :key="keyword" class="feature-tag">{{ t(`home.recentUpdates.keywords.${keyword}`) }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="updates-actions">
+          <button class="updates-toggle" @click="updatesExpanded = !updatesExpanded">
+            {{ updatesExpanded ? t('home.recentUpdates.collapse') : t('home.recentUpdates.expand') }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="updatesExpanded" class="updates-grid">
+        <article v-for="item in updateItems" :key="item.key" class="update-card">
+          <div class="update-card-header">
+            <span class="update-badge" :class="`type-${item.type}`">{{ t(`home.recentUpdates.types.${item.type}`) }}</span>
+            <span class="update-date">{{ t('home.recentUpdates.dateLabel') }}: {{ t(`home.recentUpdates.items.${item.key}.date`) }}</span>
+          </div>
+          <h4>{{ t(`home.recentUpdates.items.${item.key}.title`) }}</h4>
+          <p>{{ t(`home.recentUpdates.items.${item.key}.summary`) }}</p>
+        </article>
+      </div>
+
+      <p v-else class="updates-collapsed-summary">{{ t('home.recentUpdates.collapsedSummary') }}</p>
+    </section>
 
     <section class="home-about">
       <About />
@@ -144,7 +178,7 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent, computed } from 'vue'
+import { defineAsyncComponent, computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isLocalProfile } from '@/services/runtime'
 
@@ -159,6 +193,15 @@ import glideIcon from '@icon/glide.svg'
 import manualIcon from '@icon/manual.svg'
 
 const isLocal = computed(() => isLocalProfile())
+const updatesExpanded = ref(false)
+
+const updateItems = [
+  { key: 'manualCell', type: 'feature' },
+  { key: 'glideVisual', type: 'feature' },
+  { key: 'indexingVisual', type: 'notice' },
+]
+
+const updateKeywordKeys = ['manualCell', 'glideC', 'indexingVisual']
 </script>
 
 <style scoped>
@@ -530,16 +573,161 @@ const isLocal = computed(() => isLocalProfile())
   color: var(--primary);
 }
 
+.home-updates {
+  position: relative;
+  z-index: 1;
+  padding: 28px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+}
+
+.updates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+
+.updates-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.updates-inline-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.updates-inline-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.updates-inline-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.updates-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: var(--primary-bg);
+  margin-bottom: 10px;
+}
+
+.updates-toggle {
+  border: 1px solid rgba(59, 130, 246, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--primary);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.updates-collapsed-summary {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.updates-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.update-card {
+  padding: 22px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.92));
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.update-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.update-badge.type-feature {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary);
+}
+
+.update-badge.type-fix {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--secondary);
+}
+
+.update-badge.type-notice {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--cta);
+}
+
+.update-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.update-card h4 {
+  margin: 0;
+  font-size: 1.08rem;
+  color: var(--text-primary);
+}
+
+.update-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
 @media (max-width: 1024px) {
   .cards-container,
-  .workflow-grid {
+  .workflow-grid,
+  .updates-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 768px) {
   .cards-container,
-  .workflow-grid {
+  .workflow-grid,
+  .updates-grid {
     grid-template-columns: 1fr;
   }
 
@@ -557,6 +745,29 @@ const isLocal = computed(() => isLocalProfile())
 
   .hero-title-sub {
     letter-spacing: 0.12em;
+  }
+
+  .home-updates {
+    padding: 22px;
+  }
+
+  .updates-header {
+    flex-direction: column;
+  }
+
+  .updates-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .updates-inline-head {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .updates-inline-lines {
+    width: 100%;
   }
 }
 

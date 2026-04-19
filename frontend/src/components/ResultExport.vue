@@ -14,8 +14,9 @@
         </svg>
       </div>
       <h3>{{ t('results.noResults') }}</h3>
-      <p>{{ t('results.noResultsDesc') }}</p>
-      <button class="btn-start" @click="startAnalysis">
+      <p v-if="!isExternalResult">{{ t('results.noResultsDesc') }}</p>
+      <p v-else>{{ t('results.noResultsDesc') }}</p>
+      <button v-if="!isExternalResult" class="btn-start" @click="startAnalysis">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5,3 19,12 5,21 5,3"/>
         </svg>
@@ -193,54 +194,60 @@
         </div>
       </div>
 
-      <div class="near-peak-section">
+      <!-- Grey release: peak symmetry merge section hidden until next minor version -->
+      <div v-if="false" class="peak-symmetry-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M7 7h10v10H7z"/>
             <path d="M3 12h4M17 12h4M12 3v4M12 17v4"/>
           </svg>
-          {{ t('results.nearPeakTitle') }}
+          {{ t('results.peakSymmetryTitle') }}
         </h3>
-        <div class="near-peak-summary" :class="{ disabled: !nearPeakEnabled }">
-          <div class="near-peak-summary-item">
+        <div class="peak-symmetry-summary" :class="{ disabled: !peakSymmetryEnabled }">
+          <div class="peak-symmetry-summary-item">
             <span class="summary-label">{{ t('results.mode') }}</span>
-            <span class="summary-value">{{ nearPeakEnabled ? t('results.enabled') : t('results.disabled') }}</span>
+            <span class="summary-value">{{ peakSymmetryEnabled ? t('results.enabled') : t('results.disabled') }}</span>
           </div>
-          <div class="near-peak-summary-item">
+          <div class="peak-symmetry-summary-item">
             <span class="summary-label">Tq</span>
-            <span class="summary-value">{{ nearPeakTq.toFixed(2) }}</span>
+            <span class="summary-value">{{ peakSymmetryTq.toFixed(2) }}</span>
           </div>
-          <div class="near-peak-summary-item">
+          <div class="peak-symmetry-summary-item">
             <span class="summary-label">Ta</span>
-            <span class="summary-value">{{ nearPeakTa.toFixed(1) }}</span>
+            <span class="summary-value">{{ peakSymmetryTa.toFixed(1) }}</span>
           </div>
-          <div class="near-peak-summary-item">
+          <div class="peak-symmetry-summary-item">
             <span class="summary-label">{{ t('results.twoPeakGroups') }}</span>
             <span class="summary-value">{{ twoPeakGroupCount }}</span>
           </div>
-          <div class="near-peak-summary-item">
+          <div class="peak-symmetry-summary-item">
             <span class="summary-label">{{ t('results.fourPeakGroups') }}</span>
             <span class="summary-value">{{ fourPeakGroupCount }}</span>
           </div>
+          <div v-if="mergeGradientEnabled" class="peak-symmetry-summary-item">
+            <span class="summary-label">{{ t('results.mergeGradientLabel') }}</span>
+            <span class="summary-value">{{ mergeGradientThreshold.toFixed(1) }}</span>
+          </div>
         </div>
 
-        <div v-if="nearPeakEnabled && nearPeakGroups.length" class="near-peak-list">
-          <div v-for="(group, index) in nearPeakGroups" :key="`${group.groupType}-${index}`" class="near-peak-group-card">
-            <div class="near-peak-group-header">
+        <div v-if="peakSymmetryEnabled && peakSymmetryGroups.length" class="peak-symmetry-list">
+          <div v-for="(group, index) in peakSymmetryGroups" :key="`${group.groupType}-${index}`" class="peak-symmetry-group-card">
+            <div class="peak-symmetry-group-header">
               <span class="group-badge">{{ group.groupType }}</span>
               <span class="group-members">{{ t('results.peaksLabel', { indices: formatPeakIndices(group.memberPeakIndices) }) }}</span>
             </div>
-            <div class="near-peak-group-meta">
+            <div class="peak-symmetry-group-meta">
               <span>Δq max {{ formatMetric(group.withinThreshold?.deltaQMax, 3) }}</span>
               <span>Δangle max {{ formatMetric(group.withinThreshold?.deltaAngleMax, 2) }}°</span>
               <span>{{ t('results.hkRuleLabel') }} {{ group.hkRulePassed ? t('results.passed') : t('results.failed') }}</span>
+              <span v-if="group.mergeGradient?.enabled">{{ t('results.mergeGradientLabel') }} {{ group.mergeGradient.passed ? t('results.passed') : t('results.failed') }}</span>
             </div>
           </div>
         </div>
-        <p v-else-if="nearPeakEnabled" class="near-peak-empty">{{ t('results.noNearPeakGroups') }}</p>
+        <p v-else-if="peakSymmetryEnabled" class="peak-symmetry-empty">{{ t('results.noPeakSymmetryGroups') }}</p>
       </div>
 
-      <div v-if="glideBatchOutputs.enabled" class="glide-batch-section">
+      <div v-if="resultType === 'indexing' && glideBatchOutputs.enabled" class="glide-batch-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
@@ -274,7 +281,7 @@
         </div>
       </div>
 
-      <div class="export-section">
+      <div v-if="resultType === 'indexing'" class="export-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
@@ -327,15 +334,29 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/index'
+
+const props = defineProps({
+  resultType: {
+    type: String,
+    default: 'indexing',
+    validator: (v) => ['indexing', 'glide', 'manual'].includes(v),
+  },
+  resultData: {
+    type: Object,
+    default: null,
+  },
+})
 
 const { t } = useI18n()
 const emit = defineEmits(['navigate'])
 const router = useRouter()
 const route = useRoute()
+
+const isExternalResult = computed(() => props.resultType !== 'indexing' && props.resultData)
 
 const hasResults = ref(false)
 const cellParams = ref({
@@ -366,15 +387,16 @@ const maxDeviationKPsi = ref(1)
 const maxDeviationLPsi = ref(1)
 const currentTaskId = ref(null)
 const currentView = ref('reset')
-const nearPeakGroups = ref([])
-const nearPeakConfig = ref({ enabled: false, mergeTq: 0.2, mergeTa: 2.0 })
-const glideBatchOutputs = ref({ enabled: false, batchRoot: '', groups: [] })
-
-const nearPeakEnabled = computed(() => Boolean(nearPeakConfig.value?.enabled))
-const nearPeakTq = computed(() => Number(nearPeakConfig.value?.mergeTq ?? 0.2))
-const nearPeakTa = computed(() => Number(nearPeakConfig.value?.mergeTa ?? 2.0))
-const twoPeakGroupCount = computed(() => nearPeakGroups.value.filter(group => group?.groupType === '2-peak').length)
-const fourPeakGroupCount = computed(() => nearPeakGroups.value.filter(group => group?.groupType === '4-peak').length)
+const peakSymmetryGroups = ref([])
+const peakSymmetryConfig = ref({ enabled: false, mergeTq: 0.2, mergeTa: 2.0, mergeGradientEnabled: false, mergeGradientThreshold: 0.0 })
+const peakSymmetryEnabled = computed(() => Boolean(peakSymmetryConfig.value?.enabled))
+const peakSymmetryTq = computed(() => Number(peakSymmetryConfig.value?.mergeTq ?? 0.2))
+const peakSymmetryTa = computed(() => Number(peakSymmetryConfig.value?.mergeTa ?? 2.0))
+const mergeGradientEnabled = computed(() => Boolean(peakSymmetryConfig.value?.mergeGradientEnabled))
+const mergeGradientThreshold = computed(() => Number(peakSymmetryConfig.value?.mergeGradientThreshold ?? 0.0))
+const glideBatchOutputs = ref({ enabled: false, groups: [], batchRoot: '' })
+const twoPeakGroupCount = computed(() => peakSymmetryGroups.value.filter(group => group?.groupType === '2-peak').length)
+const fourPeakGroupCount = computed(() => peakSymmetryGroups.value.filter(group => group?.groupType === '4-peak').length)
 
 const formatMetric = (value, digits) => Number(value ?? 0).toFixed(digits)
 const formatPeakIndices = (indices) => Array.isArray(indices) ? indices.join(', ') : ''
@@ -434,7 +456,42 @@ const setView = (view) => {
   }
 }
 
+const applyExternalResult = (data) => {
+  if (!data) return
+  cellParams.value = data.cellParams || cellParams.value
+  millerData.value = data.millerData || []
+  totalReflections.value = data.totalReflections || 0
+  indexedPeaks.value = data.indexedPeaks || millerData.value.length
+  currentTaskId.value = data.taskId || null
+  peakSymmetryGroups.value = Array.isArray(data.peakSymmetryGroups) ? data.peakSymmetryGroups : []
+  peakSymmetryConfig.value = data.peakSymmetryConfig || peakSymmetryConfig.value
+  if (data.rFactorQ !== undefined) rFactorQ.value = data.rFactorQ
+  if (data.rFactorPsi !== undefined) rFactorPsi.value = data.rFactorPsi
+  if (data.qualityMetrics) {
+    rFactor.value = data.qualityMetrics.r_factor || 0
+    rFactorQ.value = data.qualityMetrics.r_factor_q || rFactorQ.value
+    rFactorPsi.value = data.qualityMetrics.r_factor_psi || rFactorPsi.value
+    maxDeviationQ.value = data.qualityMetrics.max_deviation_q || 0
+    maxDeviationPsi.value = data.qualityMetrics.max_deviation_psi || 0
+    if (data.qualityMetrics.max_deviation_q_point) {
+      maxDeviationHQ.value = data.qualityMetrics.max_deviation_q_point.h || 0
+      maxDeviationKQ.value = data.qualityMetrics.max_deviation_q_point.k || 0
+      maxDeviationLQ.value = data.qualityMetrics.max_deviation_q_point.l || 0
+    }
+    if (data.qualityMetrics.max_deviation_psi_point) {
+      maxDeviationHPsi.value = data.qualityMetrics.max_deviation_psi_point.h || 0
+      maxDeviationKPsi.value = data.qualityMetrics.max_deviation_psi_point.k || 0
+      maxDeviationLPsi.value = data.qualityMetrics.max_deviation_psi_point.l || 0
+    }
+  }
+  hasResults.value = true
+}
+
 const loadResults = async () => {
+  if (isExternalResult.value) {
+    applyExternalResult(props.resultData)
+    return
+  }
   try {
     const result = await api.getResults()
     if (result.success && result.data) {
@@ -443,8 +500,8 @@ const loadResults = async () => {
       totalReflections.value = result.data.totalReflections || 0
       indexedPeaks.value = result.data.indexedPeaks || millerData.value.length
       currentTaskId.value = result.data.taskId || null
-      nearPeakGroups.value = Array.isArray(result.data.nearPeakGroups) ? result.data.nearPeakGroups : []
-      nearPeakConfig.value = result.data.nearPeakConfig || nearPeakConfig.value
+      peakSymmetryGroups.value = Array.isArray(result.data.peakSymmetryGroups) ? result.data.peakSymmetryGroups : []
+      peakSymmetryConfig.value = result.data.peakSymmetryConfig || peakSymmetryConfig.value
       glideBatchOutputs.value = result.data.glideBatchOutputs || glideBatchOutputs.value
 
       if (result.data.qualityMetrics) {
@@ -616,7 +673,7 @@ const exportHDF5 = async () => {
     URL.revokeObjectURL(url)
   } catch (error) {
     const hdf5Data = {
-      version: '1.8.0',
+      version: '1.8.1',
       timestamp: new Date().toISOString(),
       cellParameters: cellParams.value,
       millerIndices: millerData.value,
@@ -660,6 +717,14 @@ onMounted(async () => {
   await loadResults()
   await nextTick()
   plot3DCell()
+})
+
+watch(() => props.resultData, async (newData) => {
+  if (newData && isExternalResult.value) {
+    applyExternalResult(newData)
+    await nextTick()
+    plot3DCell()
+  }
 })
 </script>
 
@@ -779,7 +844,7 @@ onMounted(async () => {
 
 .cell-params-card h3,
 .miller-info-card h3,
-.near-peak-section h3,
+.peak-symmetry-section h3,
 .visualization-section h3,
 .export-section h3 {
   display: flex;
@@ -792,7 +857,7 @@ onMounted(async () => {
 
 .cell-params-card h3 svg,
 .miller-info-card h3 svg,
-.near-peak-section h3 svg,
+.peak-symmetry-section h3 svg,
 .visualization-section h3 svg,
 .export-section h3 svg {
   width: 20px;
@@ -800,26 +865,26 @@ onMounted(async () => {
   color: var(--primary);
 }
 
-.near-peak-section {
+.peak-symmetry-section {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
 }
 
-.near-peak-summary {
+.peak-symmetry-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.near-peak-summary.disabled {
+.peak-symmetry-summary.disabled {
   opacity: 0.75;
 }
 
-.near-peak-summary-item,
-.near-peak-group-card {
+.peak-symmetry-summary-item,
+.peak-symmetry-group-card {
   background: var(--bg-surface-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -838,19 +903,19 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
-.near-peak-list {
+.peak-symmetry-list {
   display: grid;
   gap: 12px;
 }
 
-.near-peak-group-header,
-.near-peak-group-meta {
+.peak-symmetry-group-header,
+.peak-symmetry-group-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
 }
 
-.near-peak-group-header {
+.peak-symmetry-group-header {
   margin-bottom: 8px;
 }
 
@@ -866,8 +931,8 @@ onMounted(async () => {
 }
 
 .group-members,
-.near-peak-group-meta,
-.near-peak-empty {
+.peak-symmetry-group-meta,
+.peak-symmetry-empty {
   color: var(--text-secondary);
   font-size: 0.875rem;
 }

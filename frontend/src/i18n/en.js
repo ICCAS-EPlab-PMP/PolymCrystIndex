@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.8.0'
+    version: 'v1.8.1'
   },
   home: {
     selectModule: 'Select Module',
@@ -17,6 +17,41 @@ export default {
     tags: {
       rawImage: 'Raw Image',
       integration2d: '2D Integration'
+    },
+    recentUpdates: {
+      eyebrow: 'Recent Updates',
+      expand: 'Expand Summary',
+      collapse: 'Collapse Summary',
+      collapsedSummary: 'Expand to review the contents of this release.',
+      versionValue: 'v 1.8.1',
+      keywords: {
+        manualCell: 'Manual cell parameters - new feature',
+        glideC: 'c-axis glide visualization',
+        indexingVisual: 'indexing visualization'
+      },
+      dateLabel: 'Change Date',
+      types: {
+        feature: 'Feature',
+        fix: 'Fix',
+        notice: 'Notice'
+      },
+      items: {
+        manualCell: {
+          date: '2026.4.17',
+          title: 'Manual Cell Parameters - New Feature',
+          summary: 'The manual cell parameter workflow is now easier to enter from the homepage and better aligned with downstream batch browsing and review.'
+        },
+        glideVisual: {
+          date: '2026.4.17',
+          title: 'c-axis Glide Visualization',
+          summary: 'GLIDE outputs now support clearer visualization around c-axis shear transforms, making it easier to compare generated FullMiller groups.'
+        },
+        indexingVisual: {
+          date: '2026.4.17',
+          title: 'Indexing Program Visualization',
+          summary: 'Visualization inside the indexing workflow is now better integrated, so image, parameter, and marker changes can be reviewed in one place.'
+        }
+      }
     }
   },
   modules: {
@@ -175,9 +210,14 @@ export default {
     fixedPeakFormatLabel: 'peak_index h k l',
     fixedPeakPlaceholder: '1 1 1 0\n3 2 0 1',
     fixedPeakHint: 'One peak per line. Format must be peak_index h k l and peak_index matches observed_diffraction order.',
-    nearPeakMode: 'Near-peak discussion mode',
-    nearPeakTqHint: 'Default 0.2. Max Δq allowed inside a near-peak group.',
-    nearPeakTaHint: 'Default 2.0. Max Δangle allowed inside a near-peak group.',
+    peakSymmetryMode: 'Peak symmetry merge mode',
+    peakSymmetryComingSoon: 'Coming Soon',
+    peakSymmetryGreyHint: 'This feature is under development and will be available in a future release.',
+    peakSymmetryTqHint: 'Default 0.2. Max Δq allowed inside a peak-symmetry group.',
+    peakSymmetryTaHint: 'Default 2.0. Max Δangle allowed inside a peak-symmetry group.',
+    mergeGradientToggle: 'Merge Gradient',
+    mergeGradientThresholdLabel: 'Gradient Threshold',
+    mergeGradientThresholdHint: 'Threshold for gradient direction consistency. 0 disables gradient check.',
     fixedPeakSummaryReady: '{count} fixed peaks ready to submit.',
     fixedPeakSummaryEmpty: 'No fixed peaks provided. Leave blank to disable fixhkl.txt.',
     glideSummaryEmpty: 'No glide groups configured. Analysis will run without glide-shear batches.',
@@ -260,7 +300,7 @@ export default {
     maxDeviationQPoint: 'Δq Max Point (hkl)',
     maxDeviationPsi: 'Max Δψ',
     maxDeviationPsiPoint: 'Δψ Max Point (hkl)',
-    nearPeakTitle: 'Near-peak discussion',
+    peakSymmetryTitle: 'Peak symmetry merge',
     mode: 'Mode',
     enabled: 'Enabled',
     disabled: 'Disabled',
@@ -270,13 +310,14 @@ export default {
     hkRuleLabel: 'HK rule',
     passed: 'passed',
     failed: 'failed',
-    noNearPeakGroups: 'No 2-peak or 4-peak groups matched the current thresholds.',
+    noPeakSymmetryGroups: 'No 2-peak or 4-peak groups matched the current thresholds.',
     glideTitle: 'Glide-shear batches',
     groupsLabel: 'Groups',
     batchRootLabel: 'Batch root',
     fullMillerLabel: 'FullMiller',
     outputMillerLabel: 'outputMiller',
-    cellLabel: 'Cell'
+    cellLabel: 'Cell',
+    mergeGradientLabel: 'Merge Gradient'
   },
   visualizer: {
     title: 'Miller Index Visualizer',
@@ -700,7 +741,20 @@ export default {
     reflections: 'reflections',
     download: 'Download FullMiller.txt',
     generationFailed: 'GLIDE generation failed',
-    requestFailed: 'Request failed'
+    requestFailed: 'Request failed',
+    viewResult: 'View Result',
+    hideResult: 'Hide Result',
+    visualizerTitle: 'Visualizer',
+    quickBrowseExpand: 'Quick Browse',
+    quickBrowseCollapse: 'Collapse Browse',
+    browseModeSingle: 'Single Group',
+    browseModeOverlay: 'Overlay Groups',
+    selectGroup: 'Choose a group to browse',
+    overlaySelectionTitle: 'Choose groups to overlay',
+    overlayHint: 'Select multiple groups to overlay, up to 5 groups.',
+    liveSyncHint: 'After importing image/PONI once, switching groups or regenerating will refresh markers automatically.',
+    selectedCount: '{count} group(s) selected',
+    overlayLimit: 'Max overlay limit reached (5 groups)'
   },
   manual: {
     title: 'Manual Cell Parameters',
@@ -715,6 +769,19 @@ export default {
     someGroupsFailed: 'Some groups failed',
     volume: 'Volume',
     cell: 'Cell',
-    reflections: 'reflections'
+    reflections: 'reflections',
+    viewResult: 'View Result',
+    hideResult: 'Hide Result',
+    visualizerTitle: 'Visualizer',
+    quickBrowseExpand: 'Quick Browse',
+    quickBrowseCollapse: 'Collapse Browse',
+    browseModeSingle: 'Single Group',
+    browseModeOverlay: 'Overlay Groups',
+    selectGroup: 'Choose a group to browse',
+    overlaySelectionTitle: 'Choose groups to overlay',
+    overlayHint: 'Select multiple groups to overlay, up to 5 groups.',
+    liveSyncHint: 'After importing image/PONI once, switching groups or regenerating will refresh markers automatically.',
+    selectedCount: '{count} group(s) selected',
+    overlayLimit: 'Max overlay limit reached (5 groups)'
   }
 }

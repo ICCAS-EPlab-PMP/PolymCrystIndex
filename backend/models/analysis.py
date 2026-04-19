@@ -1,6 +1,6 @@
 """Analysis task request and response models."""
 
-from typing import Optional, List
+from typing import Any, Optional, List
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -56,7 +56,24 @@ class AnalysisParams(BaseModel):
     mergeNearbyEnabled: bool = False
     mergeTq: float = Field(default=0.2, ge=0)
     mergeTa: float = Field(default=2.0, ge=0)
+    peakSymmetryEnabled: bool = False
+    symmetryTq: float = Field(default=0.2, ge=0)
+    symmetryTa: float = Field(default=2.0, ge=0)
+    mergeGradientEnabled: bool = False
+    mergeGradientThreshold: float = Field(default=0.0, ge=0)
     duplicate: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backward_compat_peak_symmetry(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "mergeNearbyEnabled" in data and "peakSymmetryEnabled" not in data:
+                data["peakSymmetryEnabled"] = data["mergeNearbyEnabled"]
+            if "mergeTq" in data and "symmetryTq" not in data:
+                data["symmetryTq"] = data["mergeTq"]
+            if "mergeTa" in data and "symmetryTa" not in data:
+                data["symmetryTa"] = data["mergeTa"]
+        return data
 
     hklMode: str = Field(default="Default")
     custH: int = Field(default=5, ge=0)

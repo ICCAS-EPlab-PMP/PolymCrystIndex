@@ -108,8 +108,10 @@ async def run_analysis(
     else:
         request.params.fixedPeakText = ""
     _normalize_glide_batch_labels(request)
-    request.params.mergeTq = max(0.0, request.params.mergeTq or 0.2)
-    request.params.mergeTa = max(0.0, request.params.mergeTa or 2.0)
+    request.params.symmetryTq = max(0.0, request.params.symmetryTq or 0.2)
+    request.params.symmetryTa = max(0.0, request.params.symmetryTa or 2.0)
+    request.params.mergeGradientEnabled = bool(request.params.mergeGradientEnabled or False)
+    request.params.mergeGradientThreshold = max(0.0, request.params.mergeGradientThreshold or 0.0)
 
     data_file_path = request.dataFile.replace("\\", "/") if request.dataFile else None
 

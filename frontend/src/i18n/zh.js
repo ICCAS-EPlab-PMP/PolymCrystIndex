@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.8.0'
+    version: 'v1.8.1'
   },
   home: {
     selectModule: '选择功能模块',
@@ -17,6 +17,41 @@ export default {
     tags: {
       rawImage: '原始图像',
       integration2d: '二维积分'
+    },
+    recentUpdates: {
+      eyebrow: '最近更新',
+      expand: '展开摘要',
+      collapse: '收起摘要',
+      collapsedSummary: '点击展开可查看本次版本更新内容。',
+      versionValue: 'v 1.8.1',
+      keywords: {
+        manualCell: '手动晶胞参数-新功能',
+        glideC: '晶胞参数c轴滑移可视化',
+        indexingVisual: '指标化程序可视化'
+      },
+      dateLabel: '改动日期',
+      types: {
+        feature: '新增功能',
+        fix: '修复改进',
+        notice: '使用提醒'
+      },
+      items: {
+        manualCell: {
+          date: '2026.4.17',
+          title: '手动晶胞参数 - 新功能',
+          summary: '支持在主页入口后快速进入手动晶胞参数流程，并围绕当前批量生成结果进行更顺畅的浏览和复核。'
+        },
+        glideVisual: {
+          date: '2026.4.17',
+          title: '晶胞参数 c 轴滑移可视化',
+          summary: 'GLIDE 结果支持围绕 c 轴滑移变换进行更直观的可视化查看，帮助比对不同分组生成的 FullMiller 标记。'
+        },
+        indexingVisual: {
+          date: '2026.4.17',
+          title: '指标化程序可视化',
+          summary: '指标化程序中的结果浏览与可视化联动已进一步增强，方便在同一工作流内查看图像、参数与标记变化。'
+        }
+      }
     }
   },
   modules: {
@@ -175,9 +210,14 @@ export default {
     fixedPeakFormatLabel: 'peak_index h k l',
     fixedPeakPlaceholder: '1 1 1 0\n3 2 0 1',
     fixedPeakHint: '每行一个峰。格式为 peak_index h k l，其中 peak_index 对应观测衍射峰的序号。',
-    nearPeakMode: '近峰讨论模式',
-    nearPeakTqHint: '默认 0.2。近峰组内允许的最大 Δq。',
-    nearPeakTaHint: '默认 2.0。近峰组内允许的最大 Δangle。',
+    peakSymmetryMode: '峰对称性合并',
+    peakSymmetryComingSoon: '开发中',
+    peakSymmetryGreyHint: '此功能正在开发中，将在后续版本开放。',
+    peakSymmetryTqHint: '默认 0.2。峰对称组内允许的最大 Δq。',
+    peakSymmetryTaHint: '默认 2.0。峰对称组内允许的最大 Δangle。',
+    mergeGradientToggle: '合并梯度',
+    mergeGradientThresholdLabel: '梯度阈值',
+    mergeGradientThresholdHint: '用于判断梯度方向一致性的阈值，0 表示禁用梯度判断',
     fixedPeakSummaryReady: '已准备 {count} 个固定峰。',
     fixedPeakSummaryEmpty: '未提供固定峰文本。留空将禁用 fixhkl.txt。',
     glideSummaryEmpty: '尚未配置 glide 组。分析将不会生成 glide-shear 批次。',
@@ -260,7 +300,7 @@ export default {
     maxDeviationQPoint: 'Δq 最大点 (hkl)',
     maxDeviationPsi: '最大 Δψ',
     maxDeviationPsiPoint: 'Δψ 最大点 (hkl)',
-    nearPeakTitle: '近峰讨论',
+    peakSymmetryTitle: '峰对称性合并',
     mode: '模式',
     enabled: '已启用',
     disabled: '未启用',
@@ -270,13 +310,14 @@ export default {
     hkRuleLabel: 'HK 规则',
     passed: '通过',
     failed: '未通过',
-    noNearPeakGroups: '当前阈值下没有匹配到 2 峰组或 4 峰组。',
+    noPeakSymmetryGroups: '当前阈值下没有匹配到 2 峰组或 4 峰组。',
     glideTitle: 'Glide 剪切批次',
     groupsLabel: '分组数',
     batchRootLabel: '批次根目录',
     fullMillerLabel: 'FullMiller',
     outputMillerLabel: 'outputMiller',
-    cellLabel: '晶胞'
+    cellLabel: '晶胞',
+    mergeGradientLabel: '合并梯度'
   },
   visualizer: {
     title: 'Miller 索引可视化',
@@ -700,7 +741,20 @@ export default {
     reflections: '个反射',
     download: '下载 FullMiller.txt',
     generationFailed: 'GLIDE 生成失败',
-    requestFailed: '请求失败'
+    requestFailed: '请求失败',
+    viewResult: '查看结果',
+    hideResult: '收起结果',
+    visualizerTitle: '可视化',
+    quickBrowseExpand: '快速浏览',
+    quickBrowseCollapse: '收起浏览',
+    browseModeSingle: '单组浏览',
+    browseModeOverlay: '叠加浏览',
+    selectGroup: '选择要浏览的分组',
+    overlaySelectionTitle: '选择要叠加的分组',
+    overlayHint: '可勾选多个分组进行叠加显示，最多 5 组。',
+    liveSyncHint: '导入一次图片/PONI 后，切换分组或重新生成会自动刷新当前标记。',
+    selectedCount: '当前已选择 {count} 组',
+    overlayLimit: '已达最大叠加数（5 组）'
   },
   manual: {
     title: '手动晶胞参数',
@@ -715,6 +769,19 @@ export default {
     someGroupsFailed: '部分分组失败',
     volume: '体积',
     cell: '晶胞',
-    reflections: '个反射'
+    reflections: '个反射',
+    viewResult: '查看结果',
+    hideResult: '收起结果',
+    visualizerTitle: '可视化',
+    quickBrowseExpand: '快速浏览',
+    quickBrowseCollapse: '收起浏览',
+    browseModeSingle: '单组浏览',
+    browseModeOverlay: '叠加浏览',
+    selectGroup: '选择要浏览的分组',
+    overlaySelectionTitle: '选择要叠加的分组',
+    overlayHint: '可勾选多个分组进行叠加显示，最多 5 组。',
+    liveSyncHint: '导入一次图片/PONI 后，切换分组或重新生成会自动刷新当前标记。',
+    selectedCount: '当前已选择 {count} 组',
+    overlayLimit: '已达最大叠加数（5 组）'
   }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="visualizer">
+  <div class="visualizer" :class="{ 'compact-mode': compact }">
     <div class="top-bar">
       <span class="title">{{ t('visualizer.dataSource') }}：</span>
       <div class="source-group">
@@ -31,7 +31,7 @@
               <button class="btn" :disabled="!raw.imageLoaded" @click="triggerUpload('rawPoni')">
                 ② {{ t('visualizer.importPoniFile') }}
               </button>
-              <div class="btn-row">
+              <div v-if="!compact" class="btn-row">
                 <button class="btn btn-cyan" :disabled="!raw.imageLoaded"
                         @click="triggerUpload('rawFullMiller')">
                   {{ t('visualizer.importFullMiller') }} ■
@@ -200,7 +200,7 @@
               <button class="btn btn-green" :disabled="!int2d.imageLoaded" @click="renderInt">
                 ⟳ {{ t('visualizer.refreshImage') }}
               </button>
-              <div class="btn-row">
+              <div v-if="!compact" class="btn-row">
                 <button class="btn btn-cyan" :disabled="!int2d.imageLoaded"
                         @click="triggerUpload('intFullMiller')">
                   {{ t('visualizer.importFullMiller') }} ●
@@ -364,9 +364,38 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
+
+const emit = defineEmits(['raw-session-ready'])
+
+const props = defineProps({
+  workDir: {
+    type: String,
+    default: '',
+  },
+  resultType: {
+    type: String,
+    default: 'indexing',
+  },
+  millerData: {
+    type: Array,
+    default: null,
+  },
+  overlayGroups: {
+    type: Array,
+    default: null,
+  },
+  importRequestKey: {
+    type: Number,
+    default: 0,
+  },
+  compact: {
+    type: Boolean,
+    default: false,
+  },
+})
 
 const { t } = useI18n()
 
@@ -545,6 +574,7 @@ async function uploadRawImage(file) {
   await renderRaw()
   await nextTick()
   resetZoom('raw')
+  emit('raw-session-ready')
 }
 
 async function uploadRawPoni(file) {
@@ -793,6 +823,81 @@ onMounted(async () => {
   } catch {
     setStatus('⚠ Cannot connect to backend, please confirm the backend is running')
   }
+  if (props.workDir) {
+    await loadFromWorkDir(props.workDir)
+  }
+})
+
+async function loadFromWorkDir(dir) {
+  if (!dir) return
+  loading.value = true
+  try {
+    const { data } = await axios.post(`${API_BASE}/raw/load-workdir`, { work_dir: dir })
+    if (data.image_loaded) {
+      raw.imageLoaded = true
+      raw.imgW = data.width || 0
+      raw.imgH = data.height || 0
+      raw.imgMin = Math.floor(data.min || 0)
+      raw.imgMax = Math.ceil(data.max || 65535)
+      raw.p.cmin = Math.floor(data.p01 ?? data.min ?? 0)
+      raw.p.cmax = Math.ceil(data.p99 ?? data.max ?? 65535)
+      if (data.poni) {
+        raw.poniLoaded = true
+        raw.p.wl = data.poni.wl || raw.p.wl
+        raw.p.px = data.poni.px || raw.p.px
+        raw.p.py = data.poni.py || raw.p.py
+        raw.p.cx = data.poni.cx || raw.p.cx
+        raw.p.cy = data.poni.cy || raw.p.cy
+        raw.p.dist = data.poni.dist || raw.p.dist
+      }
+      if (data.full_miller_count !== undefined) raw.fullCount = data.full_miller_count
+      if (data.output_miller_count !== undefined) raw.outputCount = data.output_miller_count
+      await renderRaw()
+      await nextTick()
+      resetZoom('raw')
+      setStatus(data.message || `Loaded from workDir: ${dir}`)
+      emit('raw-session-ready')
+    }
+  } catch (err) {
+    setStatus('Error loading workDir: ' + (err.response?.data?.detail || err.message))
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(() => props.workDir, async (newDir) => {
+  if (newDir) {
+    await loadFromWorkDir(newDir)
+  }
+})
+
+async function loadOverlayGroups() {
+  if (!props.overlayGroups || props.overlayGroups.length === 0) return
+  if (!raw.imageLoaded) return
+  loading.value = true
+  try {
+    const groups = props.overlayGroups.slice(0, 5).map(g => ({
+      label: g.label || '',
+      full_miller_content: g.fullMillerContent || '',
+    }))
+    const { data } = await axios.post(`${API_BASE}/raw/set-miller-content`, { groups })
+    raw.fullCount = data.total_count || 0
+    setStatus(data.message || `Overlay: ${groups.length} group(s) loaded`)
+    await renderRaw()
+  } catch (err) {
+    setStatus('Error loading overlay groups: ' + (err.response?.data?.detail || err.message))
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(() => props.importRequestKey, async (newKey, oldKey) => {
+  if (!newKey || newKey === oldKey) return
+  if (!raw.imageLoaded) {
+    setStatus('Please import a diffraction image before loading FullMiller markers')
+    return
+  }
+  await loadOverlayGroups()
 })
 </script>
 
@@ -1221,5 +1326,37 @@ onMounted(async () => {
 
 [title] {
   cursor: help;
+}
+
+.visualizer.compact-mode {
+  height: auto;
+  min-height: 720px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.visualizer.compact-mode .main-content {
+  min-height: 640px;
+}
+
+.visualizer.compact-mode .status-bar {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.visualizer.compact-mode .sidebar {
+  width: 320px;
+  min-width: 280px;
+}
+
+.visualizer.compact-mode .image-toolbar {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.visualizer.compact-mode .image-toolbar .btn {
+  padding: 2px 8px;
+  font-size: 10px;
 }
 </style>

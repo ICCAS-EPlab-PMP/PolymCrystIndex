@@ -1,6 +1,6 @@
 # PolymCrystIndex
 
-[![Release](https://img.shields.io/badge/release-v1.8.0-blue)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases)
+[![Release](https://img.shields.io/badge/release-v1.8.1-blue)](https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases)
 [![Homepage](https://img.shields.io/badge/homepage-polymcrystal.com-0a7cff)](http://www.polymcrystal.com)
 [![Preview](https://img.shields.io/badge/preview-index.polymcrystal.com-6f42c1)](http://index.polymcrystal.com)
 [![Paper](https://img.shields.io/badge/paper-IUCr%20oc5041-blue)](https://journals.iucr.org/paper?oc5041)

@@ -46,6 +46,7 @@
 
 import os
 import time
+import threading
 from typing import Optional, Dict, Any
 from .config import InputConfig
 from .population import PopulationManager
@@ -87,6 +88,7 @@ class FiberDiffractionIndexer:
         callback: Optional[IndexingCallback] = None,
         use_hdf5: bool = False,
         hdf5_file: Optional[str] = None,
+        stop_event: Optional[threading.Event] = None,
     ):
         """初始化索引器 / Initialize indexer
 
@@ -115,6 +117,7 @@ class FiberDiffractionIndexer:
         self.fortran_caller = FortranCaller(
             self.config, workdir=self.workdir
         )  # Fortran 调用 / Fortran wrapper
+        self.stop_event = stop_event
         self.file_manager = FileManager()  # 文件操作 / File operations
 
         # =====================================================================
@@ -189,6 +192,8 @@ class FiberDiffractionIndexer:
             start_time = time.time()
 
             for step in range(self.config.generation_steps):
+                if self.stop_event and self.stop_event.is_set():
+                    break
                 self._run_single_step(step, start_time)
 
             end_time = time.time()
@@ -443,7 +448,7 @@ class FiberDiffractionIndexer:
         # self.population.save_to_file("cell_0.txt")
 
         # 方法2：调用 Fortran 程序 / Method 2: Call Fortran program
-        self.fortran_caller.run_initialization(self.input_file)
+        self.fortran_caller.run_initialization(self.input_file, stop_event=self.stop_event)
 
     def run_optimization_step(self, step: int) -> None:
         """运行优化步骤 / Run optimization step
@@ -455,7 +460,7 @@ class FiberDiffractionIndexer:
             step: 步骤编号 / Step number
         """
         self.fortran_caller.run_optimization(
-            self.input_file, self.diffraction_file, step
+            self.input_file, self.diffraction_file, step, stop_event=self.stop_event
         )
 
     def run_sorting_step(self, step: int) -> None:
@@ -476,7 +481,7 @@ class FiberDiffractionIndexer:
 
         if self.file_manager.file_exists(annealing_path):
             self.fortran_caller.run_sorting(
-                self.input_file, annealing_path, step + 1, self.diffraction_file
+                self.input_file, annealing_path, step + 1, self.diffraction_file, stop_event=self.stop_event
             )
 
     def archive_files(self, step: int) -> None:

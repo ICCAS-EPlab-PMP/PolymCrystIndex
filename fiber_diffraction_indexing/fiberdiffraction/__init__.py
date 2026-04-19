@@ -58,7 +58,7 @@ Fiber Diffraction Indexing 包
     hdf5.close()
 """
 
-__version__ = "1.8.0"
+__version__ = "1.8.1"
 __author__ = "POLYCRYSTINDEX Team"
 __email__ = "polycrystindex@example.com"
 __license__ = "MIT"

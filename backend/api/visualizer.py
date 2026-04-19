@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 import numpy as np
 
 from core.config import settings
@@ -128,6 +128,43 @@ class UpdateRangesBody(BaseModel):
     q_max: float = 1.0
     az_min: float = -180.0
     az_max: float = 180.0
+
+
+class WorkDirBody(BaseModel):
+    work_dir: str
+
+
+class MillerOverlayGroup(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    label: str = ""
+    content: str = Field(default="", alias="full_miller_content")
+
+
+class RawSetMillerBody(BaseModel):
+    groups: List[MillerOverlayGroup] = []
+
+
+def _load_poni_into_raw_state(poni_path: Path) -> Optional[dict]:
+    if not PYFAI_OK or not poni_path.exists():
+        return None
+    ai = pyFAI.load(str(poni_path))
+    raw_state.calculator.set_pyfai_geometry_v2(ai)
+    return {
+        "wl": round(ai.wavelength * 1e10, 6),
+        "px": round(ai.detector.pixel2 * 1e6, 4),
+        "py": round(ai.detector.pixel1 * 1e6, 4),
+        "cx": round(ai.poni2 / ai.detector.pixel2, 2),
+        "cy": round(ai.poni1 / ai.detector.pixel1, 2),
+        "dist": round(ai.dist * 1e3, 4),
+    }
+
+
+def _find_first_existing(base_dir: Path, patterns: List[str]) -> Optional[Path]:
+    for pattern in patterns:
+        matches = sorted(base_dir.glob(pattern))
+        if matches:
+            return matches[0]
+    return None
 
 
 def load_image_auto(data: bytes, filename: str) -> np.ndarray:
@@ -287,6 +324,126 @@ async def raw_upload_miller(
     return {"message": f"已导入 {len(data)} 个 {label} 点 ← {file.filename}", "count": len(data)}
 
 
+@router.post("/raw/set-miller-content")
+def raw_set_miller_content(body: RawSetMillerBody):
+    """Directly set up to 5 FullMiller groups from raw text content for overlay preview."""
+    merged: List[dict] = []
+    accepted_groups = body.groups[:5]
+    for idx, group in enumerate(accepted_groups):
+        parsed = MillerFileParser.parse(group.content or "")
+        for pt in parsed:
+            merged.append({
+                **pt,
+                "overlay_index": idx,
+                "overlay_label": group.label or f"group_{idx + 1}",
+            })
+    raw_state.full_miller = merged
+    raw_state.output_miller = []
+    return {
+        "message": f"已装载 {len(accepted_groups)} 组 FullMiller 叠加数据",
+        "group_count": len(accepted_groups),
+        "count": len(merged),
+        "total_count": len(merged),
+    }
+
+
+@router.post("/raw/load-workdir")
+def raw_load_workdir(body: WorkDirBody):
+    """Best-effort load image/PONI/Miller files from a work directory for quick preview."""
+    try:
+        work_dir = Path(body.work_dir).expanduser().resolve()
+    except Exception:
+        return {
+            "image_loaded": False,
+            "width": 0,
+            "height": 0,
+            "min": 0.0,
+            "max": 0.0,
+            "p01": 0.0,
+            "p99": 0.0,
+            "poni": None,
+            "full_miller_count": 0,
+            "output_miller_count": 0,
+            "message": f"工作目录无效: {body.work_dir}",
+        }
+    if not work_dir.exists() or not work_dir.is_dir():
+        return {
+            "image_loaded": False,
+            "width": 0,
+            "height": 0,
+            "min": 0.0,
+            "max": 0.0,
+            "p01": 0.0,
+            "p99": 0.0,
+            "poni": None,
+            "full_miller_count": 0,
+            "output_miller_count": 0,
+            "message": f"工作目录不存在: {body.work_dir}",
+        }
+
+    image_path = _find_first_existing(work_dir, ["*.tif", "*.tiff", "*.edf", "*.cbf", "*.img"])
+    poni_path = _find_first_existing(work_dir, ["*.poni"])
+    full_miller_path = work_dir / "FullMiller.txt"
+    output_miller_path = work_dir / "outputMiller.txt"
+
+    result = {
+        "image_loaded": False,
+        "width": 0,
+        "height": 0,
+        "min": 0.0,
+        "max": 0.0,
+        "p01": 0.0,
+        "p99": 0.0,
+        "poni": None,
+        "full_miller_count": 0,
+        "output_miller_count": 0,
+        "message": "",
+    }
+
+    if image_path and image_path.exists():
+        try:
+            arr = load_image_auto(image_path.read_bytes(), image_path.name)
+            raw_state.image = arr
+            raw_state.image_shape = arr.shape
+            raw_state.ai = None
+            raw_state.calculator.clear_invert_geom()
+            stats = image_stats(arr)
+            h, w = arr.shape
+            result.update({
+                "image_loaded": True,
+                "width": w,
+                "height": h,
+                **stats,
+            })
+        except Exception as exc:
+            result["message"] = f"加载工作目录图像失败: {exc}"
+            return result
+
+    if full_miller_path.exists():
+        raw_state.full_miller = MillerFileParser.parse(full_miller_path.read_text(encoding='utf-8', errors='replace'))
+        result["full_miller_count"] = len(raw_state.full_miller)
+    else:
+        raw_state.full_miller = []
+
+    if output_miller_path.exists():
+        raw_state.output_miller = MillerFileParser.parse(output_miller_path.read_text(encoding='utf-8', errors='replace'))
+        result["output_miller_count"] = len(raw_state.output_miller)
+    else:
+        raw_state.output_miller = []
+
+    if poni_path and poni_path.exists():
+        try:
+            result["poni"] = _load_poni_into_raw_state(poni_path)
+        except Exception as exc:
+            result["message"] = f"加载工作目录 PONI 失败: {exc}"
+            return result
+
+    if not result["message"]:
+        result["message"] = f"已检查工作目录: {work_dir.name}"
+
+    return result
+
+
 @router.delete("/raw/miller")
 def raw_clear_miller(
     miller_type: str = Query("all", description="full | output | all"),
@@ -343,7 +500,11 @@ def raw_markers(params: RawRenderParams):
                 continue
             x, y = coords
             if 0 <= x < w and 0 <= y < h:
-                pts.append({'h': pt['h'], 'k': pt['k'], 'l': pt['l'], 'x': x, 'y': y})
+                pts.append({
+                    'h': pt['h'], 'k': pt['k'], 'l': pt['l'], 'x': x, 'y': y,
+                    'overlay_index': pt.get('overlay_index', 0),
+                    'overlay_label': pt.get('overlay_label', ''),
+                })
         return pts
 
     full_pts = compute_pts(raw_state.full_miller)
@@ -393,7 +554,11 @@ def raw_render(params: RawRenderParams):
                 continue
             x, y = coords
             if 0 <= x < w and 0 <= y < h:
-                pts.append({'h': pt['h'], 'k': pt['k'], 'l': pt['l'], 'x': x, 'y': y})
+                pts.append({
+                    'h': pt['h'], 'k': pt['k'], 'l': pt['l'], 'x': x, 'y': y,
+                    'overlay_index': pt.get('overlay_index', 0),
+                    'overlay_label': pt.get('overlay_label', ''),
+                })
         return pts
 
     full_pts = compute_pts(raw_state.full_miller)

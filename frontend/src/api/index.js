@@ -4,9 +4,11 @@ export const buildRunAnalysisPayload = (dataFile, params = {}) => {
   const requestParams = {
     ...params,
     fixedPeakText: typeof params?.fixedPeakText === 'string' ? params.fixedPeakText : '',
-    mergeNearbyEnabled: Boolean(params?.mergeNearbyEnabled),
-    mergeTq: typeof params?.mergeTq === 'number' && !Number.isNaN(params.mergeTq) ? params.mergeTq : 0.2,
-    mergeTa: typeof params?.mergeTa === 'number' && !Number.isNaN(params.mergeTa) ? params.mergeTa : 2.0,
+    // Grey release: force peak symmetry merge disabled
+    peakSymmetryEnabled: false,
+    mergeGradientEnabled: false,
+    symmetryTq: typeof params?.symmetryTq === 'number' && !Number.isNaN(params.symmetryTq) ? params.symmetryTq : 0.2,
+    symmetryTa: typeof params?.symmetryTa === 'number' && !Number.isNaN(params.symmetryTa) ? params.symmetryTa : 2.0,
     glideBatches: Array.isArray(params?.glideBatches)
       ? params.glideBatches.filter(b => b && Math.abs(Number(b.l0) || 0) > 1e-12).map(b => ({
           label: String(b.label || '').trim(),
@@ -266,6 +268,10 @@ export const api = {
     return request.post('/analysis/glide-batch', {
       a, b, c, alpha, beta, gamma, wavelength, glideGroups
     })
+  },
+
+  async rawSetMillerContent(groups) {
+    return request.post('/visualizer/raw/set-miller-content', { groups })
   }
 }
 

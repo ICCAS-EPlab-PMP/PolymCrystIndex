@@ -24,9 +24,16 @@ import os
 import shutil
 import sys
 import subprocess
+import time
+import threading
 from typing import Optional
 from pathlib import Path
 from .config import InputConfig
+
+
+class TaskCancelledException(Exception):
+    """Custom exception for task cancellation."""
+    pass
 
 
 class FortranCaller:
@@ -58,6 +65,14 @@ class FortranCaller:
         self.scripts_dir = scripts_dir or self._find_scripts_dir()
         self.exe_dir = self._find_exe_dir()
         self.workdir = workdir or os.getcwd()
+        self._current_process: Optional[subprocess.Popen] = None
+
+    def kill_current_process(self) -> None:
+        """Kill the currently running subprocess if any."""
+        if self._current_process is not None and self._current_process.poll() is None:
+            self._current_process.kill()
+            self._current_process.wait()
+            self._current_process = None
     
     @staticmethod
     def is_windows() -> bool:
@@ -160,7 +175,7 @@ class FortranCaller:
             print("[OpenMP] Thread count not limited, system will determine")
     
     def run_optimization(self, input_file: str, diffraction_file: str,
-                         step: int) -> None:
+                         step: int, stop_event: Optional[threading.Event] = None) -> None:
         """运行单步优化 / Run single optimization step
         
         调用 single_polymcrystindex 程序进行晶胞参数优化。
@@ -197,17 +212,24 @@ class FortranCaller:
         
         print(f"[Fortran] Running optimization step {step}...")
         
-        result = subprocess.run(
-            cmd,
-            cwd=self.workdir,
-            capture_output=True,
-            text=True
-        )
+        process = subprocess.Popen(cmd, cwd=self.workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self._current_process = process
+        try:
+            while process.poll() is None:
+                if stop_event and stop_event.is_set():
+                    process.kill()
+                    process.wait()
+                    raise TaskCancelledException("Task cancelled during subprocess execution")
+                time.sleep(0.1)
+            stdout, stderr = process.communicate()
+        finally:
+            self._current_process = None
+        returncode = process.returncode
         
-        if result.returncode != 0:
-            stderr = result.stderr.strip() if result.stderr else ""
+        if returncode != 0:
+            stderr_msg = stderr.strip() if stderr else ""
             raise RuntimeError(
-                f"Fortran optimization step {step} failed with code {result.returncode}: {stderr}"
+                f"Fortran optimization step {step} failed with code {returncode}: {stderr_msg}"
             )
 
         if not os.path.exists(fortran_error_file):
@@ -219,7 +241,7 @@ class FortranCaller:
         if not os.path.exists(annealing_file):
             raise FileNotFoundError(annealing_file)
     
-    def run_initialization(self, input_file: str) -> None:
+    def run_initialization(self, input_file: str, stop_event: Optional[threading.Event] = None) -> None:
         """运行初始化程序 / Run initialization program
         
         调用 Python 脚本 initial.py 生成初始随机种群 cell_0.txt。
@@ -236,17 +258,24 @@ class FortranCaller:
         
         print(f"[Init] Running initialization...")
         
-        result = subprocess.run(
-            cmd,
-            cwd=self.workdir,
-            capture_output=True,
-            text=True
-        )
+        process = subprocess.Popen(cmd, cwd=self.workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self._current_process = process
+        try:
+            while process.poll() is None:
+                if stop_event and stop_event.is_set():
+                    process.kill()
+                    process.wait()
+                    raise TaskCancelledException("Task cancelled during subprocess execution")
+                time.sleep(0.1)
+            stdout, stderr = process.communicate()
+        finally:
+            self._current_process = None
+        returncode = process.returncode
         
-        if result.returncode != 0:
-            stderr = result.stderr.strip() if result.stderr else ""
+        if returncode != 0:
+            stderr_msg = stderr.strip() if stderr else ""
             raise RuntimeError(
-                f"Initialization failed with code {result.returncode}: {stderr}"
+                f"Initialization failed with code {returncode}: {stderr_msg}"
             )
 
         init_cell = os.path.join(self.workdir, "cell_0.txt")
@@ -254,7 +283,7 @@ class FortranCaller:
             raise FileNotFoundError(init_cell)
     
     def run_sorting(self, input_file: str, cell_file: str,
-                   generation: int, diffraction_file: str) -> None:
+                   generation: int, diffraction_file: str, stop_event: Optional[threading.Event] = None) -> None:
         """运行排序程序 / Run sorting program
         
         调用 Python 脚本 sort.py 根据衍射数据对晶胞进行排序，
@@ -285,17 +314,24 @@ class FortranCaller:
         
         print(f"[Sort] Running sorting for generation {generation}...")
         
-        result = subprocess.run(
-            cmd,
-            cwd=self.workdir,
-            capture_output=True,
-            text=True
-        )
+        process = subprocess.Popen(cmd, cwd=self.workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self._current_process = process
+        try:
+            while process.poll() is None:
+                if stop_event and stop_event.is_set():
+                    process.kill()
+                    process.wait()
+                    raise TaskCancelledException("Task cancelled during subprocess execution")
+                time.sleep(0.1)
+            stdout, stderr = process.communicate()
+        finally:
+            self._current_process = None
+        returncode = process.returncode
         
-        if result.returncode != 0:
-            stderr = result.stderr.strip() if result.stderr else ""
+        if returncode != 0:
+            stderr_msg = stderr.strip() if stderr else ""
             raise RuntimeError(
-                f"Sorting for generation {generation} failed with code {result.returncode}: {stderr}"
+                f"Sorting for generation {generation} failed with code {returncode}: {stderr_msg}"
             )
 
         next_cell = os.path.join(self.workdir, f"cell_{generation}.txt")

@@ -3,6 +3,11 @@ module fitting_module
     real*8 x(maxdata),value(maxdata),value1(maxdata)
     real*8 e2,e3,e4,wavelength,x1,sym_e,sym_cal
     real*8 Miller_trans(maxdata,3)
+    integer :: family_member_count(maxdata)
+    integer :: family_supported(maxdata)
+    integer :: family_key(maxdata,3)
+    integer :: family_members(maxdata,4,3)
+    real*8 :: family_residual_raw(maxdata)
     integer sym_stat
     integer level
     real*8 contribution(maxdata)
@@ -45,6 +50,219 @@ module error_module
     use fitting_module
     implicit none
 contains
+    !=========================================================================
+    ! Symmetry-family scoring contract for upcoming joint matching (Task 1)
+    ! ----------------------------------------------------------------------
+    ! Canonical family key (v1 only): family_key = (abs(h), abs(k), l).
+    ! This matches the existing hk-rule buckets in PRE/backend/services/peak_merge.py.
+    !
+    ! Supported family cardinalities (v1 only):
+    !   - 2-member family: same abs(h), same abs(k), same l, and exactly two
+    !     unique sign variants that form an opposite-sign pair on h and/or k.
+    !   - 4-member family: same abs(h), same abs(k), same l, and the full set
+    !     of sign variants implied by the non-zero h/k magnitudes.
+    !   - Unsupported shapes MUST be rejected explicitly by later family logic:
+    !     examples include 3-member buckets, duplicate-sign-only buckets, or any
+    !     mismatched-sign bucket that does not satisfy the current 2/4-member rule.
+    !
+    ! Shared observed peak semantics for symmetry-enabled runs:
+    !   - One observed diffraction peak may be shared by every member inside a
+    !     supported family.
+    !   - Each family member computes its own member_to_observed_error against the
+    !     same observed peak (same observed q/psi source, different theoretical q/psi).
+    !   - If no supported family exists for a theoretical reflection, that reflection
+    !     remains an ungrouped singleton and uses the legacy single-HKL residual.
+    !
+    ! Family residual contract that will replace raw per-member summation:
+    !   family_residual = mean(member_to_observed_error) + lambda * intra_family_spread
+    ! where
+    !   member_to_observed_error = abs(q_theory - q_obs) * e3
+    !                            + abs(psi_theory - psi_obs) * e2
+    !                            + V / e4
+    !   intra_family_spread = max pairwise theoretical delta within the family,
+    !   measured in (q, psi) space for the current parameter set.
+    ! The spread term is evaluated only once per family. After taking the family
+    ! mean, later code MUST NOT re-sum the member residuals again.
+    !
+    ! Normalized totalSq/error_total aggregation contract:
+    !   totalSq = sum(unit_residual)
+    ! over active scoring units, where each unit is either one supported family
+    ! or one ungrouped singleton. Therefore a 2-member or 4-member family adds
+    ! exactly one normalized residual to totalSq/error_total, not one term per member.
+    !=========================================================================
+    subroutine reset_family_state(diffraction_num)
+        integer, intent(in) :: diffraction_num
+
+        family_member_count(1:diffraction_num) = 1
+        family_supported(1:diffraction_num) = 0
+        family_key(1:diffraction_num, 1:3) = 0
+        family_members(1:diffraction_num, 1:4, 1:3) = 0
+        family_residual_raw(1:diffraction_num) = 0.0d0
+    end subroutine
+
+    subroutine build_family_bucket(abs_h, abs_k, l_value, member_count, supported, members)
+        integer, intent(in) :: abs_h, abs_k, l_value
+        integer, intent(out) :: member_count, supported
+        integer, intent(out) :: members(4,3)
+
+        members(:, :) = 0
+        member_count = 1
+        supported = 0
+
+        if (abs_h == 0 .and. abs_k == 0) then
+            members(1, 1) = 0
+            members(1, 2) = 0
+            members(1, 3) = l_value
+        else if (abs_h > 0 .and. abs_k > 0) then
+            member_count = 4
+            supported = 1
+            members(1, :) = (/ abs_h,  abs_k, l_value /)
+            members(2, :) = (/ abs_h, -abs_k, l_value /)
+            members(3, :) = (/ -abs_h, abs_k, l_value /)
+            members(4, :) = (/ -abs_h, -abs_k, l_value /)
+        else if (abs_h > 0) then
+            member_count = 2
+            supported = 1
+            members(1, :) = (/ abs_h, 0, l_value /)
+            members(2, :) = (/ -abs_h, 0, l_value /)
+        else
+            member_count = 2
+            supported = 1
+            members(1, :) = (/ 0, abs_k, l_value /)
+            members(2, :) = (/ 0, -abs_k, l_value /)
+        end if
+    end subroutine
+
+    subroutine compute_reflection_coordinates(h_value, k_value, l_value, c_axis, tilt_angle, V, &
+                                              A11, B11, C11, D11, E11, F11, q_value, coord_value, valid)
+        integer, intent(in) :: h_value, k_value, l_value
+        real*8, intent(in) :: c_axis, tilt_angle, V, A11, B11, C11, D11, E11, F11
+        real*8, intent(out) :: q_value, coord_value
+        logical, intent(out) :: valid
+
+        real*8, parameter :: pi = 3.14159265358979323846d0
+        real*8 :: d, theta, d1, y1, phi_value, phi_asin
+
+        valid = .false.
+        q_value = 1.0d10
+        coord_value = 1.0d10
+
+        if (l_value == 0) then
+            y1 = 0.0d0
+        else
+            y1 = dble(l_value) / c_axis
+        end if
+
+        d = 1.0d0 / sqrt((A11 * h_value**2 + B11 * k_value**2 + C11 * l_value**2 + &
+                         2.0d0 * D11 * h_value * k_value + 2.0d0 * E11 * k_value * l_value + &
+                         2.0d0 * F11 * h_value * l_value) / V**2)
+
+        theta = asin(wavelength / (2.0d0 * d))
+        if (theta /= theta) return
+
+        q_value = 2.0d0 * pi / d
+        d1 = 1.0d0 / wavelength * sin(2.0d0 * theta)
+
+        if (tilt_check == 1) then
+            phi_asin = (y1 / cos(tilt_angle) + 1.0d0 / d * sin(theta) * tan(tilt_angle)) / d1
+            if (phi_asin > 1.0d0 .or. phi_asin < -1.0d0) then
+                phi_value = pi / 2.0d0
+            else
+                phi_value = asin(phi_asin)
+            end if
+        else
+            if (y1 / d1 > 1.0d0 .or. y1 / d1 < -1.0d0) then
+                phi_value = pi / 2.0d0
+            else
+                phi_value = asin(y1 / d1)
+            end if
+        end if
+
+        if (level == 1) then
+            coord_value = phi_value * 180.0d0 / pi
+        else
+            coord_value = y1
+        end if
+
+        valid = .true.
+    end subroutine
+
+    real*8 function calculate_family_spread(member_count, q_values, coord_values)
+        integer, intent(in) :: member_count
+        real*8, intent(in) :: q_values(4), coord_values(4)
+
+        integer :: i, j
+        real*8 :: spread_local
+
+        calculate_family_spread = 0.0d0
+        if (member_count <= 1) return
+
+        do i = 1, member_count - 1
+            do j = i + 1, member_count
+                spread_local = abs(q_values(i) - q_values(j)) * e3 + &
+                               abs(coord_values(i) - coord_values(j)) * e2
+                if (spread_local > calculate_family_spread) then
+                    calculate_family_spread = spread_local
+                end if
+            end do
+        end do
+    end function
+
+    subroutine calculate_family_unit_residual(observed_idx, member_count, members, c_axis, tilt_angle, V, &
+                                              A11, B11, C11, D11, E11, F11, unit_residual, valid)
+        integer, intent(in) :: observed_idx, member_count
+        integer, intent(in) :: members(4,3)
+        real*8, intent(in) :: c_axis, tilt_angle, V, A11, B11, C11, D11, E11, F11
+        real*8, intent(out) :: unit_residual
+        logical, intent(out) :: valid
+
+        integer :: member_idx
+        real*8 :: q_values(4), coord_values(4), member_error_sum
+        logical :: member_valid
+
+        unit_residual = 1.0d10
+        q_values(:) = 0.0d0
+        coord_values(:) = 0.0d0
+        member_error_sum = 0.0d0
+        valid = .true.
+
+        do member_idx = 1, member_count
+            call compute_reflection_coordinates(members(member_idx, 1), members(member_idx, 2), &
+                                                members(member_idx, 3), c_axis, tilt_angle, V, &
+                                                A11, B11, C11, D11, E11, F11, q_values(member_idx), &
+                                                coord_values(member_idx), member_valid)
+            if (.not. member_valid) then
+                valid = .false.
+                return
+            end if
+
+            member_error_sum = member_error_sum + abs(q_values(member_idx) - value1(observed_idx)) * e3 + &
+                               abs(coord_values(member_idx) - value(observed_idx)) * e2 + V / e4
+        end do
+
+        unit_residual = member_error_sum / dble(member_count) + &
+                        calculate_family_spread(member_count, q_values, coord_values)
+    end subroutine
+
+    subroutine set_family_assignment(observed_idx, representative_h, representative_k, representative_l, &
+                                     member_count, supported, members, unit_residual)
+        integer, intent(in) :: observed_idx, representative_h, representative_k, representative_l
+        integer, intent(in) :: member_count, supported
+        integer, intent(in) :: members(4,3)
+        real*8, intent(in) :: unit_residual
+
+        Miller_trans(observed_idx, 1) = representative_h
+        Miller_trans(observed_idx, 2) = representative_k
+        Miller_trans(observed_idx, 3) = representative_l
+        family_member_count(observed_idx) = member_count
+        family_supported(observed_idx) = supported
+        family_key(observed_idx, 1) = abs(representative_h)
+        family_key(observed_idx, 2) = abs(representative_k)
+        family_key(observed_idx, 3) = representative_l
+        family_members(observed_idx, :, :) = members(:, :)
+        family_residual_raw(observed_idx) = unit_residual
+    end subroutine
+
     !=== The routine calculates fitting error === 误差计算，绝对值差
     subroutine calcfiterr(diffraction_num,nparm,parm,fiterr,iflag)
         !必须要参数----》观测点数量，参数数量，参数【数组】，最终误差结果，信息
@@ -53,6 +271,10 @@ contains
         integer diffraction_num,nparm,iflag,i
         real*8 :: parm(nparm),fiterr(diffraction_num),fitval(diffraction_num),fitval1(diffraction_num)
         real*8 :: V
+        real*8 :: a, b, c, alpha, beta, gamma
+        real*8 :: A11, B11, C11, D11, E11, F11
+        real*8 :: tilt_angle
+        logical :: unit_valid
 
 
         ! 调用函数 ！
@@ -60,7 +282,52 @@ contains
 
         !误差核心计算,fitval为q,fitval1为phi
         sym_cal=0
+
         if (sym_stat==1) then
+            a = parm(1)
+            b = parm(2)
+            c = parm(3)
+
+            if (ortho_ab_star == 1) then
+                alpha = parm(4) * 3.14159265358979323846d0 / 180.0d0
+                beta = parm(5) * 3.14159265358979323846d0 / 180.0d0
+                gamma = acos(cos(alpha) * cos(beta))
+            else if (crystal_system == 1) then
+                alpha = 3.14159265358979323846d0 / 2.0d0
+                beta = 3.14159265358979323846d0 / 2.0d0
+                gamma = 3.14159265358979323846d0 / 2.0d0
+            else
+                alpha = parm(4) * 3.14159265358979323846d0 / 180.0d0
+                beta = parm(5) * 3.14159265358979323846d0 / 180.0d0
+                gamma = parm(6) * 3.14159265358979323846d0 / 180.0d0
+            end if
+
+            tilt_angle = 0.0d0
+            if (tilt_check == 1) then
+                tilt_angle = parm(7) * 3.14159265358979323846d0 / 180.0d0
+            end if
+
+            A11 = b**2 * c**2 * sin(alpha)**2
+            B11 = a**2 * c**2 * sin(beta)**2
+            C11 = a**2 * b**2 * sin(gamma)**2
+            D11 = a * b * c**2 * (cos(alpha) * cos(beta) - cos(gamma))
+            E11 = a**2 * b * c * (cos(beta) * cos(gamma) - cos(alpha))
+            F11 = a * b**2 * c * (cos(gamma) * cos(alpha) - cos(beta))
+
+            do i = 1, diffraction_num
+                if (family_supported(i) == 1) then
+                    call calculate_family_unit_residual(i, family_member_count(i), family_members(i, :, :), &
+                                                        c, tilt_angle, V, A11, B11, C11, D11, E11, F11, &
+                                                        fiterr(i), unit_valid)
+                    if (.not. unit_valid) then
+                        fiterr(i) = 100000.0d0
+                    end if
+                else
+                    fiterr(i) = abs(fitval(i) - value1(i)) * e3 + abs(fitval1(i) - value(i)) * e2 + V / e4
+                end if
+                family_residual_raw(i) = fiterr(i)
+            end do
+
             do i=4,6
 
                 if (abs(parm(i)-90)<2.0d0) then
@@ -70,14 +337,11 @@ contains
             end do
 
             if (sym_cal==3) then
-                fiterr(:)=(abs(fitval(1:diffraction_num)-value1(1:diffraction_num))*e3&
-                &+abs(fitval1(1:diffraction_num)-value(1:diffraction_num))*e2+V/e4)*sym_e*contribution(1:diffraction_num)
+                fiterr(:)=fiterr(:)*sym_e*contribution(1:diffraction_num)
             else if (sym_cal==2) then
-                fiterr(:)=(abs(fitval(1:diffraction_num)-value1(1:diffraction_num))*e3&
-                &+abs(fitval1(1:diffraction_num)-value(1:diffraction_num))*e2+V/e4)*(0.5+sym_e/2)*contribution(1:diffraction_num)
+                fiterr(:)=fiterr(:)*(0.5d0+sym_e/2.0d0)*contribution(1:diffraction_num)
             else
-                fiterr(:)=(abs(fitval(1:diffraction_num)-value1(1:diffraction_num))*e3&
-                &+abs(fitval1(1:diffraction_num)-value(1:diffraction_num))*e2+V/e4)*contribution(1:diffraction_num)
+                fiterr(:)=fiterr(:)*contribution(1:diffraction_num)
             end if
 
 
@@ -114,6 +378,8 @@ contains
         integer :: k, l, n     !循环变量
         integer :: num_ref     !最佳匹配位置记录
         integer :: valid_count !有效计算点计数器
+        integer :: current_member_count, current_supported
+        integer :: current_members(4,3)
 
         real(kind=8) :: a, b, c, alpha, beta, gamma
         real(kind=8) :: V
@@ -121,7 +387,8 @@ contains
         real(kind=8) :: theta, d, q, PHI, d1, y1
         real(kind=8), parameter :: pi = 3.14159265358979323846d0
         real(kind=8) :: tilt_angle, PHI_asin
-        real(kind=8) :: error_lowest, error_mid
+        real(kind=8) :: error_lowest, error_mid, unit_residual
+        logical :: unit_valid
 
         !中间计算变量（无需大数组存储）
         real(kind=8) :: current_q, current_PHI_or_y1, current_theta
@@ -183,17 +450,24 @@ contains
         Miller_trans(:, 1) = 1
         Miller_trans(:, 2) = 0
         Miller_trans(:, 3) = 0
+        call reset_family_state(diffraction_num)
 
         current_V = V ! 记录当前体积
 
         ! 2. 外层循环：遍历理论晶面 (h, k, l)
         ! 将计算量大的部分放在外层，确保每组 hkl 只计算一次物理量
         !$OMP PARALLEL DO COLLAPSE(3) DEFAULT(SHARED) &
-        !$OMP PRIVATE(c1, b1, a1, y1, d, theta, q, d1, PHI_asin, PHI, k, error_mid) &
+        !$OMP PRIVATE(c1, b1, a1, y1, d, theta, q, d1, PHI_asin, PHI, k, error_mid, &
+        !$OMP         current_member_count, current_supported, current_members, unit_residual, unit_valid) &
         !$OMP SCHEDULE(DYNAMIC)
         do c1 = 0, max_l1
             do b1 = -max_k1, max_k1
                 do a1 = -max_h1, max_h1
+
+                    if (sym_stat == 1) then
+                        if (a1 < 0) cycle
+                        if (a1 == 0 .and. b1 < 0) cycle
+                    end if
                     
                     ! 1. 计算 y1 (注意：y1 虽然依赖 c1，但放在 PRIVATE 里最安全)
                     if (c1 == 0) then
@@ -250,29 +524,51 @@ contains
 
                     !===========================================
                     ! 2. 比较与更新记录
-                    do k = 1, diffraction_num
-                        if (level == 1) then
-                            error_mid = abs(q - value1(k)) * e3 + abs(PHI * 180.0d0 / pi - value(k)) * e2
-                        else if (level == 2) then
-                            error_mid = abs(q - value1(k)) * e3 + abs(y1 - value(k)) * e2
-                        end if
+                    if (sym_stat == 1) then
+                        call build_family_bucket(abs(a1), abs(b1), c1, current_member_count, current_supported, current_members)
+                        do k = 1, diffraction_num
+                            call calculate_family_unit_residual(k, current_member_count, current_members, c, tilt_angle, V, &
+                                                                A11, B11, C11, D11, E11, F11, unit_residual, unit_valid)
+                            if (.not. unit_valid) cycle
 
-                        ! --- 全局比较保护区 ---
-                        ! 只有当发现更小值时，才进入受保护状态
-                        if (error_mid < min_error_list(k)) then
-                            ! 使用 CRITICAL 确保同一时间只有一个线程修改第 k 个点的记录
-                            ! 给 CRITICAL 起个名字 (update_min) 可以稍微提高效率
-                            !$OMP CRITICAL(update_min)
-                            ! 进入后需要再次判断，因为在等待时可能被别的线程更新了
-                            if (error_mid < min_error_list(k)) then
-                                min_error_list(k) = error_mid
-                                Miller_trans(k, 1) = a1
-                                Miller_trans(k, 2) = b1
-                                Miller_trans(k, 3) = c1
+                            if (unit_residual < min_error_list(k)) then
+                                !$OMP CRITICAL(update_min)
+                                if (unit_residual < min_error_list(k)) then
+                                    min_error_list(k) = unit_residual
+                                    call set_family_assignment(k, a1, b1, c1, current_member_count, current_supported, &
+                                                               current_members, unit_residual)
+                                end if
+                                !$OMP END CRITICAL(update_min)
                             end if
-                            !$OMP END CRITICAL(update_min)
-                        end if
-                    end do 
+                        end do
+                    else
+                        do k = 1, diffraction_num
+                            if (level == 1) then
+                                error_mid = abs(q - value1(k)) * e3 + abs(PHI * 180.0d0 / pi - value(k)) * e2
+                            else if (level == 2) then
+                                error_mid = abs(q - value1(k)) * e3 + abs(y1 - value(k)) * e2
+                            end if
+
+                            ! --- 全局比较保护区 ---
+                            ! 只有当发现更小值时，才进入受保护状态
+                            if (error_mid < min_error_list(k)) then
+                                ! 使用 CRITICAL 确保同一时间只有一个线程修改第 k 个点的记录
+                                ! 给 CRITICAL 起个名字 (update_min) 可以稍微提高效率
+                                !$OMP CRITICAL(update_min)
+                                ! 进入后需要再次判断，因为在等待时可能被别的线程更新了
+                                if (error_mid < min_error_list(k)) then
+                                    min_error_list(k) = error_mid
+                                    Miller_trans(k, 1) = a1
+                                    Miller_trans(k, 2) = b1
+                                    Miller_trans(k, 3) = c1
+                                    current_members(:, :) = 0
+                                    current_members(1, :) = (/ a1, b1, c1 /)
+                                    call set_family_assignment(k, a1, b1, c1, 1, 0, current_members, error_mid)
+                                end if
+                                !$OMP END CRITICAL(update_min)
+                            end if
+                        end do
+                    end if
 
                 end do 
             end do
@@ -286,6 +582,10 @@ contains
         if (allocated(fixhkl)) then
             do k = 1, fixhklfile
                 Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
+                current_members(:, :) = 0
+                current_members(1, :) = fixhkl(k, 2:4)
+                call set_family_assignment(fixhkl(k, 1), fixhkl(k, 2), fixhkl(k, 3), fixhkl(k, 4), &
+                                           1, 0, current_members, min_error_list(fixhkl(k, 1)))
             end do
         end if
 
@@ -764,6 +1064,12 @@ program LMfit
 
         !write(*,*) parm(1),parm(2),parm(3),parm(4),parm(5),parm(6),fiterr(1:diffraction_num)
         !导出error
+        ! Symmetry-family aggregation reminder:
+        ! `calcfiterr()` now writes one normalized residual per active observed unit.
+        ! In symmetry-enabled runs, a supported 2-member / 4-member family is already
+        ! collapsed to one family-level `fiterr(j)` before this loop. Unsupported or
+        ! non-family cases remain singleton units. Therefore summing `fiterr(j)` here
+        ! is the intended unit-level accumulation step, not a raw per-member re-sum.
         error_total(i)=0
         do j=1,diffraction_num
 

@@ -1,4 +1,17 @@
-"""Helpers for peak symmetry merge grouping."""
+"""Postprocess audit and reporting utility for peak symmetry groups.
+
+The canonical source of truth for symmetry-enabled family matching is the
+Fortran-generated ``outputMillerFamilies.jsonl`` artifact, ingested by
+``indexing_service.py`` via ``_read_joint_match_groups()``.  That production
+path uses ``_derive_legacy_peak_symmetry_groups_from_joint_matches()`` to emit
+groups with the correct Fortran-backed family semantics.
+
+This module provides an independent, Python-side implementation of hk-rule
+validation and peak-symmetry group identification for audit and reporting
+purposes only.  Its results may differ from the Fortran-backed path in
+edge cases (e.g. sign-pattern handling, bucket formation).  No production
+code should rely on this module as the source of truth for matching logic.
+"""
 
 from itertools import combinations
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
@@ -260,7 +273,15 @@ def build_peak_symmetry_groups_from_results(
     merge_gradient_enabled: bool = False,
     merge_gradient_threshold: float = 0.0,
 ) -> List[Dict[str, Any]]:
-    """Zip observed peaks with parsed Miller assignments and build joint groups."""
+    """Secondary / reporting-only helper — zips observed peaks with Miller assignments.
+
+    **This function is NOT the canonical matching source.**  The production path
+    uses ``_read_joint_match_groups()`` (reads Fortran's ``outputMillerFamilies.jsonl``)
+    and ``_derive_legacy_peak_symmetry_groups_from_joint_matches()`` in
+    ``indexing_service.py``.  This Python helper re-derives groups from in-memory
+    data for audit / reporting purposes only; its grouping semantics may diverge
+    from the Fortran artifact in edge cases.
+    """
 
     paired_peaks = []
     for peak_index, (diffraction_peak, miller_peak) in enumerate(

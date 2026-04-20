@@ -285,14 +285,21 @@
               <span class="toggle-label">{{ t('params.pseudoOrth') }}</span>
             </label>
 
-            <!-- Grey release: peak symmetry merge disabled until next minor version -->
-            <div class="peak-symmetry-config peak-symmetry-disabled">
-              <label class="toggle-item" :aria-disabled="true">
-                <input type="checkbox" disabled :checked="false" />
-                <span class="toggle-label">{{ t('params.peakSymmetryMode') }}</span>
-                <span class="grey-release-badge">{{ t('params.peakSymmetryComingSoon') }}</span>
-              </label>
-              <p class="grey-release-hint">{{ t('params.peakSymmetryGreyHint') }}</p>
+            <label class="toggle-item">
+              <input type="checkbox" v-model="localParams.peakSymmetryEnabled" />
+              <span class="toggle-label">{{ t('params.peakSymmetryMode') }}</span>
+            </label>
+            <div v-if="localParams.peakSymmetryEnabled" class="peak-symmetry-thresholds">
+              <div class="weight-item">
+                <label>{{ t('params.peakSymmetryTq') }}</label>
+                <input type="number" v-model.number="localParams.symmetryTq" step="0.01" min="0" />
+                <p class="threshold-hint">{{ t('params.peakSymmetryTqHint') }}</p>
+              </div>
+              <div class="weight-item">
+                <label>{{ t('params.peakSymmetryTa') }}</label>
+                <input type="number" v-model.number="localParams.symmetryTa" step="0.1" min="0" />
+                <p class="threshold-hint">{{ t('params.peakSymmetryTaHint') }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -475,10 +482,6 @@ const resetParams = () => {
 }
 
 const saveParams = () => {
-  // Grey release: force peak symmetry merge disabled
-  localParams.peakSymmetryEnabled = false
-  localParams.mergeGradientEnabled = false
-
   Object.assign(props.params, localParams)
   saveNotice.value = t('params.saved')
   if (typeof window !== 'undefined') {
@@ -899,40 +902,17 @@ const saveParams = () => {
   border-top: 1px solid var(--border);
 }
 
-.peak-symmetry-config.peak-symmetry-disabled {
-  opacity: 0.5;
-  pointer-events: none;
-  user-select: none;
-}
-
-.peak-symmetry-config.peak-symmetry-disabled .toggle-item {
-  cursor: not-allowed;
-}
-
-.grey-release-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(156, 163, 175, 0.15);
-  color: var(--text-muted);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  margin-left: 8px;
-}
-
-.grey-release-hint {
-  margin: 6px 0 0 28px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
 .peak-symmetry-thresholds {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   margin-top: 12px;
+}
+
+.threshold-hint {
+  margin: 4px 0 0;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
 }
 
 .threshold-group input[type="number"] {

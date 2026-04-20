@@ -4,9 +4,8 @@ export const buildRunAnalysisPayload = (dataFile, params = {}) => {
   const requestParams = {
     ...params,
     fixedPeakText: typeof params?.fixedPeakText === 'string' ? params.fixedPeakText : '',
-    // Grey release: force peak symmetry merge disabled
-    peakSymmetryEnabled: false,
-    mergeGradientEnabled: false,
+    peakSymmetryEnabled: Boolean(params?.peakSymmetryEnabled),
+    mergeGradientEnabled: Boolean(params?.mergeGradientEnabled),
     symmetryTq: typeof params?.symmetryTq === 'number' && !Number.isNaN(params.symmetryTq) ? params.symmetryTq : 0.2,
     symmetryTa: typeof params?.symmetryTa === 'number' && !Number.isNaN(params.symmetryTa) ? params.symmetryTa : 2.0,
     glideBatches: Array.isArray(params?.glideBatches)
@@ -242,6 +241,10 @@ export const api = {
     return request.post(`/visualizer/int/upload-miller?miller_type=${millerType}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
+  },
+
+  async intSetMillerContent(groups) {
+    return request.post('/visualizer/int/set-miller-content', { groups })
   },
 
   async intClearMiller(millerType = 'all') {

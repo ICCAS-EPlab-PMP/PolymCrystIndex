@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.8.1'
+    version: 'v1.8.2'
   },
   home: {
     selectModule: 'Select Module',
@@ -23,7 +23,7 @@ export default {
       expand: 'Expand Summary',
       collapse: 'Collapse Summary',
       collapsedSummary: 'Expand to review the contents of this release.',
-      versionValue: 'v 1.8.1',
+      versionValue: 'v 1.8.2',
       keywords: {
         manualCell: 'Manual cell parameters - new feature',
         glideC: 'c-axis glide visualization',
@@ -211,8 +211,8 @@ export default {
     fixedPeakPlaceholder: '1 1 1 0\n3 2 0 1',
     fixedPeakHint: 'One peak per line. Format must be peak_index h k l and peak_index matches observed_diffraction order.',
     peakSymmetryMode: 'Peak symmetry merge mode',
-    peakSymmetryComingSoon: 'Coming Soon',
-    peakSymmetryGreyHint: 'This feature is under development and will be available in a future release.',
+    peakSymmetryTq: 'Tq Threshold',
+    peakSymmetryTa: 'Ta Threshold',
     peakSymmetryTqHint: 'Default 0.2. Max Δq allowed inside a peak-symmetry group.',
     peakSymmetryTaHint: 'Default 2.0. Max Δangle allowed inside a peak-symmetry group.',
     mergeGradientToggle: 'Merge Gradient',

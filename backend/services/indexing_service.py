@@ -285,6 +285,7 @@ def _build_task_paths(work_dir: str) -> dict:
         "diffraction_file": os.path.join(work_dir, "observed_diffraction.txt"),
         "hdf5_file": os.path.join(work_dir, "results.h5"),
         "output_miller_file": os.path.join(work_dir, "outputMiller.txt"),
+        "output_miller_families_file": os.path.join(work_dir, "outputMillerFamilies.jsonl"),
         "full_miller_file": os.path.join(work_dir, "FullMiller.txt"),
         "peak_symmetry_groups_file": os.path.join(work_dir, "peak_symmetry_groups.json"),
     }
@@ -401,6 +402,196 @@ class IndexingService:
             merge_gradient_threshold=config["mergeGradientThreshold"],
         )
 
+    def _family_hkl_to_dict(self, raw_hkl: Any) -> Optional[Dict[str, int]]:
+        if not isinstance(raw_hkl, (list, tuple)) or len(raw_hkl) < 3:
+            return None
+        try:
+            return {
+                "h": int(raw_hkl[0]),
+                "k": int(raw_hkl[1]),
+                "l": int(raw_hkl[2]),
+            }
+        except (TypeError, ValueError):
+            return None
+
+    def _get_joint_match_artifact_path(self, work_dir: str) -> Optional[str]:
+        task_paths = _build_task_paths(work_dir)
+        artifact_candidates = [
+            task_paths["output_miller_families_file"],
+            os.path.join(task_paths["result_dir"], "outputMillerFamilies.jsonl"),
+        ]
+        return next((path for path in artifact_candidates if os.path.exists(path)), None)
+
+    def _empty_joint_match_source(self, work_dir: str) -> str:
+        return (
+            "empty_joint_match_artifact"
+            if self._get_joint_match_artifact_path(work_dir)
+            else "missing_joint_match_artifact"
+        )
+
+    def _read_joint_match_groups(
+        self,
+        work_dir: str,
+        diffraction_data: List[Dict[str, Any]],
+        miller_data: List[Dict[str, Any]],
+        enabled: bool,
+    ) -> List[Dict[str, Any]]:
+        if not enabled:
+            return []
+
+        artifact_path = self._get_joint_match_artifact_path(work_dir)
+        if not artifact_path:
+            return []
+
+        joint_match_groups: List[Dict[str, Any]] = []
+        with open(artifact_path, "r", encoding="utf-8") as f:
+            for line_number, raw_line in enumerate(f, start=1):
+                stripped = raw_line.strip()
+                if not stripped:
+                    continue
+                try:
+                    payload = json.loads(stripped)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Skipping invalid family artifact line %s in %s",
+                        line_number,
+                        artifact_path,
+                    )
+                    continue
+
+                try:
+                    observed_peak_index = int(payload.get("observed_peak_index", 0) or 0)
+                    member_count = int(
+                        payload.get("member_count", len(payload.get("member_hkls", [])))
+                        or len(payload.get("member_hkls", []))
+                    )
+                    family_residual = float(payload.get("family_residual", 0.0) or 0.0)
+                    intra_family_spread = float(
+                        payload.get("intra_family_spread", 0.0) or 0.0
+                    )
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "Skipping malformed numeric family artifact line %s in %s",
+                        line_number,
+                        artifact_path,
+                    )
+                    continue
+
+                if observed_peak_index <= 0:
+                    continue
+
+                member_hkls = [
+                    hkl
+                    for hkl in (
+                        self._family_hkl_to_dict(item)
+                        for item in payload.get("member_hkls", [])
+                    )
+                    if hkl is not None
+                ]
+                family_key = self._family_hkl_to_dict(payload.get("family_key", []))
+                observed_peak = (
+                    diffraction_data[observed_peak_index - 1]
+                    if observed_peak_index <= len(diffraction_data)
+                    else {}
+                )
+                representative_assignment = (
+                    miller_data[observed_peak_index - 1]
+                    if observed_peak_index <= len(miller_data)
+                    else None
+                )
+
+                joint_match_groups.append(
+                    {
+                        "observedPeakIndex": observed_peak_index,
+                        "familySupported": bool(payload.get("family_supported", 0)),
+                        "familyKey": family_key,
+                        "memberCount": member_count,
+                        "memberHkls": member_hkls,
+                        "familyResidual": family_residual,
+                        "intraFamilySpread": intra_family_spread,
+                        "observedPeak": {
+                            "qObs": observed_peak.get("q_obs"),
+                            "psiObs": observed_peak.get("psi_obs"),
+                        },
+                        "representativeAssignment": representative_assignment,
+                        "sourceArtifact": os.path.basename(artifact_path),
+                    }
+                )
+
+        return joint_match_groups
+
+    def _derive_legacy_peak_symmetry_groups_from_joint_matches(
+        self,
+        joint_match_groups: List[Dict[str, Any]],
+        params: Optional[AnalysisParams],
+    ) -> List[Dict[str, Any]]:
+        config = self._get_peak_symmetry_config(params)
+        derived_groups: List[Dict[str, Any]] = []
+        for joint_group in joint_match_groups:
+            member_hkls = joint_group.get("memberHkls", []) or []
+            member_count = int(joint_group.get("memberCount", len(member_hkls)) or len(member_hkls))
+            observed_peak_index = int(joint_group.get("observedPeakIndex", 0) or 0)
+            observed_peak = joint_group.get("observedPeak", {}) or {}
+            if (
+                not joint_group.get("familySupported")
+                or member_count not in (2, 4)
+                or observed_peak_index <= 0
+                or len(member_hkls) != member_count
+            ):
+                continue
+
+            members = [
+                {
+                    "peakIndex": observed_peak_index,
+                    "q": observed_peak.get("qObs"),
+                    "psi": observed_peak.get("psiObs"),
+                    "h": member_hkl.get("h", 0),
+                    "k": member_hkl.get("k", 0),
+                    "l": member_hkl.get("l", 0),
+                }
+                for member_hkl in member_hkls
+            ]
+            family_key = joint_group.get("familyKey") or {}
+            derived_groups.append(
+                {
+                    "groupType": f"{member_count}-peak",
+                    "memberPeakIndices": [observed_peak_index],
+                    "memberCount": member_count,
+                    "withinThreshold": {
+                        "passed": True,
+                        "deltaQMax": 0.0,
+                        "deltaAngleMax": 0.0,
+                        "Tq": config["symmetryTq"],
+                        "Ta": config["symmetryTa"],
+                        "pairChecks": [],
+                    },
+                    "hkRulePassed": True,
+                    "hkRule": {
+                        "hkRulePassed": True,
+                        "sameAbsH": True,
+                        "sameAbsK": True,
+                        "sameL": True,
+                        "absH": family_key.get("h"),
+                        "absK": family_key.get("k"),
+                        "l": family_key.get("l"),
+                        "signVariants": [],
+                        "requiresSupportedMemberCount": True,
+                        "signPatternOk": True,
+                    },
+                    "mergeGradient": {
+                        "enabled": config["mergeGradientEnabled"],
+                        "passed": not config["mergeGradientEnabled"],
+                        "threshold": config["mergeGradientThreshold"],
+                    },
+                    "members": members,
+                    "reportingOnly": True,
+                    "semanticType": "joint-family-derived",
+                    "observedPeakIndex": observed_peak_index,
+                }
+            )
+
+        return derived_groups
+
     def _read_diffraction_data(self, diffraction_file: str) -> List[Dict[str, Any]]:
         diffraction_data = []
         if not os.path.exists(diffraction_file):
@@ -507,19 +698,39 @@ class IndexingService:
         if not config["enabled"]:
             if os.path.exists(artifact_path):
                 os.remove(artifact_path)
-            return {"enabled": False, "artifactPath": artifact_path, "groupCount": 0}
+            return {
+                "enabled": False,
+                "artifactPath": artifact_path,
+                "groupCount": 0,
+                "jointMatchGroupCount": 0,
+                "peakSymmetryGroups": [],
+                "jointMatchGroups": [],
+                "peakSymmetryGroupsSource": "disabled",
+            }
 
         diffraction_data = self._read_diffraction_data(task_paths["diffraction_file"])
         miller_data = self._read_miller_data(task_paths["output_miller_file"])
-        peak_symmetry_groups = self._build_peak_symmetry_groups(
+        joint_match_groups = self._read_joint_match_groups(
+            work_dir,
             diffraction_data,
             miller_data,
-            params,
+            enabled=config["enabled"],
         )
+        if joint_match_groups:
+            peak_symmetry_groups = self._derive_legacy_peak_symmetry_groups_from_joint_matches(
+                joint_match_groups,
+                params,
+            )
+            peak_symmetry_groups_source = "derived_from_joint_match_groups"
+        else:
+            peak_symmetry_groups = []
+            peak_symmetry_groups_source = self._empty_joint_match_source(work_dir)
 
         payload = {
             "peakSymmetryConfig": config,
+            "jointMatchGroups": joint_match_groups,
             "peakSymmetryGroups": peak_symmetry_groups,
+            "peakSymmetryGroupsSource": peak_symmetry_groups_source,
             "generatedDuringRun": True,
             "source": "run_indexing",
             "generatedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -531,7 +742,10 @@ class IndexingService:
             "enabled": True,
             "artifactPath": artifact_path,
             "groupCount": len(peak_symmetry_groups),
+            "jointMatchGroupCount": len(joint_match_groups),
+            "jointMatchGroups": joint_match_groups,
             "peakSymmetryGroups": peak_symmetry_groups,
+            "peakSymmetryGroupsSource": peak_symmetry_groups_source,
         }
 
     def _read_peak_symmetry_artifact(self, work_dir: str) -> Dict[str, Any]:
@@ -1343,10 +1557,40 @@ class IndexingService:
                 diffraction_file = os.path.join(work_dir, "observed_diffraction.txt")
                 diffraction_data = self._read_diffraction_data(diffraction_file)
                 peak_symmetry_artifact = self._read_peak_symmetry_artifact(work_dir)
-                peak_symmetry_groups = peak_symmetry_artifact.get("peakSymmetryGroups", []) or []
-                peak_symmetry_config = peak_symmetry_artifact.get(
-                    "peakSymmetryConfig", self._get_peak_symmetry_config(task.params)
-                )
+                peak_symmetry_config = self._get_peak_symmetry_config(task.params)
+                if not task.params and peak_symmetry_artifact.get("peakSymmetryConfig"):
+                    peak_symmetry_config = peak_symmetry_artifact["peakSymmetryConfig"]
+                if peak_symmetry_config.get("enabled"):
+                    joint_match_groups = peak_symmetry_artifact.get("jointMatchGroups")
+                    if joint_match_groups is None:
+                        joint_match_groups = self._read_joint_match_groups(
+                            work_dir,
+                            diffraction_data,
+                            miller_data,
+                            enabled=True,
+                        )
+                    peak_symmetry_groups = peak_symmetry_artifact.get("peakSymmetryGroups")
+                    peak_symmetry_groups_source = peak_symmetry_artifact.get(
+                        "peakSymmetryGroupsSource"
+                    )
+                    if joint_match_groups:
+                        if peak_symmetry_groups is None:
+                            peak_symmetry_groups = (
+                                self._derive_legacy_peak_symmetry_groups_from_joint_matches(
+                                    joint_match_groups,
+                                    task.params,
+                                )
+                            )
+                        if not peak_symmetry_groups_source or peak_symmetry_groups_source == "legacy_postprocess_zip":
+                            peak_symmetry_groups_source = "derived_from_joint_match_groups"
+                    else:
+                        joint_match_groups = []
+                        peak_symmetry_groups = []
+                        peak_symmetry_groups_source = self._empty_joint_match_source(work_dir)
+                else:
+                    joint_match_groups = []
+                    peak_symmetry_groups = []
+                    peak_symmetry_groups_source = "disabled"
                 glide_batch_artifact = self._read_glide_batch_artifact(work_dir)
 
                 r_factor_q = 0.0
@@ -1396,6 +1640,24 @@ class IndexingService:
                 if volume is not None:
                     cell_params["volume"] = volume
 
+                # jointMatchConfig: stable name for the symmetry/family configuration.
+                # peakSymmetryConfig is preserved as a legacy alias with identical content.
+                # jointMatchSummary: optional aggregate for quick UI display.
+                joint_match_config = peak_symmetry_config
+                joint_match_summary = (
+                    {
+                        "groupCount": len(joint_match_groups),
+                        "legacyGroupCount": len(peak_symmetry_groups),
+                        "source": peak_symmetry_groups_source,
+                    }
+                    if peak_symmetry_config.get("enabled")
+                    else {
+                        "groupCount": 0,
+                        "legacyGroupCount": 0,
+                        "source": "disabled",
+                    }
+                )
+
                 return {
                     "resultType": "indexing",
                     "cellParams": cell_params,
@@ -1412,13 +1674,21 @@ class IndexingService:
                     "taskId": task_id,
                     "totalReflections": full_miller_count,
                     "indexedPeaks": len(miller_data),
+                    # --- family-aware joint match fields (stable names) ---
+                    "jointMatchConfig": joint_match_config,
+                    "jointMatchGroups": joint_match_groups,
+                    "jointMatchSummary": joint_match_summary,
+                    # --- legacy alias (preserved for backward compat) ---
                     "peakSymmetryConfig": peak_symmetry_config,
                     "peakSymmetryGroups": peak_symmetry_groups,
+                    "peakSymmetryGroupsSource": peak_symmetry_groups_source,
+                    # ---
                     "glideBatchOutputs": glide_batch_artifact,
                     "files": {
                         "cell_file": f"cell_{task.total_steps - 1}.txt",
                         "miller_file": "outputMiller.txt",
                         "full_miller_file": "FullMiller.txt",
+                        "joint_match_file": "outputMillerFamilies.jsonl",
                         "glide_batch_root": glide_batch_artifact.get("batchRoot"),
                     },
                 }

@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.8.1'
+    version: 'v1.8.2'
   },
   home: {
     selectModule: '选择功能模块',
@@ -23,7 +23,7 @@ export default {
       expand: '展开摘要',
       collapse: '收起摘要',
       collapsedSummary: '点击展开可查看本次版本更新内容。',
-      versionValue: 'v 1.8.1',
+      versionValue: 'v 1.8.2',
       keywords: {
         manualCell: '手动晶胞参数-新功能',
         glideC: '晶胞参数c轴滑移可视化',
@@ -211,8 +211,8 @@ export default {
     fixedPeakPlaceholder: '1 1 1 0\n3 2 0 1',
     fixedPeakHint: '每行一个峰。格式为 peak_index h k l，其中 peak_index 对应观测衍射峰的序号。',
     peakSymmetryMode: '峰对称性合并',
-    peakSymmetryComingSoon: '开发中',
-    peakSymmetryGreyHint: '此功能正在开发中，将在后续版本开放。',
+    peakSymmetryTq: 'Tq 阈值',
+    peakSymmetryTa: 'Ta 阈值',
     peakSymmetryTqHint: '默认 0.2。峰对称组内允许的最大 Δq。',
     peakSymmetryTaHint: '默认 2.0。峰对称组内允许的最大 Δangle。',
     mergeGradientToggle: '合并梯度',

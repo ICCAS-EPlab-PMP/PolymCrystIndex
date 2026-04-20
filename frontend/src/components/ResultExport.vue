@@ -194,8 +194,8 @@
         </div>
       </div>
 
-      <!-- Grey release: peak symmetry merge section hidden until next minor version -->
-      <div v-if="false" class="peak-symmetry-section">
+      <!-- Peak symmetry merge results -->
+      <div v-if="peakSymmetryEnabled || peakSymmetryGroups.length" class="peak-symmetry-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M7 7h10v10H7z"/>
@@ -203,48 +203,20 @@
           </svg>
           {{ t('results.peakSymmetryTitle') }}
         </h3>
-        <div class="peak-symmetry-summary" :class="{ disabled: !peakSymmetryEnabled }">
+        <div class="peak-symmetry-summary">
           <div class="peak-symmetry-summary-item">
             <span class="summary-label">{{ t('results.mode') }}</span>
             <span class="summary-value">{{ peakSymmetryEnabled ? t('results.enabled') : t('results.disabled') }}</span>
           </div>
-          <div class="peak-symmetry-summary-item">
-            <span class="summary-label">Tq</span>
-            <span class="summary-value">{{ peakSymmetryTq.toFixed(2) }}</span>
-          </div>
-          <div class="peak-symmetry-summary-item">
-            <span class="summary-label">Ta</span>
-            <span class="summary-value">{{ peakSymmetryTa.toFixed(1) }}</span>
-          </div>
-          <div class="peak-symmetry-summary-item">
+          <div v-if="peakSymmetryEnabled" class="peak-symmetry-summary-item">
             <span class="summary-label">{{ t('results.twoPeakGroups') }}</span>
             <span class="summary-value">{{ twoPeakGroupCount }}</span>
           </div>
-          <div class="peak-symmetry-summary-item">
+          <div v-if="peakSymmetryEnabled" class="peak-symmetry-summary-item">
             <span class="summary-label">{{ t('results.fourPeakGroups') }}</span>
             <span class="summary-value">{{ fourPeakGroupCount }}</span>
           </div>
-          <div v-if="mergeGradientEnabled" class="peak-symmetry-summary-item">
-            <span class="summary-label">{{ t('results.mergeGradientLabel') }}</span>
-            <span class="summary-value">{{ mergeGradientThreshold.toFixed(1) }}</span>
-          </div>
         </div>
-
-        <div v-if="peakSymmetryEnabled && peakSymmetryGroups.length" class="peak-symmetry-list">
-          <div v-for="(group, index) in peakSymmetryGroups" :key="`${group.groupType}-${index}`" class="peak-symmetry-group-card">
-            <div class="peak-symmetry-group-header">
-              <span class="group-badge">{{ group.groupType }}</span>
-              <span class="group-members">{{ t('results.peaksLabel', { indices: formatPeakIndices(group.memberPeakIndices) }) }}</span>
-            </div>
-            <div class="peak-symmetry-group-meta">
-              <span>Δq max {{ formatMetric(group.withinThreshold?.deltaQMax, 3) }}</span>
-              <span>Δangle max {{ formatMetric(group.withinThreshold?.deltaAngleMax, 2) }}°</span>
-              <span>{{ t('results.hkRuleLabel') }} {{ group.hkRulePassed ? t('results.passed') : t('results.failed') }}</span>
-              <span v-if="group.mergeGradient?.enabled">{{ t('results.mergeGradientLabel') }} {{ group.mergeGradient.passed ? t('results.passed') : t('results.failed') }}</span>
-            </div>
-          </div>
-        </div>
-        <p v-else-if="peakSymmetryEnabled" class="peak-symmetry-empty">{{ t('results.noPeakSymmetryGroups') }}</p>
       </div>
 
       <div v-if="resultType === 'indexing' && glideBatchOutputs.enabled" class="glide-batch-section">
@@ -673,7 +645,7 @@ const exportHDF5 = async () => {
     URL.revokeObjectURL(url)
   } catch (error) {
     const hdf5Data = {
-      version: '1.8.1',
+      version: '1.8.2',
       timestamp: new Date().toISOString(),
       cellParameters: cellParams.value,
       millerIndices: millerData.value,

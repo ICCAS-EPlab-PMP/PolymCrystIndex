@@ -285,19 +285,19 @@
               <span class="toggle-label">{{ t('params.pseudoOrth') }}</span>
             </label>
 
-            <label class="toggle-item">
-              <input type="checkbox" v-model="localParams.peakSymmetryEnabled" />
+            <label class="toggle-item disabled-toggle" aria-disabled="true">
+              <input type="checkbox" :checked="false" disabled />
               <span class="toggle-label">{{ t('params.peakSymmetryMode') }}</span>
             </label>
-            <div v-if="localParams.peakSymmetryEnabled" class="peak-symmetry-thresholds">
+            <div class="peak-symmetry-thresholds disabled-thresholds">
               <div class="weight-item">
                 <label>{{ t('params.peakSymmetryTq') }}</label>
-                <input type="number" v-model.number="localParams.symmetryTq" step="0.01" min="0" />
+                <input type="number" :value="defaultParams.symmetryTq" step="0.01" min="0" disabled />
                 <p class="threshold-hint">{{ t('params.peakSymmetryTqHint') }}</p>
               </div>
               <div class="weight-item">
                 <label>{{ t('params.peakSymmetryTa') }}</label>
-                <input type="number" v-model.number="localParams.symmetryTa" step="0.1" min="0" />
+                <input type="number" :value="defaultParams.symmetryTa" step="0.1" min="0" disabled />
                 <p class="threshold-hint">{{ t('params.peakSymmetryTaHint') }}</p>
               </div>
             </div>
@@ -390,6 +390,9 @@ const defaultParams = {
 }
 
 const localParams = reactive({ ...props.params })
+localParams.peakSymmetryEnabled = false
+localParams.symmetryTq = defaultParams.symmetryTq
+localParams.symmetryTa = defaultParams.symmetryTa
 const expandedSections = reactive({
   ga: true,
   cell: true,
@@ -425,6 +428,9 @@ onBeforeUnmount(() => {
 
 watch(() => props.params, (newParams) => {
   Object.assign(localParams, newParams)
+  localParams.peakSymmetryEnabled = false
+  localParams.symmetryTq = defaultParams.symmetryTq
+  localParams.symmetryTa = defaultParams.symmetryTa
 }, { deep: true })
 
 watch(adminMaxOmpThreads, (maxThreads) => {
@@ -482,6 +488,9 @@ const resetParams = () => {
 }
 
 const saveParams = () => {
+  localParams.peakSymmetryEnabled = false
+  localParams.symmetryTq = defaultParams.symmetryTq
+  localParams.symmetryTa = defaultParams.symmetryTa
   Object.assign(props.params, localParams)
   saveNotice.value = t('params.saved')
   if (typeof window !== 'undefined') {
@@ -504,6 +513,11 @@ const saveParams = () => {
 
 .page-header {
   margin-bottom: 32px;
+}
+
+.disabled-toggle,
+.disabled-thresholds {
+  opacity: 0.55;
 }
 
 .page-header h2 {

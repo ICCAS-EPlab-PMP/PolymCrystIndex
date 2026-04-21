@@ -194,31 +194,6 @@
         </div>
       </div>
 
-      <!-- Peak symmetry merge results -->
-      <div v-if="peakSymmetryEnabled || peakSymmetryGroups.length" class="peak-symmetry-section">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M7 7h10v10H7z"/>
-            <path d="M3 12h4M17 12h4M12 3v4M12 17v4"/>
-          </svg>
-          {{ t('results.peakSymmetryTitle') }}
-        </h3>
-        <div class="peak-symmetry-summary">
-          <div class="peak-symmetry-summary-item">
-            <span class="summary-label">{{ t('results.mode') }}</span>
-            <span class="summary-value">{{ peakSymmetryEnabled ? t('results.enabled') : t('results.disabled') }}</span>
-          </div>
-          <div v-if="peakSymmetryEnabled" class="peak-symmetry-summary-item">
-            <span class="summary-label">{{ t('results.twoPeakGroups') }}</span>
-            <span class="summary-value">{{ twoPeakGroupCount }}</span>
-          </div>
-          <div v-if="peakSymmetryEnabled" class="peak-symmetry-summary-item">
-            <span class="summary-label">{{ t('results.fourPeakGroups') }}</span>
-            <span class="summary-value">{{ fourPeakGroupCount }}</span>
-          </div>
-        </div>
-      </div>
-
       <div v-if="resultType === 'indexing' && glideBatchOutputs.enabled" class="glide-batch-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -359,16 +334,7 @@ const maxDeviationKPsi = ref(1)
 const maxDeviationLPsi = ref(1)
 const currentTaskId = ref(null)
 const currentView = ref('reset')
-const peakSymmetryGroups = ref([])
-const peakSymmetryConfig = ref({ enabled: false, mergeTq: 0.2, mergeTa: 2.0, mergeGradientEnabled: false, mergeGradientThreshold: 0.0 })
-const peakSymmetryEnabled = computed(() => Boolean(peakSymmetryConfig.value?.enabled))
-const peakSymmetryTq = computed(() => Number(peakSymmetryConfig.value?.mergeTq ?? 0.2))
-const peakSymmetryTa = computed(() => Number(peakSymmetryConfig.value?.mergeTa ?? 2.0))
-const mergeGradientEnabled = computed(() => Boolean(peakSymmetryConfig.value?.mergeGradientEnabled))
-const mergeGradientThreshold = computed(() => Number(peakSymmetryConfig.value?.mergeGradientThreshold ?? 0.0))
 const glideBatchOutputs = ref({ enabled: false, groups: [], batchRoot: '' })
-const twoPeakGroupCount = computed(() => peakSymmetryGroups.value.filter(group => group?.groupType === '2-peak').length)
-const fourPeakGroupCount = computed(() => peakSymmetryGroups.value.filter(group => group?.groupType === '4-peak').length)
 
 const formatMetric = (value, digits) => Number(value ?? 0).toFixed(digits)
 const formatPeakIndices = (indices) => Array.isArray(indices) ? indices.join(', ') : ''
@@ -435,8 +401,6 @@ const applyExternalResult = (data) => {
   totalReflections.value = data.totalReflections || 0
   indexedPeaks.value = data.indexedPeaks || millerData.value.length
   currentTaskId.value = data.taskId || null
-  peakSymmetryGroups.value = Array.isArray(data.peakSymmetryGroups) ? data.peakSymmetryGroups : []
-  peakSymmetryConfig.value = data.peakSymmetryConfig || peakSymmetryConfig.value
   if (data.rFactorQ !== undefined) rFactorQ.value = data.rFactorQ
   if (data.rFactorPsi !== undefined) rFactorPsi.value = data.rFactorPsi
   if (data.qualityMetrics) {
@@ -472,8 +436,6 @@ const loadResults = async () => {
       totalReflections.value = result.data.totalReflections || 0
       indexedPeaks.value = result.data.indexedPeaks || millerData.value.length
       currentTaskId.value = result.data.taskId || null
-      peakSymmetryGroups.value = Array.isArray(result.data.peakSymmetryGroups) ? result.data.peakSymmetryGroups : []
-      peakSymmetryConfig.value = result.data.peakSymmetryConfig || peakSymmetryConfig.value
       glideBatchOutputs.value = result.data.glideBatchOutputs || glideBatchOutputs.value
 
       if (result.data.qualityMetrics) {

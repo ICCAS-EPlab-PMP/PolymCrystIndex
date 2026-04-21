@@ -4,7 +4,7 @@ export const buildRunAnalysisPayload = (dataFile, params = {}) => {
   const requestParams = {
     ...params,
     fixedPeakText: typeof params?.fixedPeakText === 'string' ? params.fixedPeakText : '',
-    peakSymmetryEnabled: Boolean(params?.peakSymmetryEnabled),
+    peakSymmetryEnabled: false,
     mergeGradientEnabled: Boolean(params?.mergeGradientEnabled),
     symmetryTq: typeof params?.symmetryTq === 'number' && !Number.isNaN(params.symmetryTq) ? params.symmetryTq : 0.2,
     symmetryTa: typeof params?.symmetryTa === 'number' && !Number.isNaN(params.symmetryTa) ? params.symmetryTa : 2.0,

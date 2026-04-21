@@ -347,10 +347,6 @@ class IndexingService:
             return 62
 
     def _get_peak_symmetry_config(self, params: Optional[AnalysisParams]) -> Dict[str, Any]:
-        enabled = bool(
-            getattr(params, "peakSymmetryEnabled",
-                    getattr(params, "mergeNearbyEnabled", False))
-        )
         symmetry_tq = getattr(params, "symmetryTq",
                               getattr(params, "mergeTq", DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD))
         symmetry_ta = getattr(params, "symmetryTa",
@@ -358,7 +354,7 @@ class IndexingService:
         merge_gradient_enabled = getattr(params, "mergeGradientEnabled", False)
         merge_gradient_threshold = float(getattr(params, "mergeGradientThreshold", 0.0) or 0.0)
         return {
-            "enabled": enabled,
+            "enabled": False,
             "symmetryTq": float(
                 DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD if symmetry_tq is None else symmetry_tq
             ),
@@ -853,11 +849,22 @@ class IndexingService:
         else:  # Default
             lines.append("5 5 0")
 
-        lines.append("0")
-        lines.append("0")
+        # Line 20: sym_tq (q绝对容差), Line 21: sym_ta (角度绝对容差)
+        symmetry_tq = float(
+            getattr(params, "symmetryTq",
+                    getattr(params, "mergeTq", DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD))
+            or DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD
+        )
+        symmetry_ta = float(
+            getattr(params, "symmetryTa",
+                    getattr(params, "mergeTa", DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD))
+            or DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD
+        )
+        lines.append(str(symmetry_tq))
+        lines.append(str(symmetry_ta))
         lines.append("0")
 
-        lines.append("1")
+        lines.append("0")
         lines.append(f"{params.esym}")
 
         lines.append(
@@ -871,6 +878,9 @@ class IndexingService:
         lines.append(str(fixed_peak_count_val))
         lines.append("0")
         lines.append("0")
+
+        if len(lines) != 28:
+            raise ValueError(f"Unexpected input.txt line count: {len(lines)}")
 
         work_dir_abs = os.path.abspath(work_dir)
         input_file = os.path.join(work_dir_abs, "input.txt")
@@ -1170,10 +1180,11 @@ class IndexingService:
     ) -> Dict[str, Any]:
         import tempfile
 
-        with tempfile.TemporaryDirectory(prefix="manual_fm_") as work_dir:
+        with tempfile.TemporaryDirectory(prefix="manual_") as work_dir:
+            cell_values = [a, b, c, alpha, beta, gamma]
             self._write_cell_parameters(
                 os.path.join(work_dir, "cell_0.txt"),
-                [a, b, c, alpha, beta, gamma],
+                cell_values,
             )
 
             input_file = os.path.join(work_dir, "input.txt")
@@ -1200,7 +1211,7 @@ class IndexingService:
                 "0",
                 "0",
                 "0",
-                "1",
+                "0",
                 "0.95",
                 "3.0 3.0 5.0 60.0 60.0 60.0",
                 "10.0 10.0 15.0 150.0 150.0 150.0",
@@ -1209,6 +1220,9 @@ class IndexingService:
                 "0",
                 "0",
             ]
+            if len(lines) != 30:
+                return {"success": False, "message": f"Unexpected manual input line count: {len(lines)}"}
+
             with open(input_file, "w") as f:
                 f.write("\n".join(lines))
 
@@ -1290,7 +1304,7 @@ class IndexingService:
                 "0",
                 "0",
                 "0",
-                "1",
+                "0",
                 "0.95",
                 "3.0 3.0 5.0 60.0 60.0 60.0",
                 "10.0 10.0 15.0 150.0 150.0 150.0",
@@ -1299,6 +1313,9 @@ class IndexingService:
                 "0",
                 "0",
             ]
+            if len(lines) != 30:
+                return {"success": False, "message": f"Unexpected glide input line count: {len(lines)}"}
+
             with open(input_file, "w") as f:
                 f.write("\n".join(lines))
 

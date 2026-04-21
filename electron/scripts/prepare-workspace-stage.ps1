@@ -6,6 +6,7 @@ $workspaceRoot = Resolve-Path (Join-Path $electronRoot '..')
 $repoRoot = Resolve-Path (Join-Path $workspaceRoot '..')
 $stageRoot = Join-Path $repoRoot 'execute\electron\stage\workspace'
 $runtimeSource = Join-Path $repoRoot 'execute\electron\runtime'
+$runtimePythonExe = Join-Path $runtimeSource 'python\python.exe'
 $frontendDist = Join-Path $workspaceRoot 'frontend\dist'
 if (Test-Path $stageRoot) {
     Remove-Item $stageRoot -Recurse -Force
@@ -15,6 +16,10 @@ New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 
 if (-not (Test-Path $frontendDist)) {
     throw "Frontend dist not found: $frontendDist"
+}
+
+if (-not (Test-Path $runtimePythonExe)) {
+    throw "Bundled Python runtime not found: $runtimePythonExe. Run prepare-python-runtime.ps1 before packaging."
 }
 
 $copyTargets = @(
@@ -89,8 +94,6 @@ $frontendStage = Join-Path $stageRoot 'frontend'
 New-Item -ItemType Directory -Force -Path $frontendStage | Out-Null
 Copy-Item -Path $frontendDist -Destination (Join-Path $frontendStage 'dist') -Recurse -Force
 
-if (Test-Path $runtimeSource) {
-    Copy-Item -Path $runtimeSource -Destination (Join-Path $stageRoot 'runtime') -Recurse -Force
-}
+Copy-Item -Path $runtimeSource -Destination (Join-Path $stageRoot 'runtime') -Recurse -Force
 
 Write-Host "Prepared staged Workspace resources at $stageRoot"

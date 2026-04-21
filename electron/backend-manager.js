@@ -106,7 +106,7 @@ function resolveRuntimeRoot(packaged, workspaceRoot) {
   return path.resolve(__dirname, '..', '..', 'execute', 'electron', 'runtime', 'python')
 }
 
-function resolvePythonCommand(runtimeRoot) {
+function resolvePythonCommand(runtimeRoot, packaged) {
   if (process.env.POLYCRYINDEX_PYTHON) {
     return process.env.POLYCRYINDEX_PYTHON
   }
@@ -120,6 +120,12 @@ function resolvePythonCommand(runtimeRoot) {
     if (fs.existsSync(bundledPython)) {
       return bundledPython
     }
+  }
+
+  if (packaged) {
+    throw new Error(
+      `桌面安装包缺少 bundled Python runtime，请检查安装目录中的 runtime/python/python.exe: ${runtimeRoot}`
+    )
   }
 
   return process.platform === 'win32' ? 'python' : 'python3'
@@ -195,7 +201,7 @@ async function startBackend({ packaged, userDataDir }) {
   const backendRoot = path.join(workspaceRoot, 'backend')
   const frontendDist = path.join(workspaceRoot, 'frontend', 'dist', 'index.html')
   const fortranRoot = path.join(workspaceRoot, 'fortrancode')
-  const pythonCommand = resolvePythonCommand(runtimeRoot)
+  const pythonCommand = resolvePythonCommand(runtimeRoot, packaged)
   const runtimeDataDir = packaged ? path.join(userDataDir, 'backend-runtime') : null
 
   ensurePathExists(workspaceRoot, 'Workspace 根目录')

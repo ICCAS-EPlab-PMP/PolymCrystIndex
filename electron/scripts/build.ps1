@@ -132,17 +132,22 @@ if (-not $SkipFrontendBuild) {
     }
 }
 
-if ($BundlePython) {
-    $pythonRuntimeArgs = @{
-        PythonVersion = $PythonVersion
-    }
-
-    if ($ForceRebuildPython) {
-        $pythonRuntimeArgs.ForceRebuild = $true
-    }
-
-    & (Join-Path $scriptRoot 'prepare-python-runtime.ps1') @pythonRuntimeArgs
+$pythonRuntimeArgs = @{
+    PythonVersion = $PythonVersion
 }
+
+if ($ForceRebuildPython) {
+    $pythonRuntimeArgs.ForceRebuild = $true
+}
+
+if ($BundlePython) {
+    Write-Host 'BundlePython flag detected; preparing bundled Python runtime.'
+}
+else {
+    Write-Host 'Preparing bundled Python runtime for desktop packaging.'
+}
+
+& (Join-Path $scriptRoot 'prepare-python-runtime.ps1') @pythonRuntimeArgs
 
 Update-WindowsIconBundle
 

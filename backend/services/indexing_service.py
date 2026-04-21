@@ -347,6 +347,7 @@ class IndexingService:
             return 62
 
     def _get_peak_symmetry_config(self, params: Optional[AnalysisParams]) -> Dict[str, Any]:
+        enabled = False
         symmetry_tq = getattr(params, "symmetryTq",
                               getattr(params, "mergeTq", DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD))
         symmetry_ta = getattr(params, "symmetryTa",
@@ -354,7 +355,7 @@ class IndexingService:
         merge_gradient_enabled = getattr(params, "mergeGradientEnabled", False)
         merge_gradient_threshold = float(getattr(params, "mergeGradientThreshold", 0.0) or 0.0)
         return {
-            "enabled": False,
+            "enabled": enabled,
             "symmetryTq": float(
                 DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD if symmetry_tq is None else symmetry_tq
             ),
@@ -814,7 +815,8 @@ class IndexingService:
                 fixed_peak_count_val = 0
 
         lines.append(str(params.wavelength))
-        lines.append("0")
+        peak_symmetry_enabled = False
+        lines.append("0")  # Line 2: placeholder (Fortran skips i=2)
         lines.append("flat")
         lines.append(str(params.generations))
         lines.append(str(params.steps))
@@ -864,7 +866,7 @@ class IndexingService:
         lines.append(str(symmetry_ta))
         lines.append("0")
 
-        lines.append("0")
+        lines.append("1" if peak_symmetry_enabled else "0")
         lines.append(f"{params.esym}")
 
         lines.append(
@@ -876,8 +878,6 @@ class IndexingService:
 
         lines.append("1" if params.tiltCheck else "0")
         lines.append(str(fixed_peak_count_val))
-        lines.append("0")
-        lines.append("0")
 
         if len(lines) != 28:
             raise ValueError(f"Unexpected input.txt line count: {len(lines)}")

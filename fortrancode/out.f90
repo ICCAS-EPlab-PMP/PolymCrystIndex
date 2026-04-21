@@ -68,7 +68,7 @@ contains
     subroutine determine_symmetry_merge_mode(alpha_deg, beta_deg, gamma_deg, merge_mode)
         real*8, intent(in) :: alpha_deg, beta_deg, gamma_deg
         integer, intent(out) :: merge_mode
-        real*8, parameter :: esys_tol_deg = 5.0d0
+        real*8, parameter :: esys_tol_deg = 3.0d0
         logical :: alpha_near_90, beta_near_90, gamma_near_90
 
         alpha_near_90 = abs(alpha_deg - 90.0d0) <= esys_tol_deg
@@ -315,6 +315,87 @@ contains
         unit_residual = member_error_sum / dble(member_count)
     end subroutine calculate_family_unit_residual
 
+    subroutine evaluate_family_candidate(observed_idx, member_count, members, c_axis, tilt_angle, V, &
+                                         A11, B11, C11, D11, E11, F11, selected_count, selected_supported, &
+                                         selected_members, best_q, best_psi_display_rad, best_psi_root_rad, &
+                                         best_two_theta_deg, unit_residual, valid)
+        integer, intent(in) :: observed_idx, member_count
+        integer, intent(in) :: members(4, 3)
+        integer, intent(out) :: selected_count, selected_supported
+        integer, intent(out) :: selected_members(4, 3)
+        real*8, intent(in) :: c_axis, tilt_angle, V, A11, B11, C11, D11, E11, F11
+        real*8, intent(out) :: best_q, best_psi_display_rad, best_psi_root_rad, best_two_theta_deg
+        real*8, intent(out) :: unit_residual
+        logical, intent(out) :: valid
+
+        integer :: member_idx, pass_count, best_member_idx
+        real*8 :: q_value, coord_value, psi_display_rad, psi_root_rad, two_theta_deg
+        real*8 :: residual, pass_sum, best_residual
+        logical :: member_valid
+
+        selected_members(:, :) = 0
+        selected_count = 0
+        selected_supported = 0
+        best_q = 0.0d0
+        best_psi_display_rad = 0.0d0
+        best_psi_root_rad = 0.0d0
+        best_two_theta_deg = 0.0d0
+        unit_residual = 1.0d10
+        valid = .false.
+        pass_count = 0
+        pass_sum = 0.0d0
+        best_member_idx = 0
+        best_residual = 1.0d10
+
+        do member_idx = 1, member_count
+            call compute_reflection_coordinates(members(member_idx, 1), members(member_idx, 2), &
+                                                members(member_idx, 3), c_axis, tilt_angle, V, &
+                                                A11, B11, C11, D11, E11, F11, q_value, coord_value, &
+                                                psi_display_rad, psi_root_rad, two_theta_deg, member_valid)
+            if (.not. member_valid) cycle
+
+            residual = abs(q_value - value1(observed_idx)) * e3 + abs(coord_value - value(observed_idx)) * e2 + V / e4
+            if (residual < best_residual) then
+                best_residual = residual
+                best_member_idx = member_idx
+                best_q = q_value
+                best_psi_display_rad = psi_display_rad
+                best_psi_root_rad = psi_root_rad
+                best_two_theta_deg = two_theta_deg
+            end if
+
+            if (abs(q_value - value1(observed_idx)) <= sym_tq .and. &
+                abs(coord_value - value(observed_idx)) <= sym_ta) then
+                pass_count = pass_count + 1
+                selected_members(pass_count, :) = members(member_idx, :)
+                pass_sum = pass_sum + residual
+            end if
+        end do
+
+        if (pass_count >= 2) then
+            selected_count = pass_count
+            selected_supported = 1
+            unit_residual = pass_sum / dble(pass_count)
+            valid = .true.
+        else if (pass_count == 1) then
+            selected_count = 1
+            selected_supported = 0
+            unit_residual = pass_sum
+            valid = .true.
+            best_member_idx = 1
+            call compute_reflection_coordinates(selected_members(1,1), selected_members(1,2), &
+                                                selected_members(1,3), c_axis, tilt_angle, V, A11, B11, C11, &
+                                                D11, E11, F11, best_q, coord_value, best_psi_display_rad, &
+                                                best_psi_root_rad, best_two_theta_deg, member_valid)
+        else if (best_member_idx > 0) then
+            selected_count = 1
+            selected_supported = 0
+            selected_members(1, :) = members(best_member_idx, :)
+            unit_residual = best_residual
+            valid = .true.
+        end if
+    end subroutine evaluate_family_candidate
+
     subroutine pick_best_singleton_from_family(observed_idx, member_count, members, c_axis, tilt_angle, V, &
                                                A11, B11, C11, D11, E11, F11, best_h, best_k, best_l, &
                                                best_q, best_psi_display_rad, best_psi_root_rad, best_two_theta_deg, &
@@ -464,22 +545,20 @@ contains
         real(kind=8), intent(inout) :: parm(:)
 
         integer :: a1, b1, c1
-        integer :: k, i, merge_mode
+        integer :: k, merge_mode
         integer :: current_member_count, current_supported
-        integer :: current_members(4, 3)
-        integer :: best_singleton_h, best_singleton_k, best_singleton_l
+        integer :: current_members(4, 3), candidate_member_count, candidate_supported
+        integer :: candidate_members(4, 3)
 
         real(kind=8) :: a, b, c, alpha, beta, gamma
         real(kind=8) :: V
         real(kind=8) :: A11, B11, C11, D11, E11, F11
         real(kind=8) :: q_value, coord_value, psi_display_rad, psi_root_rad, two_theta_deg
-        real(kind=8) :: best_singleton_q, best_singleton_psi_display_rad, best_singleton_psi_root_rad
-        real(kind=8) :: best_singleton_two_theta_deg, best_singleton_residual
         real(kind=8), parameter :: pi = 3.14159265358979323846d0
-        real(kind=8) :: tilt_angle, error_mid, unit_residual, unit_spread
+        real(kind=8) :: tilt_angle, error_mid, unit_residual
         real(kind=8) :: current_V
         real(kind=8), allocatable :: min_error_list(:)
-        logical :: valid, best_singleton_valid, family_check_failed
+        logical :: valid
 
         character(len=512) :: filename_6
 
@@ -498,7 +577,7 @@ contains
         alpha = parm(4) * pi / 180.0d0
         beta = parm(5) * pi / 180.0d0
         gamma = parm(6) * pi / 180.0d0
-        call determine_symmetry_merge_mode(parm(4), parm(5), parm(6), merge_mode)
+        call determine_symmetry_merge_mode(alpha * 180.0d0 / pi, beta * 180.0d0 / pi, gamma * 180.0d0 / pi, merge_mode)
 
         V = a * b * c * (1.0d0 - cos(alpha)**2 - cos(beta)**2 - cos(gamma)**2 + &
             2.0d0 * cos(alpha) * cos(beta) * cos(gamma))**0.5d0
@@ -552,16 +631,18 @@ contains
                         end if
 
                         call build_family_bucket(abs(a1), abs(b1), c1, merge_mode, &
-                                                 current_member_count, current_supported, current_members)
+                                                 candidate_member_count, candidate_supported, candidate_members)
                         do k = 1, diffraction_num
-                            call calculate_family_unit_residual(k, current_member_count, current_members, c, tilt_angle, V, &
-                                                                A11, B11, C11, D11, E11, F11, unit_residual, unit_spread, valid)
+                            call evaluate_family_candidate(k, candidate_member_count, candidate_members, c, tilt_angle, V, &
+                                                           A11, B11, C11, D11, E11, F11, current_member_count, &
+                                                           current_supported, current_members, q_value, psi_display_rad, &
+                                                           psi_root_rad, two_theta_deg, unit_residual, valid)
                             if (.not. valid) cycle
                             if (unit_residual < min_error_list(k)) then
                                 min_error_list(k) = unit_residual
                                 call set_family_assignment(k, a1, b1, c1, q_value, psi_display_rad, psi_root_rad, &
-                                                           current_V, current_member_count, current_supported, &
-                                                           current_members, unit_residual, unit_spread)
+                                                            current_V, current_member_count, current_supported, &
+                                                            current_members, unit_residual, 0.0d0)
                             end if
                         end do
                     else
@@ -585,52 +666,6 @@ contains
                 end do
             end do
         end do
-
-        ! 二次筛选：用 tq/ta 绝对容差检查族成员的匹配质量
-        if (sym_stat == 1) then
-            do k = 1, diffraction_num
-                if (family_supported(k) == 1) then
-                    family_check_failed = .false.
-                    do i = 1, family_member_count(k)
-                        call compute_reflection_coordinates( &
-                            family_members(k, i, 1), family_members(k, i, 2), family_members(k, i, 3), &
-                            c, tilt_angle, V, A11, B11, C11, D11, E11, F11, &
-                            q_value, coord_value, psi_display_rad, psi_root_rad, &
-                            two_theta_deg, valid)
-                        if (.not. valid) then
-                            family_check_failed = .true.
-                            exit
-                        end if
-                        if (abs(q_value - value1(k)) > sym_tq .or. &
-                            abs(coord_value - value(k)) > sym_ta) then
-                            family_check_failed = .true.
-                            exit
-                        end if
-                    end do
-                    if (family_check_failed) then
-                        call pick_best_singleton_from_family(k, family_member_count(k), family_members(k, :, :), &
-                                                             c, tilt_angle, V, A11, B11, C11, D11, E11, F11, &
-                                                             best_singleton_h, best_singleton_k, best_singleton_l, &
-                                                             best_singleton_q, best_singleton_psi_display_rad, &
-                                                             best_singleton_psi_root_rad, best_singleton_two_theta_deg, &
-                                                             best_singleton_residual, best_singleton_valid)
-                        current_members(:, :) = 0
-                        if (best_singleton_valid) then
-                            current_members(1, :) = (/ best_singleton_h, best_singleton_k, best_singleton_l /)
-                            call set_family_assignment(k, best_singleton_h, best_singleton_k, best_singleton_l, &
-                                                       best_singleton_q, best_singleton_psi_display_rad, &
-                                                       best_singleton_psi_root_rad, current_V, 1, 0, current_members, &
-                                                       best_singleton_residual, 0.0d0)
-                        else
-                            current_members(1, :) = family_members(k, 1, :)
-                            call set_family_assignment(k, family_members(k, 1, 1), family_members(k, 1, 2), &
-                                                       family_members(k, 1, 3), 0.0d0, 0.0d0, 0.0d0, current_V, &
-                                                       1, 0, current_members, 1.0d10, 0.0d0)
-                        end if
-                    end if
-                end if
-            end do
-        end if
 
         if (allocated(min_error_list)) deallocate(min_error_list)
         close(6)
@@ -717,10 +752,10 @@ program LMfit
             read(1, *) sym_e
         else if (i == 20) then
             read(1, *) sym_tq
-            if (sym_tq <= 0.0d0) sym_tq = 0.2d0
+            if (sym_tq <= 0.0d0) sym_tq = 0.02d0
         else if (i == 21) then
             read(1, *) sym_ta
-            if (sym_ta <= 0.0d0) sym_ta = 2.0d0
+            if (sym_ta <= 0.0d0) sym_ta = 1.0d0
         else if (i == 27) then
             read(1, *) tilt_check
         else

@@ -104,7 +104,7 @@ contains
     subroutine determine_symmetry_merge_mode(alpha_deg, beta_deg, gamma_deg, merge_mode)
         real*8, intent(in) :: alpha_deg, beta_deg, gamma_deg
         integer, intent(out) :: merge_mode
-        real*8, parameter :: esys_tol_deg = 5.0d0
+        real*8, parameter :: esys_tol_deg = 3.0d0
         logical :: alpha_near_90, beta_near_90, gamma_near_90
 
         alpha_near_90 = abs(alpha_deg - 90.0d0) <= esys_tol_deg
@@ -337,6 +337,70 @@ contains
         unit_residual = member_error_sum / dble(member_count)
     end subroutine
 
+    subroutine evaluate_family_candidate(observed_idx, member_count, members, c_axis, tilt_angle, V, &
+                                         A11, B11, C11, D11, E11, F11, selected_count, selected_supported, &
+                                         selected_members, unit_residual, valid)
+        integer, intent(in) :: observed_idx, member_count
+        integer, intent(in) :: members(4,3)
+        integer, intent(out) :: selected_count, selected_supported
+        integer, intent(out) :: selected_members(4,3)
+        real*8, intent(in) :: c_axis, tilt_angle, V, A11, B11, C11, D11, E11, F11
+        real*8, intent(out) :: unit_residual
+        logical, intent(out) :: valid
+
+        integer :: member_idx, pass_count, best_member_idx
+        real*8 :: q_value, coord_value, residual, pass_sum, best_residual
+        logical :: member_valid
+
+        selected_members(:, :) = 0
+        selected_count = 0
+        selected_supported = 0
+        unit_residual = 1.0d10
+        valid = .false.
+        pass_count = 0
+        pass_sum = 0.0d0
+        best_member_idx = 0
+        best_residual = 1.0d10
+
+        do member_idx = 1, member_count
+            call compute_reflection_coordinates(members(member_idx, 1), members(member_idx, 2), &
+                                                members(member_idx, 3), c_axis, tilt_angle, V, &
+                                                A11, B11, C11, D11, E11, F11, q_value, coord_value, member_valid)
+            if (.not. member_valid) cycle
+
+            residual = abs(q_value - value1(observed_idx)) * e3 + abs(coord_value - value(observed_idx)) * e2 + V / e4
+            if (residual < best_residual) then
+                best_residual = residual
+                best_member_idx = member_idx
+            end if
+
+            if (abs(q_value - value1(observed_idx)) <= sym_tq .and. &
+                abs(coord_value - value(observed_idx)) <= sym_ta) then
+                pass_count = pass_count + 1
+                selected_members(pass_count, :) = members(member_idx, :)
+                pass_sum = pass_sum + residual
+            end if
+        end do
+
+        if (pass_count >= 2) then
+            selected_count = pass_count
+            selected_supported = 1
+            unit_residual = pass_sum / dble(pass_count)
+            valid = .true.
+        else if (pass_count == 1) then
+            selected_count = 1
+            selected_supported = 0
+            unit_residual = pass_sum
+            valid = .true.
+        else if (best_member_idx > 0) then
+            selected_count = 1
+            selected_supported = 0
+            selected_members(1, :) = members(best_member_idx, :)
+            unit_residual = best_residual
+            valid = .true.
+        end if
+    end subroutine
+
     subroutine pick_best_singleton_from_family(observed_idx, member_count, members, c_axis, tilt_angle, V, &
                                                A11, B11, C11, D11, E11, F11, best_h, best_k, best_l, &
                                                best_residual, valid)
@@ -401,7 +465,7 @@ contains
         !必须要参数----》观测点数量，参数数量，参数【数组】，最终误差结果，信息
         !将会调用calcfitval
 
-        integer diffraction_num,nparm,iflag,i,merge_mode
+        integer diffraction_num,nparm,iflag,i
         real*8 :: parm(nparm),fiterr(diffraction_num),fitval(diffraction_num),fitval1(diffraction_num)
         real*8 :: V
         real*8 :: a, b, c, alpha, beta, gamma
@@ -441,8 +505,6 @@ contains
                 tilt_angle = parm(7) * 3.14159265358979323846d0 / 180.0d0
             end if
 
-            call determine_symmetry_merge_mode(parm(4), parm(5), parm(6), merge_mode)
-
             A11 = b**2 * c**2 * sin(alpha)**2
             B11 = a**2 * c**2 * sin(beta)**2
             C11 = a**2 * b**2 * sin(gamma)**2
@@ -451,8 +513,7 @@ contains
             F11 = a * b**2 * c * (cos(gamma) * cos(alpha) - cos(beta))
 
             do i = 1, diffraction_num
-                if (family_supported(i) == 1 .and. &
-                    family_matches_merge_mode(family_member_count(i), family_members(i, :, :), merge_mode)) then
+                if (family_supported(i) == 1) then
                     call calculate_family_unit_residual(i, family_member_count(i), family_members(i, :, :), &
                                                         c, tilt_angle, V, A11, B11, C11, D11, E11, F11, &
                                                         fiterr(i), unit_valid)
@@ -515,12 +576,12 @@ contains
 
         !内部变量
         integer :: a1, b1, c1  !当前遍历的Miller指数
-        integer :: k, l, n, merge_mode     !循环变量
+        integer :: k, n, merge_mode     !循环变量
         integer :: num_ref     !最佳匹配位置记录
         integer :: valid_count !有效计算点计数器
         integer :: current_member_count, current_supported
-        integer :: current_members(4,3)
-        integer :: best_singleton_h, best_singleton_k, best_singleton_l
+        integer :: current_members(4,3), candidate_member_count, candidate_supported
+        integer :: candidate_members(4,3)
 
         real(kind=8) :: a, b, c, alpha, beta, gamma
         real(kind=8) :: V
@@ -528,8 +589,8 @@ contains
         real(kind=8) :: theta, d, q, PHI, d1, y1
         real(kind=8), parameter :: pi = 3.14159265358979323846d0
         real(kind=8) :: tilt_angle, PHI_asin
-        real(kind=8) :: error_lowest, error_mid, unit_residual, best_singleton_residual
-        logical :: unit_valid, best_singleton_valid, family_check_failed
+        real(kind=8) :: error_lowest, error_mid, unit_residual
+        logical :: unit_valid
 
         !中间计算变量（无需大数组存储）
         real(kind=8) :: current_q, current_PHI_or_y1, current_theta
@@ -564,7 +625,7 @@ contains
             gamma = parm(6) * pi / 180
         end if
 
-        call determine_symmetry_merge_mode(parm(4), parm(5), parm(6), merge_mode)
+        call determine_symmetry_merge_mode(alpha * 180.0d0 / pi, beta * 180.0d0 / pi, gamma * 180.0d0 / pi, merge_mode)
 
         V = a * b * c * (1 - cos(alpha)**2 - cos(beta)**2 - cos(gamma)**2 + 2 * cos(alpha) * cos(beta) * cos(gamma))**0.5
         if (isnan(V) .or. V < 0.01) then
@@ -601,7 +662,8 @@ contains
         ! 将计算量大的部分放在外层，确保每组 hkl 只计算一次物理量
         !$OMP PARALLEL DO COLLAPSE(3) DEFAULT(SHARED) &
         !$OMP PRIVATE(c1, b1, a1, y1, d, theta, q, d1, PHI_asin, PHI, k, error_mid, &
-        !$OMP         current_member_count, current_supported, current_members, unit_residual, unit_valid) &
+        !$OMP         current_member_count, current_supported, current_members, candidate_member_count, &
+        !$OMP         candidate_supported, candidate_members, unit_residual, unit_valid) &
         !$OMP SCHEDULE(DYNAMIC)
         do c1 = 0, max_l1
             do b1 = -max_k1, max_k1
@@ -675,10 +737,11 @@ contains
                     ! 2. 比较与更新记录
                     if (sym_stat == 1 .and. merge_mode /= 0) then
                         call build_family_bucket(abs(a1), abs(b1), c1, merge_mode, &
-                                                 current_member_count, current_supported, current_members)
+                                                 candidate_member_count, candidate_supported, candidate_members)
                         do k = 1, diffraction_num
-                            call calculate_family_unit_residual(k, current_member_count, current_members, c, tilt_angle, V, &
-                                                                A11, B11, C11, D11, E11, F11, unit_residual, unit_valid)
+                            call evaluate_family_candidate(k, candidate_member_count, candidate_members, c, tilt_angle, V, &
+                                                           A11, B11, C11, D11, E11, F11, current_member_count, &
+                                                           current_supported, current_members, unit_residual, unit_valid)
                             if (.not. unit_valid) cycle
 
                             if (unit_residual < min_error_list(k)) then
@@ -722,49 +785,7 @@ contains
         end do
         !$OMP END PARALLEL DO
 
-        ! 3. 二次筛选：用 tq/ta 绝对容差检查族成员的匹配质量
-        !    对每个族，检查所有成员的 |Δq| < tq 且 |Δangle| < ta
-        !    任一成员不满足则降级为单例
-        if (sym_stat == 1) then
-            do k = 1, diffraction_num
-                if (family_supported(k) == 1) then
-                    family_check_failed = .false.
-                    do l = 1, family_member_count(k)
-                        call compute_reflection_coordinates( &
-                            family_members(k, l, 1), family_members(k, l, 2), family_members(k, l, 3), &
-                            c, tilt_angle, V, A11, B11, C11, D11, E11, F11, &
-                            current_q, current_PHI_or_y1, unit_valid)
-                        if (.not. unit_valid) then
-                            family_check_failed = .true.
-                            exit
-                        end if
-                        if (abs(current_q - value1(k)) > sym_tq .or. &
-                            abs(current_PHI_or_y1 - value(k)) > sym_ta) then
-                            family_check_failed = .true.
-                            exit
-                        end if
-                    end do
-                    if (family_check_failed) then
-                        call pick_best_singleton_from_family(k, family_member_count(k), family_members(k, :, :), &
-                                                             c, tilt_angle, V, A11, B11, C11, D11, E11, F11, &
-                                                             best_singleton_h, best_singleton_k, best_singleton_l, &
-                                                             best_singleton_residual, best_singleton_valid)
-                        current_members(:, :) = 0
-                        if (best_singleton_valid) then
-                            current_members(1, :) = (/ best_singleton_h, best_singleton_k, best_singleton_l /)
-                            call set_family_assignment(k, best_singleton_h, best_singleton_k, best_singleton_l, &
-                                                       1, 0, current_members, best_singleton_residual)
-                        else
-                            current_members(1, :) = family_members(k, 1, :)
-                            call set_family_assignment(k, family_members(k, 1, 1), family_members(k, 1, 2), &
-                                                       family_members(k, 1, 3), 1, 0, current_members, 1.0d10)
-                        end if
-                    end if
-                end if
-            end do
-        end if
-
-        ! 4. 固定晶面处理 (在释放min_error_list之前执行)
+        ! 3. 固定晶面处理 (在释放min_error_list之前执行)
         if (allocated(fixhkl)) then
             do k = 1, fixhklfile
                 Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
@@ -1038,10 +1059,10 @@ program LMfit
             read(1,*) sym_e
         else if (i==20) then
             read(1,*) sym_tq
-            if (sym_tq <= 0.0d0) sym_tq = 0.2d0  ! 默认值
+            if (sym_tq <= 0.0d0) sym_tq = 0.02d0  ! 默认值
         else if (i==21) then
             read(1,*) sym_ta
-            if (sym_ta <= 0.0d0) sym_ta = 2.0d0  ! 默认值
+            if (sym_ta <= 0.0d0) sym_ta = 1.0d0  ! 默认值
         else if (i == 25) then
             read(1,*) amin,bmin,cmin,alphamin,betamin,gammamin
         else if (i == 26) then

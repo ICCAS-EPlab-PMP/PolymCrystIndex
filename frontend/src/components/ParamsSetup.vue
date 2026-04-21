@@ -375,8 +375,8 @@ const defaultParams = {
   tiltCheck: false,
   pseuOrth: false,
   peakSymmetryEnabled: false,
-  symmetryTq: 0.2,
-  symmetryTa: 2.0,
+  symmetryTq: 0.02,
+  symmetryTa: 1.0,
   mergeGradientEnabled: false,
   mergeGradientThreshold: 0.0,
   hklMode: 'Default',
@@ -485,6 +485,7 @@ const fixedPeakSummary = computed(() => {
 
 const resetParams = () => {
   Object.assign(localParams, defaultParams)
+  localParams.peakSymmetryEnabled = false
 }
 
 const saveParams = () => {

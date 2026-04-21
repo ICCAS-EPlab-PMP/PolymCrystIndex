@@ -17,8 +17,8 @@ from itertools import combinations
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 
-DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD = 0.2
-DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD = 2.0
+DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD = 0.02
+DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD = 1.0
 
 
 def _get_peak_q(peak: Dict[str, Any]) -> float:

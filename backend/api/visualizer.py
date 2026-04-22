@@ -646,6 +646,29 @@ async def int_upload_miller(
     return {"message": f"已导入 {len(data)} 个 {label} 点 ← {file.filename}", "count": len(data)}
 
 
+@router.post("/int/set-miller-content")
+def int_set_miller_content(body: RawSetMillerBody):
+    """Directly set up to 5 FullMiller groups from raw text content for integrated overlay preview."""
+    merged: List[dict] = []
+    accepted_groups = body.groups[:5]
+    for idx, group in enumerate(accepted_groups):
+        parsed = MillerFileParser.parse(group.content or "")
+        for pt in parsed:
+            merged.append({
+                **pt,
+                "overlay_index": idx,
+                "overlay_label": group.label or f"group_{idx + 1}",
+            })
+    int_state.full_miller = merged
+    int_state.output_miller = []
+    return {
+        "message": f"已装载 {len(accepted_groups)} 组 FullMiller 到 2D 积分图",
+        "group_count": len(accepted_groups),
+        "count": len(merged),
+        "total_count": len(merged),
+    }
+
+
 @router.delete("/int/miller")
 def int_clear_miller(miller_type: str = Query("all")):
     if miller_type in ("full", "all"):

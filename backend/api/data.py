@@ -7,6 +7,21 @@ from core.dependencies import get_current_user
 from models.data import DataCheckResponse, DataUploadResponse
 from services.file_service import FileService
 
+# BOM signatures for encoding detection
+_BOM_UTF16_LE = b'\xff\xfe'
+_BOM_UTF16_BE = b'\xfe\xff'
+
+
+def _decode_bytes(content: bytes) -> str:
+    """Decode bytes to string with BOM-based encoding detection.
+    
+    Uses Python's 'utf-16' codec which auto-detects BOM and strips it.
+    Falls back to 'utf-8' for files without BOM.
+    """
+    if content.startswith(_BOM_UTF16_LE) or content.startswith(_BOM_UTF16_BE):
+        return content.decode('utf-16')
+    return content.decode('utf-8')
+
 router = APIRouter(prefix="/data", tags=["Data"])
 
 
@@ -22,12 +37,12 @@ async def check_data(
     content = await request.body()
     
     try:
-        text_content = content.decode('utf-8')
+        text_content = _decode_bytes(content)
     except UnicodeDecodeError:
         return DataCheckResponse(
             success=False,
             data={"valid": False},
-            message="Invalid text encoding"
+            message="Invalid text encoding (expected UTF-8 or UTF-16 with BOM)"
         )
     
     is_valid, count, message = FileService.validate_diffraction_data(text_content)
@@ -67,9 +82,8 @@ async def upload_data(
     try:
         content = await file.read()
         
-        is_valid, count, message = FileService.validate_diffraction_data(
-            content.decode('utf-8')
-        )
+        text_content = _decode_bytes(content)
+        is_valid, count, message = FileService.validate_diffraction_data(text_content)
         
         if not is_valid:
             return DataUploadResponse(
@@ -77,8 +91,9 @@ async def upload_data(
                 message=f"Invalid file format: {message}"
             )
         
+        utf8_bytes = text_content.encode('utf-8')
         saved_path = FileService.save_uploaded_file(
-            content,
+            utf8_bytes,
             file.filename,
             subdir=current_user["username"]
         )

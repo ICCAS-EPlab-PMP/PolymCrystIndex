@@ -106,43 +106,86 @@
       </div>
     </div>
 
-    <div class="info-cards">
-      <div class="info-card">
-        <div class="card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 16v-4"/>
-            <path d="M12 8h.01"/>
+    <div class="help-module">
+      <button
+        class="help-toggle"
+        type="button"
+        :aria-expanded="helpExpanded"
+        @click="helpExpanded = !helpExpanded"
+      >
+        <div class="help-toggle-copy">
+          <span class="help-badge">{{ t('dataImport.helpTitle') }}</span>
+          <div>
+            <h3>{{ t('dataImport.helpTitle') }}</h3>
+            <p>{{ t('dataImport.helpSubtitle') }}</p>
+          </div>
+        </div>
+        <div class="help-toggle-action">
+          <span>{{ helpExpanded ? t('dataImport.helpHide') : t('dataImport.helpShow') }}</span>
+          <svg class="help-chevron" :class="{ expanded: helpExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6,9 12,15 18,9"/>
           </svg>
         </div>
-        <div class="card-content">
-          <h4>{{ t('dataImport.fileFormat') }}</h4>
-          <p>{{ t('dataImport.fileFormatDesc') }}</p>
-          <code>{{ t('dataImport.codeExample') }}</code>
-          <ul>
-            <li><strong>{{ t('dataImport.qLabel') }}</strong> {{ t('dataImport.qDesc') }}</li>
-            <li><strong>{{ t('dataImport.psiLabel') }}</strong> {{ t('dataImport.psiDesc') }}</li>
-            <li><strong>{{ t('dataImport.intensityLabel') }}</strong> {{ t('dataImport.intensityDesc') }}</li>
-          </ul>
-        </div>
-      </div>
+      </button>
 
-      <div class="info-card">
-        <div class="card-icon warning">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
+      <div v-if="helpExpanded" class="info-cards">
+        <div class="info-card">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4"/>
+              <path d="M12 8h.01"/>
+            </svg>
+          </div>
+          <div class="card-content">
+            <h4>{{ t('dataImport.fileFormat') }}</h4>
+            <p>{{ t('dataImport.fileFormatDesc') }}</p>
+            <code>{{ t('dataImport.codeExample') }}</code>
+            <ul>
+              <li><strong>{{ t('dataImport.qLabel') }}</strong> {{ t('dataImport.qDesc') }}</li>
+              <li><strong>{{ t('dataImport.psiLabel') }}</strong> {{ t('dataImport.psiDesc') }}</li>
+              <li><strong>{{ t('dataImport.intensityLabel') }}</strong> {{ t('dataImport.intensityDesc') }}</li>
+            </ul>
+          </div>
         </div>
-        <div class="card-content">
-          <h4>{{ t('dataImport.preprocessing') }}</h4>
-          <p>{{ t('dataImport.preprocessingDesc') }}</p>
-          <ul>
-            <li>{{ t('dataImport.pre1') }}</li>
-            <li>{{ t('dataImport.pre2') }}</li>
-            <li>{{ t('dataImport.pre3') }}</li>
-          </ul>
+
+        <div class="info-card">
+          <div class="card-icon angle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 18h16"/>
+              <path d="M12 18V6"/>
+              <path d="M12 6l5 5"/>
+              <path d="M12 6l-3 8"/>
+            </svg>
+          </div>
+          <div class="card-content">
+            <h4>{{ t('dataImport.angleRequirements') }}</h4>
+            <p>{{ t('dataImport.angleRequirementsDesc') }}</p>
+            <ul>
+              <li>{{ t('dataImport.angle1') }}</li>
+              <li>{{ t('dataImport.angle2') }}</li>
+              <li>{{ t('dataImport.angle3') }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="card-icon warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div class="card-content">
+            <h4>{{ t('dataImport.preprocessing') }}</h4>
+            <p>{{ t('dataImport.preprocessingDesc') }}</p>
+            <ul>
+              <li>{{ t('dataImport.pre1') }}</li>
+              <li>{{ t('dataImport.pre2') }}</li>
+              <li>{{ t('dataImport.pre3') }}</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
@@ -180,6 +223,7 @@ const fileContent = ref('')
 const validationResult = ref(null)
 const uploadedFilePath = ref(null)
 const dataPreview = ref([])
+const helpExpanded = ref(false)
 
 onMounted(() => {
   if (props.uploadedFileData?.path) {
@@ -218,36 +262,67 @@ const processFile = async (file) => {
   uploadedFile.value = file
   fileContent.value = ''
   dataPreview.value = []
+  validationResult.value = null
   uploadedFilePath.value = null
-  
+
   const reader = new FileReader()
   reader.onload = async (e) => {
-    const content = e.target.result
+    const buffer = e.target.result
+    // Decode for preview only — backend receives the raw File bytes
+    const content = decodeBufferToUTF8(buffer)
     fileContent.value = content
     parseDataPreview(content)
-    
+
     try {
-      validationResult.value = await api.checkData(content)
+      // Send raw File so backend can inspect original byte-level encoding/BOM
+      validationResult.value = await api.checkData(file)
       if (validationResult.value.success && validationResult.value.data.valid) {
+        // Upload the original file (preserving its native encoding)
         const uploadResult = await api.uploadData(file)
         if (uploadResult.success) {
           uploadedFilePath.value = uploadResult.data.path
+        } else {
+          // Upload failed — clear path and show explicit error; do NOT keep misleading valid state
+          uploadedFilePath.value = null
+          validationResult.value = {
+            success: false,
+            data: { valid: false },
+            message: uploadResult.message || 'File upload failed'
+          }
+          dataPreview.value = []
         }
       } else {
+        // Validation rejected — keep the server error message visible
         validationResult.value = {
-          valid: validationResult.value.data?.valid || false,
-          message: validationResult.value.message || 'Validation failed',
-          count: validationResult.value.data?.count || 0
+          success: false,
+          data: { valid: false },
+          message: validationResult.value.message || 'Validation failed'
         }
+        dataPreview.value = []
       }
     } catch (error) {
+      uploadedFilePath.value = null
       validationResult.value = {
-        valid: false,
+        success: false,
+        data: { valid: false },
         message: error.message || 'Validation failed'
       }
+      dataPreview.value = []
     }
   }
-  reader.readAsText(file)
+  reader.readAsArrayBuffer(file)
+}
+
+function decodeBufferToUTF8(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let encoding = 'utf-8'
+  // Detect BOM: UTF-16 LE (FF FE), UTF-16 BE (FE FF), UTF-8 BOM (EF BB BF)
+  if (bytes.length >= 2) {
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) encoding = 'utf-16le'
+    else if (bytes[0] === 0xFE && bytes[1] === 0xFF) encoding = 'utf-16be'
+  }
+  const decoder = new TextDecoder(encoding, { fatal: false })
+  return decoder.decode(buffer)
 }
 
 const parseDataPreview = (content) => {
@@ -515,11 +590,86 @@ const proceedToParams = () => {
   color: var(--text-muted);
 }
 
+.help-module {
+  margin-bottom: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.help-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.help-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.help-toggle-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.help-toggle-copy h3 {
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.help-toggle-copy p {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.help-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.help-toggle-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.help-chevron {
+  width: 18px;
+  height: 18px;
+  transition: transform var(--transition-normal);
+}
+
+.help-chevron.expanded {
+  transform: rotate(180deg);
+}
+
 .info-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 20px;
-  margin-bottom: 32px;
+  padding: 0 20px 20px;
 }
 
 .info-card {
@@ -544,6 +694,11 @@ const proceedToParams = () => {
 .card-icon.warning {
   background: rgba(245, 158, 11, 0.1);
   color: var(--cta);
+}
+
+.card-icon.angle {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary-dark);
 }
 
 .card-icon svg {
@@ -675,5 +830,16 @@ const proceedToParams = () => {
 .btn-primary svg {
   width: 18px;
   height: 18px;
+}
+
+@media (max-width: 768px) {
+  .help-toggle {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .help-toggle-action {
+    justify-content: space-between;
+  }
 }
 </style>

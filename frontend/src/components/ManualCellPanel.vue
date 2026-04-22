@@ -109,7 +109,7 @@
       </div>
 
       <div v-if="browsableResults.length" class="quick-browse-section">
-        <button class="quick-browse-toggle" @click="browseExpanded = !browseExpanded">
+        <button class="quick-browse-toggle" @click="toggleBrowseExpanded">
           <svg class="chevron-icon" :class="{ expanded: browseExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6,9 12,15 18,9"/>
           </svg>
@@ -193,6 +193,7 @@ const generating = ref(false)
 const error = ref(null)
 const batchResults = ref([])
 const browseExpanded = ref(false)
+const keepBrowseExpanded = ref(false)
 const browseMode = ref('single')
 const selectedSingleLabel = ref('')
 const selectedOverlayLabels = ref([])
@@ -226,6 +227,13 @@ const toggleOverlayGroup = (label) => {
   selectedOverlayLabels.value = [...selectedOverlayLabels.value, label]
 }
 
+const toggleBrowseExpanded = () => {
+  browseExpanded.value = !browseExpanded.value
+  if (!browseExpanded.value) {
+    keepBrowseExpanded.value = false
+  }
+}
+
 const handleVisualizerReady = () => {
   visualizerReady.value = true
   if (selectedGroups.value.length > 0) {
@@ -241,6 +249,22 @@ watch(selectedGroups, (groups, previousGroups) => {
     importSelectionKey.value += 1
   }
 })
+
+watch([
+  () => browsableResults.value.length,
+  browseMode,
+  selectedSingleLabel,
+  selectedOverlayLabels,
+], ([count]) => {
+  if (count === 0) {
+    browseExpanded.value = false
+    keepBrowseExpanded.value = false
+    return
+  }
+  if (keepBrowseExpanded.value && !browseExpanded.value) {
+    browseExpanded.value = true
+  }
+}, { deep: true })
 
 const addGroup = () => {
   groups.push(defaultGroup())
@@ -272,6 +296,7 @@ const generate = async () => {
       selectedSingleLabel.value = firstGroup?.label || ''
       selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
       browseMode.value = 'single'
+      keepBrowseExpanded.value = true
       browseExpanded.value = true
       if (visualizerReady.value && firstGroup) {
         importSelectionKey.value += 1

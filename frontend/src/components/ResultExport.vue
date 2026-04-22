@@ -640,7 +640,7 @@ const exportHDF5 = async () => {
     URL.revokeObjectURL(url)
   } catch (error) {
     const hdf5Data = {
-      version: '1.8.2',
+      version: '1.8.3',
       timestamp: new Date().toISOString(),
       cellParameters: cellParams.value,
       millerIndices: millerData.value,

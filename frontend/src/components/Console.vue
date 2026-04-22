@@ -152,7 +152,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/index'
 import ServerStatus from './ServerStatus.vue'
@@ -166,13 +166,18 @@ const props = defineProps({
   dataFile: {
     type: [File, null],
     default: null
+  },
+  taskId: {
+    type: String,
+    default: null
   }
 })
 
-const emit = defineEmits(['navigate'])
+const emit = defineEmits(['navigate', 'task-started', 'run-status-change'])
 
 const isRunning = ref(false)
 const analysisComplete = ref(false)
+const localRunStatus = ref('idle')
 const currentGen = ref(0)
 const bestFitness = ref(0)
 const logs = ref([])
@@ -240,14 +245,19 @@ const handleServerStatus = (status) => {
 }
 
 const statusClass = computed(() => {
-  if (isRunning.value) return 'running'
-  if (analysisComplete.value) return 'success'
+  if (localRunStatus.value === 'running') return 'running'
+  if (localRunStatus.value === 'completed') return 'success'
+  if (localRunStatus.value === 'failed' || localRunStatus.value === 'error') return 'error'
+  if (localRunStatus.value === 'cancelled') return 'cancelled'
   return 'idle'
 })
 
 const statusText = computed(() => {
-  if (isRunning.value) return t('status.running')
-  if (analysisComplete.value) return t('status.completed')
+  if (localRunStatus.value === 'running') return t('status.running')
+  if (localRunStatus.value === 'completed') return t('status.completed')
+  if (localRunStatus.value === 'failed') return t('status.failed')
+  if (localRunStatus.value === 'error') return t('status.error')
+  if (localRunStatus.value === 'cancelled') return t('status.cancelled')
   return t('status.idle')
 })
 
@@ -256,14 +266,21 @@ const progressPercent = computed(() => {
   return Math.round(((currentGen.value + 1) / props.params.steps) * 100)
 })
 
+const updateRunStatus = (status) => {
+  localRunStatus.value = status
+  emit('run-status-change', status)
+}
+
 const startAnalysis = async () => {
   if (!props.dataFile) {
     logs.value.push('[Error] No data file uploaded')
+    updateRunStatus('error')
     return
   }
 
   isRunning.value = true
   analysisComplete.value = false
+  updateRunStatus('running')
   currentGen.value = 0
   bestFitness.value = 0
   logs.value = []
@@ -292,6 +309,7 @@ const startAnalysis = async () => {
     }
     
     currentTaskId.value = runResult.data.taskId
+    emit('task-started', currentTaskId.value)
     logs.value.push(`[System] Task started: ${currentTaskId.value}`)
 
     startStatusPolling()
@@ -300,6 +318,8 @@ const startAnalysis = async () => {
   } catch (error) {
     logs.value.push(`[Error] ${error.message || 'Failed to connect to server'}`)
     isRunning.value = false
+    analysisComplete.value = false
+    updateRunStatus('error')
   }
 }
 
@@ -337,6 +357,7 @@ const startStatusPolling = () => {
         logs.value.push('[System] Analysis completed successfully')
         isRunning.value = false
         analysisComplete.value = true
+        updateRunStatus('completed')
         await appendResultSummaryLogs()
         stopStatusPolling()
         stopLogsPolling()
@@ -344,18 +365,21 @@ const startStatusPolling = () => {
         logs.value.push(`[Error] Analysis failed: ${result.data.error || 'Unknown error'}`)
         isRunning.value = false
         analysisComplete.value = false
+        updateRunStatus('failed')
         stopStatusPolling()
         stopLogsPolling()
       } else if (status === 'cancelled') {
         logs.value.push('[System] Analysis was cancelled')
         isRunning.value = false
         analysisComplete.value = false
+        updateRunStatus('cancelled')
         stopStatusPolling()
         stopLogsPolling()
       } else if (status === 'running') {
         if (!isRunning.value) {
           isRunning.value = true
         }
+        updateRunStatus('running')
       }
 
       await scrollToBottom()
@@ -410,13 +434,17 @@ const cancelAnalysis = async () => {
     if (result.success) {
       logs.value.push('[System] Cancellation requested')
       isRunning.value = false
+      analysisComplete.value = false
+      updateRunStatus('cancelled')
       stopStatusPolling()
       stopLogsPolling()
     } else {
       logs.value.push(`[Error] ${result.message || 'Cancellation failed'}`)
+      updateRunStatus('error')
     }
   } catch (error) {
     logs.value.push(`[Error] ${error.message || 'Cancellation request failed'}`)
+    updateRunStatus('error')
   }
 }
 
@@ -468,6 +496,57 @@ const exportCurrentStep = () => {
 
 watch(() => props.dataFile, () => {
   analysisComplete.value = false
+  if (!isRunning.value) {
+    updateRunStatus('idle')
+  }
+})
+
+onMounted(async () => {
+  if (!props.taskId) {
+    updateRunStatus('idle')
+    return
+  }
+
+  try {
+    const statusResult = await api.getAnalysisStatus(props.taskId)
+    if (!statusResult.success) {
+      logs.value.push('[System] Previous task not found. Starting fresh.')
+      updateRunStatus('idle')
+      return
+    }
+
+    const { status, currentGen: gen, bestFitness: fitness } = statusResult.data
+    currentTaskId.value = props.taskId
+    currentGen.value = gen || 0
+    bestFitness.value = fitness || 0
+
+    if (status === 'running') {
+      isRunning.value = true
+      logs.value.push(`[System] Restored running task: ${props.taskId}`)
+      updateRunStatus('running')
+      startStatusPolling()
+      startLogsPolling()
+    } else if (status === 'completed') {
+      isRunning.value = false
+      analysisComplete.value = true
+      logs.value.push(`[System] Restored completed task: ${props.taskId}`)
+      updateRunStatus('completed')
+      await appendResultSummaryLogs()
+    } else if (status === 'failed') {
+      isRunning.value = false
+      analysisComplete.value = false
+      logs.value.push(`[System] Previous task failed: ${props.taskId}`)
+      updateRunStatus('failed')
+    } else if (status === 'cancelled') {
+      isRunning.value = false
+      analysisComplete.value = false
+      logs.value.push(`[System] Previous task was cancelled: ${props.taskId}`)
+      updateRunStatus('cancelled')
+    }
+  } catch (error) {
+    logs.value.push('[System] Failed to restore previous task. Starting fresh.')
+    updateRunStatus('idle')
+  }
 })
 
 onUnmounted(() => {
@@ -534,6 +613,14 @@ onUnmounted(() => {
 
 .status-value.success {
   color: var(--status-success);
+}
+
+.status-value.error {
+  color: var(--status-error);
+}
+
+.status-value.cancelled {
+  color: var(--text-secondary);
 }
 
 .status-dot {

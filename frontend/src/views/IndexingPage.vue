@@ -38,7 +38,7 @@
         <transition name="fade" mode="out-in">
           <DataImport v-if="activeSubTab === 'data'" :uploaded-file-data="dataFile" @data-loaded="handleDataLoaded" @file-removed="handleFileRemoved" />
           <ParamsSetup v-else-if="activeSubTab === 'params'" :params="gaParams" />
-          <Console v-else-if="activeSubTab === 'console'" :params="gaParams" :data-file="dataFile" @navigate="handleNavigate" />
+          <Console v-else-if="activeSubTab === 'console'" :params="gaParams" :data-file="dataFile" :task-id="currentTaskId" @navigate="handleNavigate" @task-started="handleTaskStarted" @run-status-change="handleRunStatusChange" />
           <ResultExport v-else-if="activeSubTab === 'results'" @navigate="handleNavigate" />
         </transition>
       </main>
@@ -50,7 +50,7 @@
 import { ref, reactive, computed, markRaw, h, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const { t, te } = useI18n()
+const { t } = useI18n()
 
 const DataImport = defineAsyncComponent(() => import('@/components/DataImport.vue'))
 const ParamsSetup = defineAsyncComponent(() => import('@/components/ParamsSetup.vue'))
@@ -121,6 +121,7 @@ const indexSubTabs = [
 const activeSubTab = ref('data')
 const dataFile = ref(null)
 const runStatus = ref('idle')
+const currentTaskId = ref(null)
 
 const gaParams = reactive({
   steps: 30,
@@ -165,7 +166,12 @@ const gaParams = reactive({
   glideBatches: []
 })
 
-const statusClass = computed(() => runStatus.value)
+const statusClass = computed(() => {
+  if (runStatus.value === 'completed') return 'success'
+  if (runStatus.value === 'failed') return 'error'
+  if (runStatus.value === 'cancelled') return 'cancelled'
+  return runStatus.value
+})
 
 const LABEL_FALLBACKS = {
   index: 'Indexing',
@@ -190,6 +196,15 @@ const handleDataLoaded = (data) => {
 
 const handleFileRemoved = () => {
   dataFile.value = null
+}
+
+const handleTaskStarted = (taskId) => {
+  currentTaskId.value = taskId
+  runStatus.value = 'running'
+}
+
+const handleRunStatusChange = (status) => {
+  runStatus.value = status
 }
 
 const handleNavigate = (tab) => {
@@ -340,6 +355,10 @@ const handleNavigate = (tab) => {
 
 .status-dot.error {
   background: var(--status-error);
+}
+
+.status-dot.cancelled {
+  background: var(--text-secondary);
 }
 
 .status-text {

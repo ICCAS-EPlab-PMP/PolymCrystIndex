@@ -176,8 +176,8 @@
             <div class="loading-overlay" v-if="loading">
               <div class="spinner"></div>{{ t('visualizer.loading') }}…
             </div>
-            <img v-if="raw.imageSrc" :src="'data:image/png;base64,' + raw.imageSrc"
-                 :style="rawImgStyle" draggable="false" />
+             <img v-if="raw.imageSrc" ref="rawImageEl" :src="'data:image/png;base64,' + raw.imageSrc"
+                  :style="rawImgStyle" draggable="false" @load="handleImageLoad('raw')" />
             <div class="placeholder-text" v-else>
               {{ t('visualizer.pleaseImportDiffractionImage') }}<br/>
               (.tif / .edf / .cbf)
@@ -339,8 +339,8 @@
             <div class="loading-overlay" v-if="loading">
               <div class="spinner"></div>{{ t('visualizer.rendering') }}…
             </div>
-            <img v-if="int2d.imageSrc" :src="'data:image/png;base64,' + int2d.imageSrc"
-                 :style="intImgStyle" draggable="false" />
+             <img v-if="int2d.imageSrc" ref="intImageEl" :src="'data:image/png;base64,' + int2d.imageSrc"
+                  :style="intImgStyle" draggable="false" @load="handleImageLoad('int')" />
             <div class="placeholder-text" v-else>
               {{ t('visualizer.pleaseImport2DIntegrationImage') }}<br/>
               (.npy / .tif)
@@ -364,7 +364,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
 
@@ -410,7 +410,6 @@ const drag = reactive({ active: false, lastX: 0, lastY: 0, panel: '' })
 
 let rawDebTimer = null
 let intDebTimer = null
-const EXPORT_COLORMAP = '灰度'
 
 const raw = reactive({
   imageLoaded: false,
@@ -447,6 +446,8 @@ const int2d = reactive({
 
 const rawCanvas = ref(null)
 const intCanvas = ref(null)
+const rawImageEl = ref(null)
+const intImageEl = ref(null)
 const fileRawImage = ref(null)
 const fileRawPoni = ref(null)
 const fileRawFull = ref(null)
@@ -473,17 +474,54 @@ function clampZoom(panel) {
   s.zoom = Math.max(0.02, Math.min(s.zoom, 50))
 }
 
-function resetZoom(panel) {
+const resetZoomTimers = { raw: null, int: null }
+
+function scheduleResetZoom(panel, retries = 6) {
+  if (resetZoomTimers[panel]) {
+    clearTimeout(resetZoomTimers[panel])
+  }
+  resetZoomTimers[panel] = setTimeout(() => {
+    resetZoomTimers[panel] = null
+    resetZoom(panel, retries)
+  }, 16)
+}
+
+function getPanelImageMetrics(panel, container) {
+  const imageEl = panel === 'raw' ? rawImageEl.value : intImageEl.value
+  const naturalWidth = imageEl?.naturalWidth || 0
+  const naturalHeight = imageEl?.naturalHeight || 0
+  if (naturalWidth > 0 && naturalHeight > 0) {
+    return { width: naturalWidth, height: naturalHeight }
+  }
+  if (panel === 'raw' && raw.imgW > 0 && raw.imgH > 0) {
+    return { width: raw.imgW, height: raw.imgH }
+  }
+  return {
+    width: container.clientWidth || 0,
+    height: container.clientHeight || 0,
+  }
+}
+
+function resetZoom(panel, retries = 0) {
   const s = panel === 'raw' ? raw : int2d
   const container = panel === 'raw' ? rawCanvas.value : intCanvas.value
   if (!container) return
   const cw = container.clientWidth, ch = container.clientHeight
-  const iw = panel === 'raw' ? (raw.imgW || cw) : cw
-  const ih = panel === 'raw' ? (raw.imgH || ch) : ch
+  const { width: iw, height: ih } = getPanelImageMetrics(panel, container)
+  if (cw <= 0 || ch <= 0 || iw <= 0 || ih <= 0) {
+    if (retries > 0) {
+      scheduleResetZoom(panel, retries - 1)
+    }
+    return
+  }
   const scaleX = cw / iw, scaleY = ch / ih
-  s.zoom = Math.min(scaleX, scaleY, 1.0)
+  s.zoom = Math.min(scaleX, scaleY)
   s.panX = (cw - iw * s.zoom) / 2
   s.panY = (ch - ih * s.zoom) / 2
+}
+
+function handleImageLoad(panel) {
+  scheduleResetZoom(panel, 8)
 }
 
 function startDrag(e, panel) {
@@ -573,7 +611,7 @@ async function uploadRawImage(file) {
   setStatus(data.message)
   await renderRaw()
   await nextTick()
-  resetZoom('raw')
+  resetZoom('raw', 8)
   emit('raw-session-ready')
 }
 
@@ -645,7 +683,7 @@ async function applyRawParams() {
 async function refreshRawView() {
   await renderRaw()
   await nextTick()
-  resetZoom('raw')
+  resetZoom('raw', 8)
   setStatus('View refreshed, Miller points recalculated and centered')
 }
 
@@ -670,12 +708,6 @@ async function prepareRawExportImage() {
   const adjustments = []
   const hasMarkers = raw.fullCount > 0 || raw.outputCount > 0
   let needsRender = false
-
-  if (hasMarkers && raw.p.colormap !== EXPORT_COLORMAP) {
-    raw.p.colormap = EXPORT_COLORMAP
-    adjustments.push('gray colormap')
-    needsRender = true
-  }
 
   if (hasMarkers && !raw.p.showLabels) {
     raw.p.showLabels = true
@@ -715,7 +747,11 @@ async function uploadIntImage(file) {
   setStatus(data.message)
   await renderInt()
   await nextTick()
-  resetZoom('int')
+  resetZoom('int', 8)
+  emit('raw-session-ready')
+  if (props.overlayGroups?.length && props.importRequestKey) {
+    await loadIntOverlayGroups()
+  }
 }
 
 async function uploadIntInfo(file) {
@@ -791,16 +827,7 @@ function debounceRenderInt() {
 }
 
 async function prepareIntExportImage() {
-  const adjustments = []
-  const hasMarkers = int2d.fullCount > 0 || int2d.outputCount > 0
-
-  if (hasMarkers && int2d.p.colormap !== EXPORT_COLORMAP) {
-    int2d.p.colormap = EXPORT_COLORMAP
-    adjustments.push('gray colormap')
-    await renderInt()
-  }
-
-  return adjustments
+  return []
 }
 
 async function saveIntImage() {
@@ -854,7 +881,7 @@ async function loadFromWorkDir(dir) {
       if (data.output_miller_count !== undefined) raw.outputCount = data.output_miller_count
       await renderRaw()
       await nextTick()
-      resetZoom('raw')
+      resetZoom('raw', 8)
       setStatus(data.message || `Loaded from workDir: ${dir}`)
       emit('raw-session-ready')
     }
@@ -891,13 +918,54 @@ async function loadOverlayGroups() {
   }
 }
 
+async function loadIntOverlayGroups() {
+  if (!props.overlayGroups || props.overlayGroups.length === 0) return
+  if (!int2d.imageLoaded) return
+  loading.value = true
+  try {
+    const groups = props.overlayGroups.slice(0, 5).map(g => ({
+      label: g.label || '',
+      full_miller_content: g.fullMillerContent || '',
+    }))
+    const { data } = await axios.post(`${API_BASE}/int/set-miller-content`, { groups })
+    int2d.fullCount = data.total_count || 0
+    int2d.outputCount = 0
+    setStatus(data.message || `2D overlay: ${groups.length} group(s) loaded`)
+    await renderInt()
+  } catch (err) {
+    setStatus('Error loading 2D overlay groups: ' + (err.response?.data?.detail || err.message))
+  } finally {
+    loading.value = false
+  }
+}
+
 watch(() => props.importRequestKey, async (newKey, oldKey) => {
   if (!newKey || newKey === oldKey) return
-  if (!raw.imageLoaded) {
-    setStatus('Please import a diffraction image before loading FullMiller markers')
+  const canLoadRaw = raw.imageLoaded
+  const canLoadInt = int2d.imageLoaded
+  if (!canLoadRaw && !canLoadInt) {
+    setStatus('Please import a diffraction or 2D integrated image before loading FullMiller markers')
     return
   }
-  await loadOverlayGroups()
+  if (canLoadRaw) {
+    await loadOverlayGroups()
+  }
+  if (canLoadInt) {
+    await loadIntOverlayGroups()
+  }
+})
+
+watch(activePanel, async (panel) => {
+  await nextTick()
+  scheduleResetZoom(panel, 4)
+})
+
+onBeforeUnmount(() => {
+  Object.values(resetZoomTimers).forEach(timer => {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  })
 })
 </script>
 
@@ -1338,6 +1406,7 @@ watch(() => props.importRequestKey, async (newKey, oldKey) => {
 
 .visualizer.compact-mode .main-content {
   min-height: 640px;
+  min-width: 0;
 }
 
 .visualizer.compact-mode .status-bar {
@@ -1346,13 +1415,18 @@ watch(() => props.importRequestKey, async (newKey, oldKey) => {
 }
 
 .visualizer.compact-mode .sidebar {
-  width: 320px;
-  min-width: 280px;
+  width: clamp(240px, 28vw, 280px);
+  min-width: 240px;
+}
+
+.visualizer.compact-mode .right-panel {
+  min-width: 0;
 }
 
 .visualizer.compact-mode .image-toolbar {
   padding: 3px 8px;
   font-size: 11px;
+  flex-wrap: wrap;
 }
 
 .visualizer.compact-mode .image-toolbar .btn {

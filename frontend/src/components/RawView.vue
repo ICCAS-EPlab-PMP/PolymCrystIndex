@@ -53,23 +53,29 @@
 
         <div class="section-card integrate-qi-section">
           <div class="section-header">
-            <h3>{{ t('peakExtraction.integrateRegion') }} - q-I</h3>
+            <h3 class="section-title-stack">
+              <span>{{ t('peakExtraction.integrateRegion') }}</span>
+              <span class="section-title-subline">q-I</span>
+            </h3>
           </div>
           <div class="form-grid-3">
-            <div class="form-row"><label>{{ t('peakExtraction.azimuthRange') }}</label><input type="number" v-model.number="intP.azimuth_range_half" step="1" @change="runIntegration" /></div>
-            <div class="form-row"><label>{{ t('peakExtraction.radialRange') }}</label><input type="number" v-model.number="intP.radial_range_half" step="0.01" @change="runIntegration" /></div>
-            <div class="form-row"><label>Q Points</label><input type="number" v-model.number="intP.npt" step="50" @change="runIntegration" /></div>
+            <div class="form-field-stack"><label>{{ t('peakExtraction.azimuthRange') }}</label><input type="number" v-model.number="intP.azimuth_range_half" step="1" @change="runIntegration" /></div>
+            <div class="form-field-stack"><label>{{ t('peakExtraction.radialRange') }}</label><input type="number" v-model.number="intP.radial_range_half" step="0.01" @change="runIntegration" /></div>
+            <div class="form-field-stack"><label>Q Points</label><input type="number" v-model.number="intP.npt" step="50" @change="runIntegration" /></div>
           </div>
         </div>
 
         <div class="section-card integrate-qi-section">
           <div class="section-header">
-            <h3>{{ t('peakExtraction.integrateRegion') }} - ψ-I</h3>
+            <h3 class="section-title-stack">
+              <span>{{ t('peakExtraction.integrateRegion') }}</span>
+              <span class="section-title-subline">ψ-I</span>
+            </h3>
           </div>
           <div class="form-grid-3">
-            <div class="form-row"><label>{{ t('peakExtraction.azimuthRange') }}</label><input type="number" v-model.number="intP.azimuth_range_half_r" step="5" @change="runIntegration" /></div>
-            <div class="form-row"><label>{{ t('peakExtraction.radialRange') }}</label><input type="number" v-model.number="intP.radial_range_half_r" step="0.01" @change="runIntegration" /></div>
-            <div class="form-row"><label>Psi Points</label><input type="number" v-model.number="intP.npt_rad_r" step="10" @change="runIntegration" /></div>
+            <div class="form-field-stack"><label>{{ t('peakExtraction.azimuthRange') }}</label><input type="number" v-model.number="intP.azimuth_range_half_r" step="5" @change="runIntegration" /></div>
+            <div class="form-field-stack"><label>{{ t('peakExtraction.radialRange') }}</label><input type="number" v-model.number="intP.radial_range_half_r" step="0.01" @change="runIntegration" /></div>
+            <div class="form-field-stack"><label>Psi Points</label><input type="number" v-model.number="intP.npt_rad_r" step="10" @change="runIntegration" /></div>
           </div>
         </div>
       </div>
@@ -124,17 +130,17 @@
             </div>
           </div>
 
-          <div class="section-card">
+          <div class="section-card instrument-params-card">
             <div class="section-header">
               <h3>{{ t('peakExtraction.instrumentParams') }}</h3>
             </div>
-            <div class="form-grid-2">
-              <div class="form-row"><label>{{ t('peakExtraction.wavelength') }}</label><input type="number" v-model.number="params.wavelength" step="0.0001" /></div>
-              <div class="form-row"><label>{{ t('peakExtraction.distance') }}</label><input type="number" v-model.number="params.distance" step="1" /></div>
-              <div class="form-row"><label>{{ t('peakExtraction.pixelSizeX') }}</label><input type="number" v-model.number="params.pixel_size_x" step="1" /></div>
-              <div class="form-row"><label>{{ t('peakExtraction.pixelSizeY') }}</label><input type="number" v-model.number="params.pixel_size_y" step="1" /></div>
-              <div class="form-row"><label>{{ t('peakExtraction.centerX') }}</label><input type="number" v-model.number="params.center_x" step="0.1" /></div>
-              <div class="form-row"><label>{{ t('peakExtraction.centerY') }}</label><input type="number" v-model.number="params.center_y" step="0.1" /></div>
+            <div class="form-grid-2 instrument-params-grid">
+              <div class="form-field-stack"><label>{{ t('peakExtraction.wavelength') }}</label><input type="number" v-model.number="params.wavelength" step="0.0001" /></div>
+              <div class="form-field-stack"><label>{{ t('peakExtraction.distance') }}</label><input type="number" v-model.number="params.distance" step="1" /></div>
+              <div class="form-field-stack"><label>{{ t('peakExtraction.pixelSizeX') }}</label><input type="number" v-model.number="params.pixel_size_x" step="1" /></div>
+              <div class="form-field-stack"><label>{{ t('peakExtraction.pixelSizeY') }}</label><input type="number" v-model.number="params.pixel_size_y" step="1" /></div>
+              <div class="form-field-stack"><label>{{ t('peakExtraction.centerX') }}</label><input type="number" v-model.number="params.center_x" step="0.1" /></div>
+              <div class="form-field-stack"><label>{{ t('peakExtraction.centerY') }}</label><input type="number" v-model.number="params.center_y" step="0.1" /></div>
             </div>
           </div>
         </div>
@@ -722,6 +728,21 @@ onUnmounted(() => {
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.section-title-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.section-title-subline {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .image-canvas-wrapper {
@@ -954,6 +975,29 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
+}
+
+.instrument-params-grid {
+  gap: 12px;
+}
+
+.form-field-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+
+.form-field-stack label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.form-field-stack input {
+  width: 100%;
 }
 
 .input-small {

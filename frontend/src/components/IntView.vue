@@ -1,13 +1,14 @@
 <template>
   <div class="int-view">
     <div class="content-grid">
-      <div class="left-panel">
-        <div class="section-card">
-          <div class="section-header">
-            <h3>{{ t('visualizer.integration2D') }}</h3>
-          </div>
-          <div ref="heatmapDiv" class="heatmap-container"></div>
+      <div class="section-card heatmap-section">
+        <div class="section-header">
+          <h3>{{ t('visualizer.integration2D') }}</h3>
         </div>
+        <div ref="heatmapDiv" class="heatmap-container"></div>
+      </div>
+
+      <div class="left-panel">
 
         <div class="section-card">
           <div class="section-header">
@@ -747,6 +748,11 @@ async function clearRecords() {
   height: 100%;
 }
 
+.heatmap-section {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
 .left-panel, .right-panel {
   display: flex;
   flex-direction: column;
@@ -772,6 +778,7 @@ async function clearRecords() {
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .heatmap-container {
@@ -800,8 +807,9 @@ async function clearRecords() {
 .form-row label {
   font-size: 0.8125rem;
   color: var(--text-secondary);
-  min-width: 90px;
+  min-width: 130px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .form-row.compact {

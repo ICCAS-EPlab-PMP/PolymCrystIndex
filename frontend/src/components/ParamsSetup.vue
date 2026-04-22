@@ -21,19 +21,19 @@
         <div class="section-content" :class="{ collapsed: !expandedSections.ga }">
           <div class="param-row">
             <div class="param-group">
-              <label>{{ t('params.steps') }}</label>
+              <label class="label-with-hint">{{ t('params.steps') }} <span class="hint-icon" :title="t('params.stepsTip')">ⓘ</span></label>
               <input type="number" v-model.number="localParams.steps" min="5" />
               <span class="param-hint">{{ t('params.stepsHint') }}</span>
             </div>
             <div class="param-group">
-              <label>{{ t('params.generations') }}</label>
+              <label class="label-with-hint">{{ t('params.generations') }} <span class="hint-icon" :title="t('params.generationsTip')">ⓘ</span></label>
               <input type="number" v-model.number="localParams.generations" min="10" />
               <span class="param-hint">{{ t('params.generationsHint') }}</span>
             </div>
           </div>
 
           <div class="param-subgroup">
-            <h4>{{ t('params.populationRatios') }}</h4>
+            <h4 class="title-with-hint">{{ t('params.populationRatios') }} <span class="hint-icon" :title="t('params.populationRatiosTip')">ⓘ</span></h4>
             <div class="ratio-grid">
               <div class="ratio-item">
                 <label>{{ t('params.live') }}</label>
@@ -63,7 +63,7 @@
           </div>
 
           <div class="param-subgroup">
-            <h4>{{ t('params.hklExploration') }}</h4>
+            <h4 class="title-with-hint">{{ t('params.hklExploration') }} <span class="hint-icon" :title="t('params.hklTip')">ⓘ</span></h4>
             <div class="radio-group">
               <label class="radio-item">
                 <input type="radio" v-model="localParams.hklMode" value="Default" />
@@ -95,7 +95,7 @@
           </div>
 
           <div class="param-subgroup">
-            <h4>{{ t('params.fixedPeakTitle') }}</h4>
+            <h4 class="title-with-hint">{{ t('params.fixedPeakTitle') }} <span class="hint-icon" :title="t('params.fixedPeakTip')">ⓘ</span></h4>
             <label class="toggle-item">
               <input type="checkbox" v-model="localParams.fixModeEnabled" />
               <span class="toggle-label">{{ t('params.fixedPeakToggle') }}</span>
@@ -122,7 +122,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
             </svg>
-            <h3>{{ t('params.cellConstraints') }}</h3>
+            <h3>{{ t('params.cellConstraints') }} <span class="hint-icon" :title="t('params.cellConstraintsTip')">ⓘ</span></h3>
           </div>
           <svg class="chevron" :class="{ expanded: expandedSections.cell }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6,9 12,15 18,9"/>
@@ -287,7 +287,7 @@
 
             <label class="toggle-item disabled-toggle" aria-disabled="true">
               <input type="checkbox" :checked="false" disabled />
-              <span class="toggle-label">{{ t('params.peakSymmetryMode') }}</span>
+              <span class="toggle-label">{{ t('params.peakSymmetryMode') }} <span class="hint-icon" :title="t('params.peakSymmetryTip')">ⓘ</span></span>
             </label>
             <div class="peak-symmetry-thresholds disabled-thresholds">
               <div class="weight-item">
@@ -618,6 +618,29 @@ const saveParams = () => {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.label-with-hint,
+.title-with-hint,
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hint-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
 }
 
 .param-group input[type="number"],

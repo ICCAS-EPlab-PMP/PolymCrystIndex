@@ -38,8 +38,11 @@ export const api = {
   },
 
   async checkData(fileContent) {
+    const isBinaryPayload = fileContent instanceof Blob || fileContent instanceof ArrayBuffer
     return request.post('/data/check', fileContent, {
-      headers: { 'Content-Type': 'text/plain' }
+      headers: {
+        'Content-Type': isBinaryPayload ? 'application/octet-stream' : 'text/plain'
+      }
     })
   },
 

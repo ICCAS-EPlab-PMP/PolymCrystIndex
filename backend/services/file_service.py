@@ -39,16 +39,19 @@ class FileService:
                 q = float(parts[0])
                 psi = float(parts[1])
                 intensity = float(parts[2])
-                
+
                 if q < 0:
                     return False, 0, f"Line {i+1}: q value cannot be negative"
                 if psi < 0:
-                    warnings.append(f"Line {i+1}: psi is negative (will use absolute value)")
-                if psi > 360:
-                    warnings.append(f"Line {i+1}: psi > 360 degrees")
+                    # Negative psi: warn but allow processing; data should be in first quadrant (psi >= 0)
+                    warnings.append(f"Line {i+1}: psi is negative (data requires first quadrant, 0\u00b0 is equator)")
+                if psi > 90:
+                    warnings.append(f"Line {i+1}: psi {psi} > 90 degrees (recommended range: -15 to 90)")
+                if psi < -15:
+                    warnings.append(f"Line {i+1}: psi {psi} < -15 degrees (below recommended range, expected -15 to 90)")
                 if intensity < 0:
                     warnings.append(f"Line {i+1}: intensity is negative")
-                
+
                 valid_count += 1
             except ValueError as e:
                 return False, 0, f"Line {i+1}: Invalid number format - {e}"
@@ -151,7 +154,7 @@ class FileService:
         psi_values = []
         intensities = []
         
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith('#'):

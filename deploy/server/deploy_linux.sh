@@ -328,6 +328,25 @@ setup_python_env() {
     python3 -m venv "$VENV_DIR"
   fi
 
+  # Rocky 9 / RHEL 9 的 python3 -m venv 不带 ensurepip，venv 里没有 pip
+  # 兜底：检测不到 pip 就用 get-pip.py 或系统 pip 手动装进去
+  if ! "$VENV_DIR/bin/python" -m pip --version >/dev/null 2>&1; then
+    info "pip not found in venv, bootstrapping... / venv 中未检测到 pip，正在引导安装"
+    if has_command curl; then
+      curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+    elif has_command wget; then
+      wget -qO /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py
+    else
+      # 最后手段：复制系统 pip（不推荐但比直接失败好）
+      "$VENV_DIR/bin/python" -c "import ensurepip; ensurepip._main()" 2>/dev/null || \
+        die "Cannot bootstrap pip in venv. Install curl or wget first / 无法引导 pip，请先安装 curl 或 wget"
+    fi
+    if [ -f /tmp/get-pip.py ]; then
+      "$VENV_DIR/bin/python" /tmp/get-pip.py
+      rm -f /tmp/get-pip.py
+    fi
+  fi
+
   "$VENV_DIR/bin/python" -m pip install --upgrade pip
   "$VENV_DIR/bin/pip" install -r "$BACKEND_DIR/requirements.txt"
 

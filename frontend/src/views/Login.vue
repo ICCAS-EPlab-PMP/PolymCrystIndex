@@ -160,10 +160,7 @@
           </p>
         </div>
 
-        <div class="demo-hint">
-          <p>{{ t('login.demoHint') }}</p>
-          <code>admin / admin123</code>
-        </div>
+
       </div>
     </div>
   </div>

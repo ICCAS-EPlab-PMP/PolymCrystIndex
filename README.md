@@ -99,7 +99,6 @@ We do not currently maintain or test macOS devices, and we **do not provide a va
 
 ```bash
 # example only; adjust to your own source package layout
-tar -xzf your-source-package.tar.gz
 cd PolymCrystIndex/deploy/server
 bash ./install_user_linux.sh
 ```

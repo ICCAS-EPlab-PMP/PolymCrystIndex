@@ -15,6 +15,7 @@ module fitting_module
     integer tilt_check
     integer :: crystal_system
     integer :: fixhklfile!是否存在固定文件
+    integer :: fixlmode  ! 固定层号模式标志 (0=固定HKL, 1=固定l)
     integer,allocatable :: fixhkl(:,:)
     integer :: ortho_ab_star ! a*与b*垂直约束标志
     
@@ -788,11 +789,24 @@ contains
         ! 3. 固定晶面处理 (在释放min_error_list之前执行)
         if (allocated(fixhkl)) then
             do k = 1, fixhklfile
-                Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
-                current_members(:, :) = 0
-                current_members(1, :) = fixhkl(k, 2:4)
-                call set_family_assignment(fixhkl(k, 1), fixhkl(k, 2), fixhkl(k, 3), fixhkl(k, 4), &
-                                           1, 0, current_members, min_error_list(fixhkl(k, 1)))
+                if (fixlmode == 1) then
+                    Miller_trans(fixhkl(k, 1), 3) = fixhkl(k, 4)
+                    current_members(:, :) = 0
+                    current_members(1, 1) = int(Miller_trans(fixhkl(k, 1), 1))
+                    current_members(1, 2) = int(Miller_trans(fixhkl(k, 1), 2))
+                    current_members(1, 3) = fixhkl(k, 4)
+                    call set_family_assignment(fixhkl(k, 1), &
+                        int(Miller_trans(fixhkl(k, 1), 1)), &
+                        int(Miller_trans(fixhkl(k, 1), 2)), &
+                        fixhkl(k, 4), &
+                        1, 0, current_members, min_error_list(fixhkl(k, 1)))
+                else
+                    Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
+                    current_members(:, :) = 0
+                    current_members(1, :) = fixhkl(k, 2:4)
+                    call set_family_assignment(fixhkl(k, 1), fixhkl(k, 2), fixhkl(k, 3), fixhkl(k, 4), &
+                                                1, 0, current_members, min_error_list(fixhkl(k, 1)))
+                end if
             end do
         end if
 
@@ -1010,9 +1024,10 @@ program LMfit
     !读取cell_n.txt文件中的数据
     open(unit=1,file=filename_input,status='old',action='read')!打开input文件,并且将文件的内容读取到1号文件中
     fixhklfile = 0!初始化
+    fixlmode = 0
     ortho_ab_star = 0!初始化a*与b*垂直约束标志
     !文件第一行为波长，第二行为检测器距离，第三行为检测器类型
-    do i=1,28
+    do i=1,29
         if (i==1) then
             read(1,*) wavelength
         else if (i==4) then
@@ -1071,6 +1086,8 @@ program LMfit
             read(1,*) tilt_check!确定是否优化tilt-0等默认不优化，1为优化
         else if (i == 28) then
             read(1,*) fixhklfile!确定是否固定hkl，如果/=0，则打开hkl文件，读取fixhkl数量的文件
+        else if (i == 29) then
+            read(1,*) fixlmode
         else
             read(1,*)
         end if 

@@ -51,6 +51,7 @@ module fitting_module
     integer :: tilt_check
     integer :: crystal_system
     integer :: fixhklfile
+    integer :: fixlmode  ! 固定层号模式标志 (0=固定HKL, 1=固定l)
     integer, allocatable :: fixhkl(:,:)
     integer :: ortho_ab_star
     
@@ -498,7 +499,11 @@ contains
         
         if (allocated(fixhkl)) then
             do k = 1, fixhklfile
-                Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
+                if (fixlmode == 1) then
+                    Miller_trans(fixhkl(k, 1), 3) = fixhkl(k, 4)
+                else
+                    Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
+                end if
             end do
         end if
     end subroutine
@@ -1124,9 +1129,10 @@ contains
         open(unit=1, file=filename_input, status='old', action='read')
         
         fixhklfile = 0
+        fixlmode = 0
         ortho_ab_star = 0
         
-        do i = 1, 28
+        do i = 1, 29
             if (i == 1) then
                 read(1, *) wavelength
             else if (i == 4) then
@@ -1171,6 +1177,8 @@ contains
                 read(1, *) tilt_check
             else if (i == 28) then
                 read(1, *) fixhklfile
+            else if (i == 29) then
+                read(1, *) fixlmode
             else
                 read(1, *)
             end if

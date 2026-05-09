@@ -131,7 +131,7 @@ contains
     ! @子程序: read_input_file
     ! @描述: 读取输入配置文件（input.txt）
     !        
-    ! @文件格式（28行）:
+    ! @文件格式（29行）:
     !   1: wavelength
     !   4: num_cell
     !   13: level
@@ -147,6 +147,7 @@ contains
     !   26: amax, bmax, cmax, alphamax, betamax, gammamax
     !   27: tilt_check
     !   28: fixhklfile
+    !   29: fixlmode
     !======================================================================
     subroutine read_input_file(filename_input)
         character(len=100), intent(in) :: filename_input
@@ -158,9 +159,10 @@ contains
         open(unit=1, file=filename_input, status='old', action='read')
         
         fixhklfile = 0
+        fixlmode = 0
         ortho_ab_star = 0
         
-        do i = 1, 28
+        do i = 1, 29
             if (i == 1) then
                 read(1, *) wavelength
             else if (i == 4) then
@@ -203,6 +205,8 @@ contains
                 read(1, *) tilt_check
             else if (i == 28) then
                 read(1, *) fixhklfile
+            else if (i == 29) then
+                read(1, *) fixlmode
             else
                 read(1, *)
             end if

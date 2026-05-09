@@ -255,7 +255,11 @@ contains
         
         if (allocated(fixhkl)) then
             do k = 1, fixhklfile
-                Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
+                if (fixlmode == 1) then
+                    Miller_trans(fixhkl(k, 1), 3) = fixhkl(k, 4)
+                else
+                    Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
+                end if
             end do
         end if
     end subroutine

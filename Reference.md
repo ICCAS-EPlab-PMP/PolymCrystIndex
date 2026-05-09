@@ -1,6 +1,6 @@
 # PolymCrystIndex 参考文档 / Reference
 
-> 纤维衍射图谱指标化平台 v1.8.3
+> 纤维衍射图谱指标化平台 v1.8.4
 >
 > **技术栈**: Vue.js 3 (前端) + FastAPI (后端) + Fortran (核心算法)
 

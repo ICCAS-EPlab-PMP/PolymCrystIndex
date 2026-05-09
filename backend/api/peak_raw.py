@@ -118,6 +118,16 @@ class DeleteRecordReq(BaseModel):
     index: int
 
 
+class SaveRecordsReq(BaseModel):
+    session_id: str
+    name: str = ""
+
+
+class LoadRecordsReq(BaseModel):
+    session_id: str
+    record_id: str
+
+
 class ClearRecordsReq(BaseModel):
     session_id: str
 
@@ -512,6 +522,31 @@ def clear_records(req: ClearRecordsReq):
     sess = raw_store.require(req.session_id)
     sess["records"].clear()
     return {"records": []}
+
+
+@router.post("/save-records")
+def save_records(req: SaveRecordsReq):
+    try:
+        saved = raw_store.save_records(req.session_id, name=req.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"saved_record": saved, "records": raw_store.require(req.session_id).get("records", [])}
+
+
+@router.get("/saved-records")
+def list_saved_records():
+    return {"items": raw_store.list_saved_records()}
+
+
+@router.post("/load-records")
+def load_records(req: LoadRecordsReq):
+    try:
+        loaded = raw_store.load_records(req.session_id, req.record_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"loaded_record": {k: v for k, v in loaded.items() if k != "records"}, "records": loaded["records"]}
 
 
 @router.post("/calc-pixel")

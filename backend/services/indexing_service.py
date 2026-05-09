@@ -781,6 +781,30 @@ class IndexingService:
 
         return normalized_lines
 
+    def _parse_fixed_l_text(self, fixed_l_text: str) -> List[str]:
+        """Normalize fixed-l text into fixhkl-compatible lines (peak_index 0 0 l)."""
+        if not fixed_l_text:
+            return []
+        normalized_lines = []
+        for index, raw_line in enumerate(fixed_l_text.splitlines(), start=1):
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            parts = stripped.split()
+            if len(parts) != 2:
+                raise ValueError(
+                    f"Invalid fixed-l format on line {index}. Expected: peak_index l"
+                )
+            try:
+                peak_idx = int(parts[0])
+                l_val = int(parts[1])
+                normalized_lines.append(f"{peak_idx} 0 0 {l_val}")
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid fixed-l integer on line {index}. Expected: peak_index l"
+                ) from exc
+        return normalized_lines
+
     def _write_fixed_peak_file(self, work_dir: str, fixed_peak_text: str) -> int:
         """Write fixhkl.txt in task work_dir and return fixed peak count."""
         fixed_peak_lines = self._parse_fixed_peak_text(fixed_peak_text)
@@ -794,6 +818,17 @@ class IndexingService:
 
         return len(fixed_peak_lines)
 
+    def _write_fixed_l_file(self, work_dir: str, fixed_l_text: str) -> int:
+        """Write fixhkl.txt in task work_dir for fixed-l mode and return entry count."""
+        fixed_l_lines = self._parse_fixed_l_text(fixed_l_text)
+        fixhkl_path = os.path.join(work_dir, "fixhkl.txt")
+        if fixed_l_lines:
+            with open(fixhkl_path, "w") as f:
+                f.write("\n".join(fixed_l_lines) + "\n")
+        elif os.path.exists(fixhkl_path):
+            os.remove(fixhkl_path)
+        return len(fixed_l_lines)
+
     def _params_to_input_config(
         self,
         params: AnalysisParams,
@@ -801,7 +836,7 @@ class IndexingService:
         data_file: Optional[str] = None,
         fixed_peak_count: Optional[int] = None,
     ) -> str:
-        """Convert AnalysisParams to input.txt file (30-line format for Fortran)."""
+        """Convert AnalysisParams to input.txt file (29-line format for Fortran)."""
         lines = []
         if fixed_peak_count is not None:
             fixed_peak_count_val = fixed_peak_count
@@ -879,7 +914,10 @@ class IndexingService:
         lines.append("1" if params.tiltCheck else "0")
         lines.append(str(fixed_peak_count_val))
 
-        if len(lines) != 28:
+        fixl_mode = 1 if getattr(params, "fixLModeEnabled", False) else 0
+        lines.append(str(fixl_mode))
+
+        if len(lines) != 29:
             raise ValueError(f"Unexpected input.txt line count: {len(lines)}")
 
         work_dir_abs = os.path.abspath(work_dir)
@@ -1024,10 +1062,15 @@ class IndexingService:
                     shutil.copy(data_file, diffraction_file)
 
                     fix_mode_enabled = getattr(params, "fixModeEnabled", False)
+                    fix_l_mode_enabled = getattr(params, "fixLModeEnabled", False)
                     fixed_peak_count_for_input = 0
                     if fix_mode_enabled:
                         fixed_peak_count_for_input = self._write_fixed_peak_file(
                             work_dir, getattr(params, "fixedPeakText", "")
+                        )
+                    elif fix_l_mode_enabled:
+                        fixed_peak_count_for_input = self._write_fixed_l_file(
+                            work_dir, getattr(params, "fixedLText", "")
                         )
                     tracker.append_log(
                         f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [System] Fixed peaks prepared: count={fixed_peak_count_for_input}"
@@ -1139,6 +1182,14 @@ class IndexingService:
                     tracker.append_log(
                         f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [Warning] Miller post-processing may have failed"
                     )
+
+                # Unconditional final sync before COMPLETED - fixes best_fitness drop to 0.0
+                await self.task_manager.update_task_progress(
+                    task_id,
+                    tracker.current_step,
+                    tracker.best_fitness,
+                    tracker.get_logs()[-1] if tracker.get_logs() else None,
+                )
 
                 await self.task_manager.update_task_status(
                     task_id, TaskStatus.COMPLETED
@@ -1259,6 +1310,86 @@ class IndexingService:
                     ),
                 },
             }
+
+    def run_reverse_glide_fullmiller(
+        self,
+        a: float,
+        b: float,
+        c: float,
+        alpha: float,
+        beta: float,
+        gamma: float,
+        wavelength: float,
+        glide_candidates: list,
+    ) -> Dict[str, Any]:
+        import tempfile
+
+        base_result = postprocess_core.compute_reverse_glide(
+            a, b, c, alpha, beta, gamma, wavelength,
+            [{"label": getattr(gc, "label", ""), "nA": getattr(gc, "nA", 0), "nB": getattr(gc, "nB", 0), "l0": getattr(gc, "l0", 1)}
+             for gc in glide_candidates],
+        )
+
+        with tempfile.TemporaryDirectory(prefix="reverse_glide_") as work_dir:
+            input_file = os.path.join(work_dir, "input.txt")
+            lines = [
+                str(wavelength), "0", "flat", "2000", "30",
+                "0.100", "0.200", "0.500", "0.200", "2",
+                "0", "1", "1", "1", "100.0", "500.0", "1.0",
+                "0", "0", "0", "0", "0", "0", "0.95",
+                "3.0 3.0 5.0 60.0 60.0 60.0",
+                "10.0 10.0 15.0 150.0 150.0 150.0",
+                "0", "0", "0", "0",
+            ]
+            with open(input_file, "w") as f:
+                f.write("\n".join(lines))
+
+            diffraction_file = os.path.join(work_dir, "observed_diffraction.txt")
+            with open(diffraction_file, "w") as f:
+                f.write("0.1 0.0\n")
+
+            for cr in base_result["candidateResults"]:
+                if cr.get("status") != "computed":
+                    continue
+                cp = cr["cellParams"]
+                cell_values = [cp["a"], cp["b"], cp["c"], cp["alpha"], cp["beta"], cp["gamma"]]
+                batch_dir = os.path.join(work_dir, cr["label"])
+                os.makedirs(batch_dir, exist_ok=True)
+
+                shutil.copy2(input_file, os.path.join(batch_dir, "input.txt"))
+                shutil.copy2(diffraction_file, os.path.join(batch_dir, "observed_diffraction.txt"))
+                self._write_cell_parameters(
+                    os.path.join(batch_dir, "cell_0.txt"), cell_values,
+                )
+
+                success = self._run_miller_postprocess(batch_dir, 0)
+                if success:
+                    bundle = postprocess_core.read_postprocess_bundle(batch_dir, 0)
+                    cr["fullMillerContent"] = bundle.get("fullMillerContent", "")
+                    cr["totalReflections"] = bundle.get("totalReflections", 0)
+                    cr["workDir"] = batch_dir
+                else:
+                    cr["fullMillerContent"] = ""
+                    cr["totalReflections"] = 0
+                    cr["workDir"] = batch_dir
+
+        return {"success": True, "data": base_result}
+
+    def run_supercell_fullmiller(
+        self,
+        a: float,
+        b: float,
+        c: float,
+        alpha: float,
+        beta: float,
+        gamma: float,
+        wavelength: float,
+    ) -> Dict[str, Any]:
+        return self.run_manual_fullmiller(
+            a=a, b=b, c=c,
+            alpha=alpha, beta=beta, gamma=gamma,
+            wavelength=wavelength,
+        )
 
     def run_glide_batch(
         self,
@@ -1701,6 +1832,7 @@ class IndexingService:
                     "peakSymmetryGroupsSource": peak_symmetry_groups_source,
                     # ---
                     "glideBatchOutputs": glide_batch_artifact,
+                    "workDir": work_dir,
                     "files": {
                         "cell_file": f"cell_{task.total_steps - 1}.txt",
                         "miller_file": "outputMiller.txt",

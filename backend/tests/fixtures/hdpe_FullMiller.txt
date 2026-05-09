@@ -1,0 +1,7 @@
+# HDPE Miller indices relevant to regression scenario
+# Format: H K L q(A-1) psi(degree) psi-root(degree) 2theta(degree)
+# Key scenario: 200 and -200 reflections have identical q and 2theta
+# These appear at lines 51-52 in merge_test/FullMiller.txt
+ H K L q(A-1) psi(degree) psi-root(degree) 2theta(degree)
+         -2           0           0   1.6847510219298161      -0.10178197195575808        0.0000000000000000        19.139085913847012
+          2           0           0   1.6847510219298161      -0.10178197195575808        0.0000000000000000        19.139085913847012

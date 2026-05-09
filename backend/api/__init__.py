@@ -5,6 +5,7 @@ from .analysis import router as analysis_router
 from .results import router as results_router
 from .visualizer import router as visualizer_router
 from .status import router as status_router
+from .update import router as update_router
 from .peak_raw import router as peak_raw_router
 from .peak_integrated import router as peak_integrated_router
 from .admin.users import router as admin_users_router
@@ -19,6 +20,7 @@ __all__ = [
     "results_router",
     "visualizer_router",
     "status_router",
+    "update_router",
     "peak_raw_router",
     "peak_integrated_router",
     "admin_users_router",

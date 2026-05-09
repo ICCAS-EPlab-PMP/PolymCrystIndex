@@ -27,12 +27,17 @@ from models.analysis import (
     ManualBatchResponse,
     GlideBatchRequest,
     GlideBatchResponse,
+    ReverseGlideRequest,
+    ReverseGlideResponse,
+    SupercellBatchRequest,
+    SupercellBatchResponse,
 )
 from services.task_manager import TaskManager, TaskStatus
 from services.indexing_service import IndexingService
 from services.file_service import FileService
 from services.user_service import UserService
 from services.system_config_service import SystemConfigService
+from services import postprocess_core
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
@@ -59,9 +64,34 @@ def _normalize_fixed_peak_text(text: str) -> str:
     return "\n".join(normalized_lines)
 
 
+def _normalize_fixed_l_text(text: str) -> str:
+    if not text:
+        return ""
+    normalized_lines = []
+    for index, raw_line in enumerate(text.splitlines(), start=1):
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split()
+        if len(parts) != 2 or any(
+            not re.fullmatch(r"[+-]?\d+", part) for part in parts
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid fixed-l format on line {index}. Expected: peak_index l",
+            )
+        normalized_lines.append(" ".join(parts))
+    return "\n".join(normalized_lines)
+
+
 def _normalize_glide_batch_labels(request: AnalysisRunRequest) -> None:
     for index, batch in enumerate(request.params.glideBatches, start=1):
         batch.label = (batch.label or "").strip() or f"glide_{index:02d}"
+
+
+def _normalize_reverse_glide_candidate_labels(request: ReverseGlideRequest) -> None:
+    for index, candidate in enumerate(request.glideCandidates, start=1):
+        candidate.label = (candidate.label or "").strip() or f"reverse_{index:02d}"
 
 
 @router.post("/run", response_model=AnalysisRunResponse)
@@ -107,6 +137,18 @@ async def run_analysis(
         )
     else:
         request.params.fixedPeakText = ""
+    # Mutual exclusion: fixed-HKL and fixed-l cannot coexist
+    if request.params.fixModeEnabled and request.params.fixLModeEnabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Fixed-HKL and fixed-l modes are mutually exclusive. Enable only one.",
+        )
+    if request.params.fixLModeEnabled:
+        request.params.fixedLText = _normalize_fixed_l_text(
+            request.params.fixedLText
+        )
+    else:
+        request.params.fixedLText = ""
     _normalize_glide_batch_labels(request)
     request.params.symmetryTq = max(0.0, request.params.symmetryTq or 0.2)
     request.params.symmetryTa = max(0.0, request.params.symmetryTa or 2.0)
@@ -393,3 +435,80 @@ async def glide_batch_fullmiller(
         )
     except Exception as exc:
         return GlideBatchResponse(success=False, message=str(exc))
+
+
+@router.post("/reverse-glide", response_model=ReverseGlideResponse)
+async def reverse_glide(
+    request: ReverseGlideRequest,
+    current_user: dict = Depends(get_current_user),
+    task_manager: TaskManager = Depends(get_task_manager),
+):
+    _normalize_reverse_glide_candidate_labels(request)
+    indexing_service = IndexingService(task_manager)
+    try:
+        result = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: indexing_service.run_reverse_glide_fullmiller(
+                a=request.a,
+                b=request.b,
+                c=request.c,
+                alpha=request.alpha,
+                beta=request.beta,
+                gamma=request.gamma,
+                wavelength=request.wavelength,
+                glide_candidates=request.glideCandidates,
+            ),
+        )
+        return ReverseGlideResponse(
+            success=result.get("success", False),
+            data=result.get("data"),
+            message=result.get("message"),
+        )
+    except Exception as exc:
+        return ReverseGlideResponse(success=False, message=str(exc))
+
+
+@router.post("/supercell-fullmiller", response_model=SupercellBatchResponse)
+async def supercell_batch_fullmiller(
+    request: SupercellBatchRequest,
+    current_user: dict = Depends(get_current_user),
+    task_manager: TaskManager = Depends(get_task_manager),
+):
+    indexing_service = IndexingService(task_manager)
+    try:
+        results = []
+        for idx, group in enumerate(request.groups):
+            label = group.label or f"supercell_{idx + 1:02d}"
+            try:
+                result = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    lambda g=group: indexing_service.run_supercell_fullmiller(
+                        a=g.a * g.na,
+                        b=g.b * g.nb,
+                        c=g.c * g.nc,
+                        alpha=g.alpha,
+                        beta=g.beta,
+                        gamma=g.gamma,
+                        wavelength=g.wavelength,
+                    ),
+                )
+                if result.get("success") and result.get("data"):
+                    result["data"]["label"] = label
+                    result["data"]["supercellFactors"] = {
+                        "na": group.na,
+                        "nb": group.nb,
+                        "nc": group.nc,
+                        "total": group.na * group.nb * group.nc,
+                    }
+                results.append(result)
+            except Exception as exc:
+                results.append({"success": False, "message": str(exc), "label": label})
+
+        all_success = all(r.get("success") for r in results)
+        return SupercellBatchResponse(
+            success=all_success,
+            data=results,
+            message=None if all_success else "Some groups failed",
+        )
+    except Exception as exc:
+        return SupercellBatchResponse(success=False, message=str(exc))

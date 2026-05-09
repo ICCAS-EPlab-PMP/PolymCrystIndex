@@ -506,6 +506,20 @@ class PsiAzimuthMapper:
         az = (-psi + self.offset) if self.convention == "ccw" else (psi + self.offset)
         return AngleUtils.normalize_to_180(az)
 
+    def map_relative(self, psi_like: float) -> float:
+        """Map a UI-relative psi-like crop angle onto the real image azimuth."""
+        return self.map(psi_like)
+
+    def crop_bounds(self, crop_start: float, crop_end: float) -> tuple[float, float]:
+        return self.map_relative(crop_start), self.map_relative(crop_end)
+
+    @staticmethod
+    def azimuth_in_crop(azimuth: float, crop_start: float, crop_end: float) -> bool:
+        az_norm = AngleUtils.normalize_to_180(azimuth)
+        if crop_start <= crop_end:
+            return crop_start <= az_norm <= crop_end
+        return az_norm >= crop_start or az_norm <= crop_end
+
     def map_miller_list(self, miller_raw: list[dict]) -> list[dict]:
         return [
             {
@@ -537,15 +551,15 @@ def draw_raw_markers(
     """
     img = pil_img.convert('RGB')
     draw = ImageDraw.Draw(img)
-    font = _ui_font(16)
+    font = _ui_font(18)
     W, H = img.size
     full_pts = [p for p in full_pts if 0 <= p['x'] < W and 0 <= p['y'] < H]
     output_pts = [p for p in output_pts if 0 <= p['x'] < W and 0 <= p['y'] < H]
 
     # 中心十字（黄色）
     x0, y0 = int(round(cx)), int(round(cy))
-    draw.line([(x0 - 14, y0), (x0 + 14, y0)], fill=(255, 255, 0), width=2)
-    draw.line([(x0, y0 - 14), (x0, y0 + 14)], fill=(255, 255, 0), width=2)
+    draw.line([(x0 - 14, y0), (x0 + 14, y0)], fill=(255, 255, 0), width=4)
+    draw.line([(x0, y0 - 14), (x0, y0 + 14)], fill=(255, 255, 0), width=4)
 
     # ── FullMiller 多组叠加色板 / outputMiller 橙色 ───────────────────────
     OVERLAY_COLORS = [
@@ -558,11 +572,11 @@ def draw_raw_markers(
     ORANGE = (255, 140, 0)
 
     def draw_square(x, y, color):
-        draw.rectangle([x - 3, y - 3, x + 3, y + 3], outline=color, width=2)
+        draw.rectangle([x - 10, y - 10, x + 10, y + 10], outline=color, width=4)
 
     def draw_diamond(x, y, color):
-        pts = [(x, y - 5), (x + 4, y), (x, y + 5), (x - 4, y)]
-        draw.polygon(pts, outline=color)
+        pts = [(x, y - 12), (x + 10, y), (x, y + 12), (x - 10, y)]
+        draw.polygon(pts, outline=color, width=4)
 
     def draw_group(pts, color, draw_fn):
         groups: dict = {}

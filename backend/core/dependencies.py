@@ -9,6 +9,7 @@ from repositories.user_repository import UserRepository
 from services.auth_service import AuthService
 from services.indexing_service import IndexingService
 from services.task_manager import TaskManager
+from services.update_service import UpdateService
 from services.user_service import UserService
 
 if TYPE_CHECKING:
@@ -23,6 +24,7 @@ _user_service: Optional[UserService] = None
 _auth_service: Optional[AuthService] = None
 _system_config_repository: Optional["SystemConfigRepository"] = None
 _system_config_service: Optional["SystemConfigService"] = None
+_update_service: Optional[UpdateService] = None
 
 
 def get_user_repository() -> UserRepository:
@@ -81,6 +83,14 @@ def get_system_config_service() -> "SystemConfigService":
         from services.system_config_service import SystemConfigService
         _system_config_service = SystemConfigService(get_system_config_repository())
     return _system_config_service
+
+
+def get_update_service() -> UpdateService:
+    """Get the global update checking service instance."""
+    global _update_service
+    if _update_service is None:
+        _update_service = UpdateService(settings=settings)
+    return _update_service
 
 
 async def get_current_user(request: Request) -> Dict[str, str]:

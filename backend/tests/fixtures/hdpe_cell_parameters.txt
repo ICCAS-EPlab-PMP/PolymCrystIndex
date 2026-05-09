@@ -1,0 +1,4 @@
+# HDPE unit cell parameters (orthorhombic polyethylene)
+# Extracted from merge_test/cell_parameters.txt - representative row
+# Format: a b c alpha beta gamma [optional_metric]
+7.4590 4.9443 2.5734 89.5206 90.2892 90.1208 -0.6037

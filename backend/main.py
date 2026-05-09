@@ -33,6 +33,7 @@ from api import (
     results_router,
     visualizer_router,
     status_router,
+    update_router,
     peak_raw_router,
     peak_integrated_router,
     admin_users_router,
@@ -127,6 +128,7 @@ app.include_router(analysis_router, prefix=settings.API_PREFIX)
 app.include_router(results_router, prefix=settings.API_PREFIX)
 app.include_router(visualizer_router, prefix=settings.API_PREFIX)
 app.include_router(status_router, prefix=settings.API_PREFIX)
+app.include_router(update_router, prefix=settings.API_PREFIX)
 app.include_router(peak_raw_router, prefix=settings.API_PREFIX)
 app.include_router(peak_integrated_router, prefix=settings.API_PREFIX)
 if not settings.AUTH_DISABLED:

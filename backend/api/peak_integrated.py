@@ -14,6 +14,7 @@ from scipy.signal import find_peaks
 from services.session_store import int_store
 from services.image_service import downsample_2d
 from services.physics import normalize_angle_180
+from services.diffraction_utils import PsiAzimuthMapper
 
 router = APIRouter(prefix="/peak/integrated")
 
@@ -56,6 +57,16 @@ class DeleteReq(BaseModel):
     index: int
 
 
+class SaveRecordsReq(BaseModel):
+    session_id: str
+    name: str = ""
+
+
+class LoadRecordsReq(BaseModel):
+    session_id: str
+    record_id: str
+
+
 class MillerSettingsReq(BaseModel):
     session_id: str
     convention: str = "0_horizontal_ccw"
@@ -88,20 +99,13 @@ def _miller_az(psi_orig, convention, ref):
 
 def _psi_to_az(psi, convention, ref):
     """Map relative angle (psi) to real azimuth using convention + ref. ccw/cw."""
-    norm = (psi % 360 + 360) % 360
-    if convention == "ccw":
-        az = -norm + ref
-    else:
-        az = norm + ref
-    return normalize_angle_180(az)
+    mapper = PsiAzimuthMapper(convention=convention, offset=ref)
+    return mapper.map_relative(psi)
 
 
 def _angle_in_crop(az, crop_start, crop_end):
     """Check if az (normalized to [-180,180)) is within crop interval. Supports wrap-around."""
-    az_norm = normalize_angle_180(az)
-    if crop_start <= crop_end:
-        return crop_start <= az_norm <= crop_end
-    return az_norm >= crop_start or az_norm <= crop_end
+    return PsiAzimuthMapper.azimuth_in_crop(az, crop_start, crop_end)
 
 
 def _az_mask_for_crop(azv, crop_start, crop_end):
@@ -294,10 +298,12 @@ def get_slice(req: SliceReq):
     az1 = req.center_az + req.az_int_width / 2
     r0, r1 = sorted([_row(az0), _row(az1)])
     r0 = max(0, r0); r1 = min(rows-1, r1)
+    empty_crop = False
     if crop_mask is not None:
         slab_rows = np.where(crop_mask[r0:r1+1])[0] + r0
         if len(slab_rows) == 0:
-            iq = np.zeros(cols)
+            empty_crop = True
+            iq = np.array([])
         else:
             iq = np.mean(data[slab_rows, :], axis=0)
     else:
@@ -319,12 +325,24 @@ def get_slice(req: SliceReq):
     mask_az = (azv >= azd0) & (azv <= azd1)
     if crop_mask is not None:
         mask_az = mask_az & crop_mask
+        if not np.any(mask_az):
+            empty_crop = True
+
+    if empty_crop:
+        return {
+            "q_values": [],
+            "i_q": [],
+            "az_values": [],
+            "i_az": [],
+            "empty_crop": True,
+        }
 
     return {
         "q_values":  qv[mask_q].tolist(),
         "i_q":       iq[mask_q].tolist(),
         "az_values": azv[mask_az].tolist(),
         "i_az":      iaz[mask_az].tolist(),
+        "empty_crop": False,
     }
 
 
@@ -350,10 +368,12 @@ def find_peaks_in_region(req: FindPeaksReq):
     def col_idx(q):  return int(np.clip(np.argmin(np.abs(qv  - q)),  0, cols-1))
 
     r0, r1 = sorted([row_idx(req.az_min), row_idx(req.az_max)])
+    empty_crop = False
     if crop_mask is not None:
         valid_rows = np.where(crop_mask[r0:r1+1])[0] + r0
         if len(valid_rows) == 0:
-            iq_full = np.zeros(cols)
+            empty_crop = True
+            iq_full = np.array([])
         else:
             iq_full = np.mean(data[valid_rows, :], axis=0)
     else:
@@ -371,6 +391,7 @@ def find_peaks_in_region(req: FindPeaksReq):
     if crop_mask is not None:
         peak_candidates = np.where(crop_mask[ai0:ai1+1])[0] + ai0
         if len(peak_candidates) == 0:
+            empty_crop = True
             az_pks = []
         else:
             iaz_crop = iaz_full[peak_candidates]
@@ -384,7 +405,10 @@ def find_peaks_in_region(req: FindPeaksReq):
     else:
         az_pks = []
 
-    return {"q_peaks": q_pks, "az_peaks": az_pks}
+    if empty_crop:
+        return {"q_peaks": [], "az_peaks": [], "empty_crop": True}
+
+    return {"q_peaks": q_pks, "az_peaks": az_pks, "empty_crop": False}
 
 
 @router.post("/record-peaks")
@@ -420,6 +444,31 @@ def clear_records(body: dict):
     sess = int_store.require(sid)
     sess["records"].clear()
     return {"records": []}
+
+
+@router.post("/save-records")
+def save_records(req: SaveRecordsReq):
+    try:
+        saved = int_store.save_records(req.session_id, name=req.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"saved_record": saved, "records": int_store.require(req.session_id).get("records", [])}
+
+
+@router.get("/saved-records")
+def list_saved_records():
+    return {"items": int_store.list_saved_records()}
+
+
+@router.post("/load-records")
+def load_records(req: LoadRecordsReq):
+    try:
+        loaded = int_store.load_records(req.session_id, req.record_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"loaded_record": {k: v for k, v in loaded.items() if k != "records"}, "records": loaded["records"]}
 
 
 @router.get("/export-csv/{session_id}")

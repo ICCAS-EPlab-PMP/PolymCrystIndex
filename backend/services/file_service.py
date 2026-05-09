@@ -22,14 +22,23 @@ class FileService:
         Returns:
             Tuple of (is_valid, count, message)
         """
-        lines = content.strip().split('\n')
+        # Unify line endings first, then check by original line number
+        normalized = content.replace('\r\n', '\n').replace('\r', '\n')
+        lines = normalized.split('\n')
+        # Remove trailing artifact if content ends with newline
+        if lines and lines[-1] == '':
+            lines = lines[:-1]
         valid_count = 0
         warnings = []
         
         for i, line in enumerate(lines):
-            line = line.strip()
-            if not line or line.startswith('#'):
+            stripped = line.strip()
+            if stripped.startswith('#'):
                 continue
+            if not stripped:
+                warnings.append(f"Line {i+1}: blank line/空行")
+                continue
+            line = stripped
             
             parts = line.split()
             if len(parts) < 3:

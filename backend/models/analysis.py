@@ -81,6 +81,8 @@ class AnalysisParams(BaseModel):
     custL: int = Field(default=0, ge=0)
     fixModeEnabled: bool = Field(default=False)
     fixedPeakText: str = Field(default="")
+    fixLModeEnabled: bool = Field(default=False)
+    fixedLText: str = Field(default="")
     ompThreads: int = Field(default=1, ge=1, le=1024)
     glideBatches: List[GlideBatchParams] = Field(default_factory=list)
 
@@ -181,4 +183,70 @@ class GlideBatchResponse(BaseModel):
 
     success: bool = True
     data: Optional[dict] = None
+    message: Optional[str] = None
+
+
+class ReverseGlideCandidateParams(BaseModel):
+    """One reverse-glide candidate with nA, nB, l0 parameters."""
+
+    label: str = Field(default="")
+    nA: int = Field(default=0)
+    nB: int = Field(default=0)
+    l0: int
+
+    @model_validator(mode="after")
+    def validate_l0(self) -> "ReverseGlideCandidateParams":
+        if self.l0 == 0:
+            raise ValueError("reverse glide candidate l0 cannot be 0")
+        return self
+
+
+class ReverseGlideRequest(BaseModel):
+    """Reverse-glide request with direct cell parameters."""
+
+    a: float = Field(gt=0)
+    b: float = Field(gt=0)
+    c: float = Field(gt=0)
+    alpha: float = Field(gt=0, le=180)
+    beta: float = Field(gt=0, le=180)
+    gamma: float = Field(gt=0, le=180)
+    wavelength: float = Field(default=1.542, gt=0)
+    glideCandidates: List[ReverseGlideCandidateParams] = Field(min_length=1)
+
+
+class ReverseGlideResponse(BaseModel):
+    """Placeholder response for reverse-glide scaffolding."""
+
+    success: bool = True
+    data: Optional[dict] = None
+    message: Optional[str] = None
+
+
+class SupercellCellRequest(BaseModel):
+    """One item in a supercell batch request — cell params + wavelength + supercell factors."""
+
+    label: str = Field(default="")
+    a: float = Field(gt=0)
+    b: float = Field(gt=0)
+    c: float = Field(gt=0)
+    alpha: float = Field(gt=0, le=180)
+    beta: float = Field(gt=0, le=180)
+    gamma: float = Field(gt=0, le=180)
+    wavelength: float = Field(default=1.542, gt=0)
+    na: int = Field(default=1, ge=1)
+    nb: int = Field(default=1, ge=1)
+    nc: int = Field(default=1, ge=1)
+
+
+class SupercellBatchRequest(BaseModel):
+    """Batch supercell request — multiple groups of cell params + supercell factors."""
+
+    groups: List[SupercellCellRequest] = Field(min_length=1)
+
+
+class SupercellBatchResponse(BaseModel):
+    """Response for batch supercell FullMiller generation."""
+
+    success: bool = True
+    data: Optional[List[dict]] = None
     message: Optional[str] = None

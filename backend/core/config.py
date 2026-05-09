@@ -50,8 +50,16 @@ class Settings(BaseSettings):
     """
 
     PROJECT_NAME: str = "PolymCrystIndex API"
-    VERSION: str = "1.8.3"
+    VERSION: str = "1.8.4"
     API_PREFIX: str = "/api"
+    OFFICIAL_DOWNLOAD_URL: str = "http://www.polymcrystal.com/download/PolymCrystindexsetup.zip"
+    GITHUB_RELEASES_API_URL: str = "https://api.github.com/repos/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/latest"
+    GITHUB_RELEASES_PAGE_URL: str = "https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases"
+    GITHUB_LATEST_RELEASE_URL: str = "https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/latest"
+    GITEE_TAGS_API_URL: str = ""
+    GITEE_RELEASES_PAGE_URL: str = ""
+    UPDATE_CHECK_TIMEOUT_SECONDS: int = 5
+    UPDATE_CHECK_CACHE_TTL_SECONDS: int = 600
 
     # --- Profile ---
     APP_PROFILE: str = ""

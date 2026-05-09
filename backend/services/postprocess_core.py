@@ -188,6 +188,83 @@ def build_glide_batch_payload(raw_batches: Optional[List[Any]]) -> List[Dict[str
     return payload
 
 
+def compute_reciprocal_params(
+    a: float, b: float, c: float,
+    alpha_deg: float, beta_deg: float, gamma_deg: float,
+) -> Dict[str, float]:
+    alpha = math.radians(alpha_deg)
+    beta = math.radians(beta_deg)
+    gamma = math.radians(gamma_deg)
+    cos_a = math.cos(alpha)
+    cos_b = math.cos(beta)
+    cos_g = math.cos(gamma)
+    sin_a = math.sin(alpha)
+    sin_b = math.sin(beta)
+    sin_g = math.sin(gamma)
+
+    v_sq = 1 - cos_a**2 - cos_b**2 - cos_g**2 + 2 * cos_a * cos_b * cos_g
+    if v_sq <= 0:
+        raise ValueError("Invalid cell parameters: volume squared is non-positive")
+    volume = a * b * c * math.sqrt(v_sq)
+
+    a_star = (b * c * sin_a) / volume
+    b_star = (a * c * sin_b) / volume
+    cos_gamma_star = (cos_a * cos_b - cos_g) / (sin_a * sin_b)
+    cos_gamma_star = max(-1.0, min(1.0, cos_gamma_star))
+    gamma_star = math.degrees(math.acos(cos_gamma_star))
+
+    return {"aStar": a_star, "bStar": b_star, "gammaStar": gamma_star, "volume": volume}
+
+
+def compute_reverse_glide(
+    a: float, b: float, c: float,
+    alpha: float, beta: float, gamma: float,
+    wavelength: float,
+    glide_candidates: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    cell_params = [a, b, c, alpha, beta, gamma]
+    reciprocal = compute_reciprocal_params(a, b, c, alpha, beta, gamma)
+
+    candidate_results = []
+    for index, candidate in enumerate(glide_candidates, start=1):
+        label = sanitize_glide_label(candidate.get("label", ""), index)
+        na_val = int(candidate.get("nA", 0))
+        nb_val = int(candidate.get("nB", 0))
+        l0_val = int(candidate.get("l0", 1))
+
+        if l0_val == 0:
+            candidate_results.append({
+                "label": label,
+                "nA": na_val,
+                "nB": nb_val,
+                "l0": l0_val,
+                "status": "skipped",
+                "message": "l0 = 0 is not valid for glide shear",
+            })
+            continue
+
+        glide_cell = apply_glide_to_cell(cell_params, na_val, nb_val, l0_val)
+        glide_volume = compute_cell_volume(glide_cell)
+
+        candidate_results.append({
+            "label": label,
+            "nA": na_val,
+            "nB": nb_val,
+            "l0": l0_val,
+            "status": "computed",
+            "cellParams": cell_values_to_dict(glide_cell),
+            "volume": glide_volume,
+        })
+
+    return {
+        "resultType": "reverse_glide",
+        "status": "computed",
+        "inputCell": {"a": a, "b": b, "c": c, "alpha": alpha, "beta": beta, "gamma": gamma},
+        "reciprocalParams": reciprocal,
+        "candidateResults": candidate_results,
+    }
+
+
 def run_miller_postprocess(work_dir: str, step: int, stop_event: Optional[threading.Event] = None) -> bool:
     """Run Fortran Miller post-process in a prepared work directory."""
     _, postprocess_path = ensure_fortran_binaries()

@@ -10,6 +10,7 @@ import os
 import base64
 import math
 import tempfile
+from copy import copy
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query, Depends
@@ -118,7 +119,7 @@ class IntRenderParams(BaseModel):
     convention: str = "ccw"
     psi_offset: float = 0.0
     az_crop_enabled: bool = False
-    az_crop_min: float = -10.0
+    az_crop_min: float = -30.0
     az_crop_max: float = 120.0
     mode: str = "Linear"
 
@@ -338,12 +339,13 @@ def raw_set_miller_content(body: RawSetMillerBody):
                 "overlay_label": group.label or f"group_{idx + 1}",
             })
     raw_state.full_miller = merged
-    raw_state.output_miller = []
     return {
         "message": f"已装载 {len(accepted_groups)} 组 FullMiller 叠加数据",
         "group_count": len(accepted_groups),
         "count": len(merged),
         "total_count": len(merged),
+        "full_miller_count": len(raw_state.full_miller),
+        "output_miller_count": len(raw_state.output_miller),
     }
 
 
@@ -660,12 +662,13 @@ def int_set_miller_content(body: RawSetMillerBody):
                 "overlay_label": group.label or f"group_{idx + 1}",
             })
     int_state.full_miller = merged
-    int_state.output_miller = []
     return {
         "message": f"已装载 {len(accepted_groups)} 组 FullMiller 到 2D 积分图",
         "group_count": len(accepted_groups),
         "count": len(merged),
         "total_count": len(merged),
+        "full_miller_count": len(int_state.full_miller),
+        "output_miller_count": len(int_state.output_miller),
     }
 
 
@@ -698,19 +701,53 @@ def int_render(params: IntRenderParams):
 
     int_state.mapper.convention = params.convention
     int_state.mapper.offset = params.psi_offset
+    mapper = int_state.mapper
 
-    full_mapped = int_state.mapper.map_miller_list(int_state.full_miller)
-    output_mapped = int_state.mapper.map_miller_list(int_state.output_miller)
+    full_mapped = mapper.map_miller_list(int_state.full_miller)
+    output_mapped = mapper.map_miller_list(int_state.output_miller)
 
     q_lo, q_hi = int_state.q_range
-    az_lo = params.az_crop_min if params.az_crop_enabled else int_state.az_range[0]
-    az_hi = params.az_crop_max if params.az_crop_enabled else int_state.az_range[1]
-    full_mapped = [m for m in full_mapped if q_lo <= m['q'] <= q_hi and az_lo <= m['az'] <= az_hi]
-    output_mapped = [m for m in output_mapped if q_lo <= m['q'] <= q_hi and az_lo <= m['az'] <= az_hi]
+    crop_start = crop_end = None
+    crop_mask = None
+    az_range = int_state.az_range
+    if params.az_crop_enabled:
+        crop_start, crop_end = mapper.crop_bounds(params.az_crop_min, params.az_crop_max)
+        az_values = np.linspace(az_range[0], az_range[1], int_state.image.shape[0])
+        crop_mask = np.array(
+            [mapper.azimuth_in_crop(az, crop_start, crop_end) for az in az_values],
+            dtype=bool,
+        )
+    crop_active = crop_start is not None and crop_end is not None
+    if crop_active:
+        assert crop_start is not None and crop_end is not None
+
+        def in_crop(azimuth: float) -> bool:
+            return mapper.azimuth_in_crop(azimuth, crop_start, crop_end)
+    else:
+        def in_crop(azimuth: float) -> bool:
+            return True
+
+    full_mapped = [
+        m for m in full_mapped
+        if q_lo <= m['q'] <= q_hi and in_crop(m['az'])
+    ]
+    output_mapped = [
+        m for m in output_mapped
+        if q_lo <= m['q'] <= q_hi and in_crop(m['az'])
+    ]
 
     cmap_str = ImageRenderer.mpl_cmap(params.colormap)
     q_range = int_state.q_range
-    az_range = int_state.az_range
+    render_image = int_state.image
+    cmap = copy(plt.get_cmap(cmap_str))
+    if crop_mask is not None:
+        masked_rows = ~crop_mask
+        if np.any(masked_rows):
+            render_image = np.ma.array(
+                int_state.image,
+                mask=np.broadcast_to(masked_rows[:, np.newaxis], int_state.image.shape),
+            )
+            cmap.set_bad(color='#1a1a2e')
 
     fig, ax = plt.subplots(figsize=(9, 7))
     fig.patch.set_facecolor('#1a1a2e')
@@ -725,10 +762,10 @@ def int_render(params: IntRenderParams):
     ax.title.set_color('#d8eeff')
 
     ax.imshow(
-        int_state.image,
+        render_image,
         aspect='auto',
         origin='lower',
-        cmap=cmap_str,
+        cmap=cmap,
         vmin=params.contrast_min,
         vmax=params.contrast_max,
         extent=[q_range[0], q_range[1], az_range[0], az_range[1]],
@@ -743,31 +780,28 @@ def int_render(params: IntRenderParams):
     if full_mapped:
         qs = [m['q'] for m in full_mapped]
         azs = [m['az'] for m in full_mapped]
-        ax.scatter(qs, azs, s=35, facecolors='none',
-                   edgecolors=_MPL_FULL, linewidths=1.8, zorder=10, label="FullMiller")
+        ax.scatter(qs, azs, s=120, facecolors='none',
+                   edgecolors=_MPL_FULL, linewidths=3.5, zorder=10, label="FullMiller")
 
     if output_mapped:
         qs = [m['q'] for m in output_mapped]
         azs = [m['az'] for m in output_mapped]
-        ax.scatter(qs, azs, s=40, marker='D', facecolors='none',
-                   edgecolors=_MPL_OUTPUT, linewidths=1.8, zorder=10, label="outputMiller")
+        ax.scatter(qs, azs, s=140, marker='D', facecolors='none',
+                   edgecolors=_MPL_OUTPUT, linewidths=3.5, zorder=10, label="outputMiller")
 
     handles = []
     if full_mapped:
         handles.append(mpatches.Patch(
-            facecolor='none', edgecolor=_MPL_FULL, linewidth=1.8, label="FullMiller"))
+            facecolor='none', edgecolor=_MPL_FULL, linewidth=3.5, label="FullMiller"))
     if output_mapped:
         handles.append(mpatches.Patch(
-            facecolor='none', edgecolor=_MPL_OUTPUT, linewidth=1.8, label="outputMiller"))
+            facecolor='none', edgecolor=_MPL_OUTPUT, linewidth=3.5, label="outputMiller"))
     if handles:
         ax.legend(handles=handles, loc='upper right', fontsize=10, framealpha=0.9,
                   facecolor='#1a1a2e', edgecolor='#7ad6fb', labelcolor='#d8eeff')
 
     ax.set_xlim(q_range)
-    if params.az_crop_enabled:
-        ax.set_ylim(params.az_crop_min, params.az_crop_max)
-    else:
-        ax.set_ylim(az_range)
+    ax.set_ylim(az_range)
 
     ax.grid(True, color='#2a2a4e', linewidth=0.5)
 

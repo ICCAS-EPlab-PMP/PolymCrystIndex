@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 import fabio
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from scipy.signal import find_peaks
@@ -71,6 +71,68 @@ class MillerSettingsReq(BaseModel):
     session_id: str
     convention: str = "0_horizontal_ccw"
     ref_azimuth: float = 0.0
+
+
+def _normalize_header_token(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (value or "").strip().lower())
+
+
+def _safe_float(value) -> Optional[float]:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_integrated_record_rows(text: str) -> list[dict[str, Optional[float]]]:
+    lines = [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+    if not lines:
+        raise HTTPException(400, "导入文件为空。")
+
+    csv_like = any("," in line for line in lines[:5])
+    rows = list(csv.reader(io.StringIO(text))) if csv_like else [re.split(r"[\t,\s]+", line) for line in lines]
+    rows = [[cell.strip() for cell in row if str(cell).strip()] for row in rows]
+    rows = [row for row in rows if row]
+    if not rows:
+        raise HTTPException(400, "导入文件中没有可识别的数据行。")
+
+    header_map: dict[str, int] = {}
+    data_rows = rows
+    normalized_header = [_normalize_header_token(token) for token in rows[0]]
+    if any(token in {"index", "peaksindex", "q", "qa1", "qvalue", "azimuth", "azimuthdeg", "psi", "chi", "intensity"} for token in normalized_header):
+        header_map = {token: idx for idx, token in enumerate(normalized_header)}
+        data_rows = rows[1:]
+
+    parsed: list[dict[str, Optional[float]]] = []
+    for row in data_rows:
+        q = azimuth = intensity = None
+        if header_map:
+            def pick(*names: str) -> Optional[float]:
+                for name in names:
+                    idx = header_map.get(name)
+                    if idx is not None and idx < len(row):
+                        value = _safe_float(row[idx])
+                        if value is not None:
+                            return value
+                return None
+
+            q = pick("qa1", "q", "qvalue")
+            azimuth = pick("azimuthdeg", "azimuth", "psi", "chi")
+            intensity = pick("intensity")
+        else:
+            numeric = [_safe_float(cell) for cell in row]
+            if len(numeric) >= 3 and numeric[0] is not None and numeric[1] is not None and numeric[2] is not None:
+                q, azimuth, intensity = numeric[0], numeric[1], numeric[2]
+            elif len(numeric) >= 2 and numeric[0] is not None and numeric[1] is not None:
+                q, azimuth = numeric[0], numeric[1]
+
+        if q is None or azimuth is None:
+            continue
+        parsed.append({"q": float(q), "azimuth": float(azimuth), "intensity": float(intensity) if intensity is not None else None})
+
+    if not parsed:
+        raise HTTPException(400, "未识别到有效记录，请使用导出的 txt/csv 格式。")
+    return parsed
 
 
 def _coords_to_pixel(q, az, q_range, az_range, rows, cols):
@@ -446,29 +508,47 @@ def clear_records(body: dict):
     return {"records": []}
 
 
+@router.post("/import-records")
+async def import_records(file: UploadFile = File(...), session_id: str = Form(...)):
+    sess = int_store.require(session_id)
+    parsed_rows = _parse_integrated_record_rows((await file.read()).decode("utf-8", errors="ignore"))
+    data = sess["data"]
+    rows, cols = data.shape
+    q_range = sess["q_range"]
+    az_range = sess["az_range"]
+    records = []
+    for item in parsed_rows:
+        px, py = _coords_to_pixel(item["q"], item["azimuth"], q_range, az_range, rows, cols)
+        r, c = int(round(py)), int(round(px))
+        if not (0 <= r < rows and 0 <= c < cols):
+            continue
+        intensity = item["intensity"]
+        if intensity is None:
+            intensity = float(data[r, c])
+        records.append({
+            "q": item["q"],
+            "azimuth": item["azimuth"],
+            "intensity": float(intensity),
+        })
+    if not records:
+        raise HTTPException(400, "导入内容不在当前积分图坐标范围内。")
+    sess["records"] = records
+    return {"records": records, "imported_count": len(records)}
+
+
 @router.post("/save-records")
 def save_records(req: SaveRecordsReq):
-    try:
-        saved = int_store.save_records(req.session_id, name=req.name)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    return {"saved_record": saved, "records": int_store.require(req.session_id).get("records", [])}
+    raise HTTPException(410, "峰提取记录现已改为临时会话数据，请使用导入/导出功能。")
 
 
 @router.get("/saved-records")
 def list_saved_records():
-    return {"items": int_store.list_saved_records()}
+    return {"items": []}
 
 
 @router.post("/load-records")
 def load_records(req: LoadRecordsReq):
-    try:
-        loaded = int_store.load_records(req.session_id, req.record_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(404, str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    return {"loaded_record": {k: v for k, v in loaded.items() if k != "records"}, "records": loaded["records"]}
+    raise HTTPException(410, "峰提取记录现已改为临时会话数据，请使用导入/导出功能。")
 
 
 @router.get("/export-csv/{session_id}")
@@ -488,4 +568,55 @@ def export_csv(session_id: str):
         gen(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=integrated_peaks.csv"},
+    )
+
+
+@router.get("/export-marked-image/{session_id}")
+def export_marked_image(
+    session_id: str,
+    colormap: str = "灰度",
+    contrast_min: Optional[float] = None,
+    contrast_max: Optional[float] = None,
+):
+    from io import BytesIO
+    from matplotlib.figure import Figure
+
+    sess = int_store.require(session_id)
+    data = sess["data"]
+    q_range = sess["q_range"]
+    az_range = sess["az_range"]
+    records = sess.get("records", [])
+    cmap = {
+        "灰度": "gray",
+        "反转灰度": "gray_r",
+        "热力图": "hot",
+        "彩虹": "jet",
+    }.get(colormap, "gray")
+
+    fig = Figure(figsize=(8, 6))
+    ax = fig.add_subplot(111)
+    ax.imshow(
+        data,
+        aspect="auto",
+        origin="lower",
+        cmap=cmap,
+        vmin=contrast_min,
+        vmax=contrast_max,
+        extent=(q_range[0], q_range[1], az_range[0], az_range[1]),
+    )
+    ax.set_xlabel(r"q ($\AA^{-1}$)")
+    ax.set_ylabel("Azimuth (°)")
+    ax.set_title("2D 积分图像 — 标记峰点")
+    daz = az_range[1] - az_range[0]
+    for idx, record in enumerate(records, start=1):
+        ax.plot(record["q"], record["azimuth"], "x", color="red", markersize=8, mew=2, alpha=0.85, zorder=10)
+        ax.text(record["q"], record["azimuth"] + daz * 0.02, f"P{idx}", color="red", fontsize=10, ha="center", va="bottom", zorder=10)
+
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=150, bbox_inches="tight")
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="image/png",
+        headers={"Content-Disposition": "attachment; filename=integrated_peaks_marked.png"},
     )

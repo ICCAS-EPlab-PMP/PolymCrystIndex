@@ -483,6 +483,7 @@ function clampZoom(panel) {
 }
 
 const resetZoomTimers = { raw: null, int: null }
+const preserveViewOnNextImageLoad = reactive({ raw: false, int: false })
 
 function scheduleResetZoom(panel, retries = 6) {
   if (resetZoomTimers[panel]) {
@@ -529,7 +530,15 @@ function resetZoom(panel, retries = 0) {
 }
 
 function handleImageLoad(panel) {
+  if (preserveViewOnNextImageLoad[panel]) {
+    preserveViewOnNextImageLoad[panel] = false
+    return
+  }
   scheduleResetZoom(panel, 8)
+}
+
+function setPreserveView(panel, preserve = true) {
+  preserveViewOnNextImageLoad[panel] = preserve
 }
 
 function startDrag(e, panel) {
@@ -617,9 +626,7 @@ async function uploadRawImage(file) {
   raw.outputCount = 0
   raw.poniLoaded = false
   setStatus(data.message)
-  await renderRaw()
-  await nextTick()
-  resetZoom('raw', 8)
+  await renderRaw({ preserveView: false })
   emit('raw-session-ready')
 }
 
@@ -635,7 +642,7 @@ async function uploadRawPoni(file) {
   raw.p.cy = data.cy
   raw.p.dist = data.dist
   setStatus(data.message)
-  await renderRaw()
+  await renderRaw({ preserveView: true })
 }
 
 async function uploadRawMiller(file, type) {
@@ -645,7 +652,7 @@ async function uploadRawMiller(file, type) {
   if (type === 'full') raw.fullCount = data.count
   else raw.outputCount = data.count
   setStatus(data.message)
-  await renderRaw()
+  await renderRaw({ preserveView: true })
 }
 
 async function clearRawMiller() {
@@ -653,7 +660,7 @@ async function clearRawMiller() {
   raw.fullCount = 0
   raw.outputCount = 0
   setStatus('All Miller markers cleared')
-  await renderRaw()
+  await renderRaw({ preserveView: true })
 }
 
 async function clearRawMillerType(type) {
@@ -661,13 +668,14 @@ async function clearRawMillerType(type) {
   if (type === 'full') raw.fullCount = 0
   else if (type === 'output') raw.outputCount = 0
   setStatus(type === 'full' ? 'FullMiller cleared' : 'outputMiller cleared')
-  await renderRaw()
+  await renderRaw({ preserveView: true })
 }
 
-async function renderRaw() {
+async function renderRaw({ preserveView = true } = {}) {
   if (!raw.imageLoaded) return
   loading.value = true
   try {
+    setPreserveView('raw', preserveView)
     const { data } = await axios.post(`${API_BASE}/raw/render`, {
       contrast_min: raw.p.cmin,
       contrast_max: raw.p.cmax,
@@ -689,17 +697,18 @@ async function renderRaw() {
     raw.outputCount = data.output_miller_count ?? 0
     const msg = `Rendered | FullMiller: ${data.full_miller_count} pts | outputMiller: ${data.output_miller_count} pts${data.pyfai_used ? ' | pyFAI ✓' : ' | Manual geometry'}`
     setStatus(msg)
+    return data.image
   } finally {
     loading.value = false
   }
 }
 
 async function applyRawParams() {
-  await renderRaw()
+  await renderRaw({ preserveView: true })
 }
 
 async function refreshRawView() {
-  await renderRaw()
+  await renderRaw({ preserveView: true })
   setStatus('View refreshed, Miller points recalculated and centered')
 }
 
@@ -721,28 +730,15 @@ function getExportAdjustmentsSummary(adjustments) {
 }
 
 async function prepareRawExportImage() {
-  const adjustments = []
-  const hasMarkers = raw.fullCount > 0 || raw.outputCount > 0
-  let needsRender = false
-
-  if (hasMarkers && !raw.p.showLabels) {
-    raw.p.showLabels = true
-    adjustments.push('labels on')
-    needsRender = true
-  }
-
-  if (needsRender) {
-    await renderRaw()
-  }
-
-  return adjustments
+  const image = await renderRaw({ preserveView: true })
+  return { image, adjustments: [] }
 }
 
 async function saveRawImage() {
   if (!raw.imageSrc) return
   try {
-    const adjustments = await prepareRawExportImage()
-    downloadBase64Image(raw.imageSrc, 'diffraction_marked.png')
+    const { image, adjustments } = await prepareRawExportImage()
+    downloadBase64Image(image || raw.imageSrc, 'diffraction_marked.png')
     setStatus(`Marked image saved${getExportAdjustmentsSummary(adjustments)}`)
   } catch(err) {
     setStatus('Error: ' + (err.response?.data?.detail || err.message))
@@ -761,9 +757,7 @@ async function uploadIntImage(file) {
   int2d.fullCount = 0
   int2d.outputCount = 0
   setStatus(data.message)
-  await renderInt()
-  await nextTick()
-  resetZoom('int', 8)
+  await renderInt({ preserveView: false })
   emit('raw-session-ready')
   if (props.overlayGroups?.length && props.importRequestKey) {
     await loadIntOverlayGroups()
@@ -779,7 +773,7 @@ async function uploadIntInfo(file) {
   int2d.p.azMin = data.az_min
   int2d.p.azMax = data.az_max
   setStatus(data.message)
-  await renderInt()
+  await renderInt({ preserveView: true })
 }
 
 async function uploadIntMiller(file, type) {
@@ -789,7 +783,7 @@ async function uploadIntMiller(file, type) {
   if (type === 'full') int2d.fullCount = data.count
   else int2d.outputCount = data.count
   setStatus(data.message)
-  await renderInt()
+  await renderInt({ preserveView: true })
 }
 
 async function clearIntMiller() {
@@ -797,7 +791,7 @@ async function clearIntMiller() {
   int2d.fullCount = 0
   int2d.outputCount = 0
   setStatus('All Miller markers cleared')
-  await renderInt()
+  await renderInt({ preserveView: true })
 }
 
 async function clearIntMillerType(type) {
@@ -805,7 +799,7 @@ async function clearIntMillerType(type) {
   if (type === 'full') int2d.fullCount = 0
   else if (type === 'output') int2d.outputCount = 0
   setStatus(type === 'full' ? 'FullMiller cleared' : 'outputMiller cleared')
-  await renderInt()
+  await renderInt({ preserveView: true })
 }
 
 async function applyIntRanges() {
@@ -817,16 +811,17 @@ async function applyIntRanges() {
       az_max: int2d.p.azMax,
     })
     setStatus('Coordinate range updated')
-    await renderInt()
+  await renderInt({ preserveView: true })
   } catch(err) {
     setStatus('Error: ' + (err.response?.data?.detail || err.message))
   }
 }
 
-async function renderInt() {
+async function renderInt({ preserveView = true } = {}) {
   if (!int2d.imageLoaded) return
   loading.value = true
   try {
+    setPreserveView('int', preserveView)
     const { data } = await axios.post(`${API_BASE}/int/render`, {
       contrast_min: int2d.p.cmin,
       contrast_max: int2d.p.cmax,
@@ -842,6 +837,7 @@ async function renderInt() {
     int2d.fullCount = data.full_miller_count ?? 0
     int2d.outputCount = data.output_miller_count ?? 0
     setStatus(`Rendered | FullMiller: ${data.full_miller_count} pts | outputMiller: ${data.output_miller_count} pts`)
+    return data.image
   } finally {
     loading.value = false
   }
@@ -853,14 +849,15 @@ function debounceRenderInt() {
 }
 
 async function prepareIntExportImage() {
-  return []
+  const image = await renderInt({ preserveView: true })
+  return { image, adjustments: [] }
 }
 
 async function saveIntImage() {
   if (!int2d.imageSrc) return
   try {
-    const adjustments = await prepareIntExportImage()
-    downloadBase64Image(int2d.imageSrc, '2d_integrated_marked.png')
+    const { image, adjustments } = await prepareIntExportImage()
+    downloadBase64Image(image || int2d.imageSrc, '2d_integrated_marked.png')
     setStatus(`Marked image saved${getExportAdjustmentsSummary(adjustments)}`)
   } catch(err) {
     setStatus('Error: ' + (err.response?.data?.detail || err.message))
@@ -905,9 +902,7 @@ async function loadFromWorkDir(dir) {
       raw.imgMax = Math.ceil(data.max || 65535)
       raw.p.cmin = Math.floor(data.p01 ?? data.min ?? 0)
       raw.p.cmax = Math.ceil(data.p99 ?? data.max ?? 65535)
-      await renderRaw()
-      await nextTick()
-      resetZoom('raw', 8)
+      await renderRaw({ preserveView: false })
       setStatus(data.message || `Loaded from workDir: ${dir}`)
       emit('raw-session-ready')
     } else {
@@ -939,7 +934,7 @@ async function loadOverlayGroups() {
     raw.fullCount = data.full_miller_count ?? 0
     raw.outputCount = data.output_miller_count ?? raw.outputCount
     setStatus(data.message || `Overlay: ${groups.length} group(s) loaded`)
-    await renderRaw()
+    await renderRaw({ preserveView: true })
   } catch (err) {
     setStatus('Error loading overlay groups: ' + (err.response?.data?.detail || err.message))
   } finally {
@@ -960,7 +955,7 @@ async function loadIntOverlayGroups() {
     int2d.fullCount = data.full_miller_count ?? 0
     int2d.outputCount = data.output_miller_count ?? int2d.outputCount
     setStatus(data.message || `2D overlay: ${groups.length} group(s) loaded`)
-    await renderInt()
+    await renderInt({ preserveView: true })
   } catch (err) {
     setStatus('Error loading 2D overlay groups: ' + (err.response?.data?.detail || err.message))
   } finally {

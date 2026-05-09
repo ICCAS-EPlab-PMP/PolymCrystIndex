@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     GITHUB_RELEASES_PAGE_URL: str = "https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases"
     GITHUB_LATEST_RELEASE_URL: str = "https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/latest"
     GITEE_TAGS_API_URL: str = ""
-    GITEE_RELEASES_PAGE_URL: str = ""
+    GITEE_RELEASES_PAGE_URL: str = "https://gitee.com/iccas-eplab-pmp/PolymCrystIndex/releases"
     UPDATE_CHECK_TIMEOUT_SECONDS: int = 5
     UPDATE_CHECK_CACHE_TTL_SECONDS: int = 600
 

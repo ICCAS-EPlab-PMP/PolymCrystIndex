@@ -38,6 +38,7 @@ const emit = defineEmits(['click'])
 const canvasRef = ref(null)
 const wrapRef   = ref(null)
 let _img = null
+let _lastImageKey = ''
 
 const scale    = ref(1)
 const transX   = ref(0)
@@ -98,9 +99,28 @@ function draw() {
 }
 
 function loadImage(src) {
-  if (!src) { _img = null; scale.value = 1; transX.value = 0; transY.value = 0; redraw(); return }
+  if (!src) {
+    _img = null
+    _lastImageKey = ''
+    scale.value = 1
+    transX.value = 0
+    transY.value = 0
+    redraw()
+    return
+  }
   const img = new Image()
-  img.onload = () => { _img = img; scale.value = 1; transX.value = 0; transY.value = 0; draw() }
+  img.onload = () => {
+    const nextKey = `${img.naturalWidth}x${img.naturalHeight}`
+    const shouldResetView = !_img || _lastImageKey !== nextKey
+    _img = img
+    _lastImageKey = nextKey
+    if (shouldResetView) {
+      scale.value = 1
+      transX.value = 0
+      transY.value = 0
+    }
+    draw()
+  }
   img.src = 'data:image/png;base64,' + src
 }
 

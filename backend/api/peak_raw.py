@@ -1,12 +1,12 @@
 """api/peak_raw.py – Raw detector image peak-picking endpoints."""
 
 from __future__ import annotations
-import csv, io, math, traceback, uuid
+import csv, io, math, re, traceback, uuid
 from typing import Optional
 
 import numpy as np
 import fabio
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -144,6 +144,108 @@ class CalcPixelReq(BaseModel):
     center_x: float = 0.0
     center_y: float = 0.0
     distance: float = 1000.0
+
+
+def _normalize_header_token(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (value or "").strip().lower())
+
+
+def _safe_float(value) -> Optional[float]:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _has_header(tokens: list[str]) -> bool:
+    normalized = [_normalize_header_token(token) for token in tokens]
+    known = {
+        "index", "pixelx", "pixely", "intensity", "q", "qa1", "qvalue",
+        "psi", "psideg", "psidegraw", "psidegcorrected",
+    }
+    return any(token in known for token in normalized)
+
+
+def _parse_raw_record_rows(text: str) -> list[dict[str, Optional[float]]]:
+    lines = [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+    if not lines:
+        raise HTTPException(400, "导入文件为空。")
+
+    csv_like = any("," in line for line in lines[:5])
+    rows = list(csv.reader(io.StringIO(text))) if csv_like else [re.split(r"[\t,\s]+", line) for line in lines]
+    rows = [[cell.strip() for cell in row if str(cell).strip()] for row in rows]
+    rows = [row for row in rows if row]
+    if not rows:
+        raise HTTPException(400, "导入文件中没有可识别的数据行。")
+
+    header_map: dict[str, int] = {}
+    data_rows = rows
+    if _has_header(rows[0]):
+        header_map = {
+            _normalize_header_token(token): idx
+            for idx, token in enumerate(rows[0])
+        }
+        data_rows = rows[1:]
+
+    parsed: list[dict[str, Optional[float]]] = []
+    for row in data_rows:
+        x = y = intensity = q = psi_deg = None
+        if header_map:
+            def pick(*names: str) -> Optional[float]:
+                for name in names:
+                    idx = header_map.get(name)
+                    if idx is not None and idx < len(row):
+                        value = _safe_float(row[idx])
+                        if value is not None:
+                            return value
+                return None
+
+            x = pick("pixelx", "x")
+            y = pick("pixely", "y")
+            intensity = pick("intensity")
+            q = pick("qa1", "q", "qvalue")
+            psi_deg = pick("psidegraw", "psideg", "psidegcorrected", "psi")
+        else:
+            numeric = [_safe_float(cell) for cell in row]
+            if len(numeric) >= 6 and numeric[1] is not None and numeric[2] is not None and numeric[4] is not None and numeric[5] is not None:
+                x, y, intensity, q, psi_deg = numeric[1], numeric[2], numeric[3], numeric[4], numeric[5]
+            elif len(numeric) >= 2 and numeric[0] is not None and numeric[1] is not None:
+                q, psi_deg = numeric[0], numeric[1]
+
+        if q is None or psi_deg is None:
+            continue
+        parsed.append({"x": x, "y": y, "intensity": intensity, "q": q, "psi_deg": psi_deg})
+
+    if not parsed:
+        raise HTTPException(400, "未识别到有效记录，请使用导出的 txt/csv 格式。")
+    return parsed
+
+
+def _build_raw_record(sess: dict, *, q: float, psi_deg: float, wavelength: float, pixel_size_x: float, pixel_size_y: float,
+                      center_x: float, center_y: float, distance: float, x: Optional[float] = None,
+                      y: Optional[float] = None, intensity: Optional[float] = None) -> Optional[dict]:
+    original = sess["original"]
+    h, w = original.shape
+    if x is None or y is None:
+        try:
+            x, y = pixel_from_q_psi(q, psi_deg, wavelength, pixel_size_x, pixel_size_y, center_x, center_y, distance)
+        except Exception:
+            return None
+    if x is None or y is None:
+        return None
+    xi, yi = int(round(x)), int(round(y))
+    if not (0 <= yi < h and 0 <= xi < w):
+        return None
+    actual_intensity = float(original[yi, xi]) if intensity is None else float(intensity)
+    psi_rad = math.radians(psi_deg)
+    return {
+        "x": xi,
+        "y": yi,
+        "intensity": actual_intensity,
+        "q": float(q),
+        "psi_rad": psi_rad,
+        "psi_deg": float(psi_deg),
+    }
 
 
 def _split_azimuth_window(center_deg: float, half_width_deg: float) -> list[dict[str, float]]:
@@ -524,29 +626,61 @@ def clear_records(req: ClearRecordsReq):
     return {"records": []}
 
 
+@router.post("/import-records")
+async def import_records(
+    file: UploadFile = File(...),
+    session_id: str = Form(...),
+    wavelength: float = Form(...),
+    pixel_size_x: float = Form(...),
+    pixel_size_y: float = Form(...),
+    center_x: float = Form(...),
+    center_y: float = Form(...),
+    distance: float = Form(...),
+):
+    sess = raw_store.require(session_id)
+    text = (await file.read()).decode("utf-8", errors="ignore")
+    parsed_rows = _parse_raw_record_rows(text)
+    records = []
+    for item in parsed_rows:
+        q_value = item.get("q")
+        psi_value = item.get("psi_deg")
+        if q_value is None or psi_value is None:
+            continue
+        record = _build_raw_record(
+            sess,
+            q=float(q_value),
+            psi_deg=float(psi_value),
+            wavelength=wavelength,
+            pixel_size_x=pixel_size_x,
+            pixel_size_y=pixel_size_y,
+            center_x=center_x,
+            center_y=center_y,
+            distance=distance,
+            x=item.get("x"),
+            y=item.get("y"),
+            intensity=item.get("intensity"),
+        )
+        if record is not None:
+            records.append(record)
+    if not records:
+        raise HTTPException(400, "导入内容无法映射到当前图像，请检查 q/ψ 和仪器参数。")
+    sess["records"] = records
+    return {"records": records, "imported_count": len(records)}
+
+
 @router.post("/save-records")
 def save_records(req: SaveRecordsReq):
-    try:
-        saved = raw_store.save_records(req.session_id, name=req.name)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    return {"saved_record": saved, "records": raw_store.require(req.session_id).get("records", [])}
+    raise HTTPException(410, "峰提取记录现已改为临时会话数据，请使用导入/导出功能。")
 
 
 @router.get("/saved-records")
 def list_saved_records():
-    return {"items": raw_store.list_saved_records()}
+    return {"items": []}
 
 
 @router.post("/load-records")
 def load_records(req: LoadRecordsReq):
-    try:
-        loaded = raw_store.load_records(req.session_id, req.record_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(404, str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    return {"loaded_record": {k: v for k, v in loaded.items() if k != "records"}, "records": loaded["records"]}
+    raise HTTPException(410, "峰提取记录现已改为临时会话数据，请使用导入/导出功能。")
 
 
 @router.post("/calc-pixel")
@@ -613,4 +747,39 @@ def export_txt(session_id: str, psi_offset: float = 0.0):
         gen(),
         media_type="text/plain",
         headers={"Content-Disposition": "attachment; filename=raw_peaks.txt"},
+    )
+
+
+@router.get("/export-marked-image/{session_id}")
+def export_marked_image(
+    session_id: str,
+    colormap: str = "灰度",
+    contrast_min: Optional[float] = None,
+    contrast_max: Optional[float] = None,
+):
+    from PIL import Image as PILImage, ImageDraw
+    from services.image_service import _normalize, _colormap
+
+    sess = raw_store.require(session_id)
+    display = sess["display"]
+    records = sess.get("records", [])
+    cmin = float(np.min(display)) if contrast_min is None else float(contrast_min)
+    cmax = float(np.max(display)) if contrast_max is None else float(contrast_max)
+    rgb = _colormap(_normalize(display, cmin, cmax), colormap)
+    image = PILImage.fromarray(rgb, "RGB")
+    draw = ImageDraw.Draw(image)
+
+    for idx, record in enumerate(records, start=1):
+        x = int(record["x"])
+        y = int(record["y"])
+        draw.rectangle([x - 3, y - 3, x + 3, y + 3], outline=(255, 0, 0), width=2)
+        draw.text((x + 6, y - 12), str(idx), fill=(255, 255, 255))
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="image/png",
+        headers={"Content-Disposition": "attachment; filename=raw_peaks_marked.png"},
     )

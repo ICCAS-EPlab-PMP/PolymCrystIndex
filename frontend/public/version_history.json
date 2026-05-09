@@ -1,0 +1,62 @@
+[
+  {
+    "version": "1.8.4",
+    "date": "2026.4.26",
+    "items": [
+      {
+        "key": "fixedLMode",
+        "type": "feature",
+        "title_zh": "固定l约束模式",
+        "title_en": "Fixed-l Constraint Mode",
+        "summary_zh": "支持在遗传算法指标化过程中固定l值约束，提升已知层间距场景下的收敛效率。",
+        "summary_en": "Support fixed-l value constraint during genetic algorithm indexing to improve convergence for known layer spacing scenarios."
+      },
+      {
+        "key": "resultFlow",
+        "type": "feature",
+        "title_zh": "结果验证流程",
+        "title_en": "Result Verification Flow",
+        "summary_zh": "指标化与结果页间采用按钮导航，自动预载outputMiller，实现更流畅的结果复核。",
+        "summary_en": "Button-based navigation between indexing and results pages, with automatic outputMiller preloading for seamless review."
+      },
+      {
+        "key": "markerSize",
+        "type": "fix",
+        "title_zh": "Miller标记可见性增强",
+        "title_en": "Improved Miller Marker Visibility",
+        "summary_zh": "增大原始图和积分图上Miller标记的尺寸和线宽，提升标记辨识度。",
+        "summary_en": "Increased marker sizes and line widths on both raw and integrated images for clearer identification."
+      }
+    ]
+  },
+  {
+    "version": "1.8.3",
+    "date": "2026.4.17",
+    "items": [
+      {
+        "key": "manualCell",
+        "type": "feature",
+        "title_zh": "手动晶胞参数 - 新功能",
+        "title_en": "Manual Cell Parameters - New Feature",
+        "summary_zh": "支持在主页入口后快速进入手动晶胞参数流程，并围绕当前批量生成结果进行更顺畅的浏览和复核。",
+        "summary_en": "The manual cell parameter workflow is now easier to enter from the homepage and better aligned with downstream batch browsing and review."
+      },
+      {
+        "key": "glideVisual",
+        "type": "feature",
+        "title_zh": "晶胞参数 c 轴滑移可视化",
+        "title_en": "c-axis Glide Visualization",
+        "summary_zh": "GLIDE 结果支持围绕 c 轴滑移变换进行更直观的可视化查看，帮助比对不同分组生成的 FullMiller 标记。",
+        "summary_en": "GLIDE outputs now support clearer visualization around c-axis shear transforms, making it easier to compare generated FullMiller groups."
+      },
+      {
+        "key": "indexingVisual",
+        "type": "notice",
+        "title_zh": "指标化程序可视化",
+        "title_en": "Indexing Program Visualization",
+        "summary_zh": "指标化程序中的结果浏览与可视化联动已进一步增强，方便在同一工作流内查看图像、参数与标记变化。",
+        "summary_en": "Visualization inside the indexing workflow is now better integrated, so image, parameter, and marker changes can be reviewed in one place."
+      }
+    ]
+  }
+]

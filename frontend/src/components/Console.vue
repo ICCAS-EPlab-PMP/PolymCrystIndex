@@ -140,13 +140,6 @@
         <span class="success-title">{{ t('console.analysisComplete') }}</span>
         <span class="success-desc">{{ t('console.bestFitness', { value: bestFitness }) }}</span>
       </div>
-      <button class="btn-view-results" @click="viewResults">
-        {{ t('console.viewResults') }}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="5" y1="12" x2="19" y2="12"/>
-          <polyline points="12,5 19,12 12,19"/>
-        </svg>
-      </button>
     </div>
   </div>
 </template>
@@ -358,6 +351,7 @@ const startStatusPolling = () => {
         isRunning.value = false
         analysisComplete.value = true
         updateRunStatus('completed')
+        emit('navigate', 'results')
         await appendResultSummaryLogs()
         stopStatusPolling()
         stopLogsPolling()
@@ -471,10 +465,6 @@ const getLogClass = (log) => {
   if (log.includes('[Error]') || log.includes('[ERROR]')) return 'log-error'
   if (log.includes('[Warning]') || log.includes('[WARNING]')) return 'log-warning'
   return ''
-}
-
-const viewResults = () => {
-  emit('navigate', 'results')
 }
 
 const exportCurrentStep = () => {

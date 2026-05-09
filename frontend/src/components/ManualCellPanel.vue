@@ -1,8 +1,8 @@
 <template>
   <div class="manual-cell-panel">
     <div class="page-header">
-      <h2>{{ t('manual.title') }}</h2>
-      <p>{{ t('manual.subtitle') }}</p>
+      <h2>{{ panelTitle }}</h2>
+      <p>{{ panelSubtitle }}</p>
     </div>
 
     <div class="manual-form">
@@ -43,6 +43,25 @@
             <input type="number" v-model.number="group.wavelength" step="0.001" min="0.01" />
           </div>
         </div>
+
+        <div v-if="isSupercellMode" class="supercell-section">
+          <h3>{{ t('manual.supercellFactors') }}</h3>
+          <p class="supercell-hint">{{ t('manual.supercellFactorTip') }}</p>
+          <div class="cell-inputs supercell-inputs">
+            <div class="input-group">
+              <label>{{ t('manual.na') }}</label>
+              <input type="number" v-model.number="group.na" step="1" min="1" @change="enforcePositiveInt(group, 'na')" />
+            </div>
+            <div class="input-group">
+              <label>{{ t('manual.nb') }}</label>
+              <input type="number" v-model.number="group.nb" step="1" min="1" @change="enforcePositiveInt(group, 'nb')" />
+            </div>
+            <div class="input-group">
+              <label>{{ t('manual.nc') }}</label>
+              <input type="number" v-model.number="group.nc" step="1" min="1" @change="enforcePositiveInt(group, 'nc')" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <button class="btn-add" @click="addGroup">
@@ -58,7 +77,7 @@
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           <span v-if="generating" class="spinner"></span>
-          {{ generating ? t('manual.generating') : t('manual.generate', { count: groups.length, plural: groups.length > 1 ? 's' : '' }) }}
+          {{ generating ? t('manual.generating') : generateButtonText }}
         </button>
       </div>
     </div>
@@ -78,6 +97,18 @@
           <div class="result-header">
             <span class="group-badge">{{ res.data?.label || res.label || `${t('manual.group', { index: idx + 1 })}` }}</span>
             <span class="reflection-count">{{ res.data?.totalReflections ?? 0 }} {{ t('manual.reflections') }}</span>
+          </div>
+
+          <div v-if="res.data?.supercellFactors" class="cell-info supercell-info-row">
+            <span class="cell-label">{{ t('manual.supercellTab') }}</span>
+            <span class="cell-value">
+              {{ t('manual.supercellInfo', {
+                na: res.data.supercellFactors.na,
+                nb: res.data.supercellFactors.nb,
+                nc: res.data.supercellFactors.nc,
+                total: res.data.supercellFactors.total
+              }) }}
+            </span>
           </div>
 
           <div v-if="res.data?.volume" class="volume-info">
@@ -180,12 +211,24 @@ import { useI18n } from 'vue-i18n'
 import { api } from '@/api/index'
 import Visualizer from '@/components/Visualizer.vue'
 
+const props = defineProps({
+  mode: {
+    type: String,
+    default: 'cell'
+  }
+})
+
 const { t } = useI18n()
+const isSupercellMode = computed(() => props.mode === 'supercell')
+
+const panelTitle = computed(() => (isSupercellMode.value ? t('manual.supercellTitle') : t('manual.title')))
+const panelSubtitle = computed(() => (isSupercellMode.value ? t('manual.supercellSubtitle') : t('manual.subtitle')))
 
 const defaultGroup = () => ({
   a: 7.40, b: 4.93, c: 2.54,
   alpha: 90.0, beta: 90.0, gamma: 90.0,
-  wavelength: 1.542
+  wavelength: 1.542,
+  na: 1, nb: 1, nc: 1,
 })
 
 const groups = reactive([defaultGroup()])
@@ -199,6 +242,18 @@ const selectedSingleLabel = ref('')
 const selectedOverlayLabels = ref([])
 const importSelectionKey = ref(0)
 const visualizerReady = ref(false)
+
+const supercellTotal = computed(() => {
+  if (!isSupercellMode.value) return 0
+  return groups.reduce((sum, g) => sum + (g.na || 1) * (g.nb || 1) * (g.nc || 1), 0)
+})
+
+const generateButtonText = computed(() => {
+  if (isSupercellMode.value) {
+    return t('manual.supercellGenerate', { count: supercellTotal.value })
+  }
+  return t('manual.generate', { count: groups.length, plural: groups.length > 1 ? 's' : '' })
+})
 
 const browsableResults = computed(() => {
   return batchResults.value
@@ -217,6 +272,15 @@ const selectedGroups = computed(() => {
   }
   return browsableResults.value.filter(group => group.label === selectedSingleLabel.value).slice(0, 1)
 })
+
+const enforcePositiveInt = (group, field) => {
+  const val = group[field]
+  if (val == null || Number.isNaN(val) || val < 1) {
+    group[field] = 1
+  } else {
+    group[field] = Math.round(val)
+  }
+}
 
 const toggleOverlayGroup = (label) => {
   if (selectedOverlayLabels.value.includes(label)) {
@@ -266,6 +330,10 @@ watch([
   }
 }, { deep: true })
 
+watch(() => props.mode, () => {
+  error.value = null
+})
+
 const addGroup = () => {
   groups.push(defaultGroup())
 }
@@ -279,35 +347,71 @@ const generate = async () => {
   generating.value = true
 
   try {
-    const payload = groups.map((g, idx) => ({
-      label: `manual_${String(idx + 1).padStart(2, '0')}`,
-      a: g.a, b: g.b, c: g.c,
-      alpha: g.alpha, beta: g.beta, gamma: g.gamma,
-      wavelength: g.wavelength,
-    }))
-
-    const res = await api.manualBatchFullmiller(payload)
-    if (Array.isArray(res.data) && res.data.length > 0) {
-      batchResults.value = res.data.map((item, i) => ({
-        ...item,
-        label: item.label || item.data?.label || payload[i]?.label || `${t('manual.group', { index: i + 1 })}`,
+    if (isSupercellMode.value) {
+      const payload = groups.map((g, idx) => ({
+        label: `supercell_${String(idx + 1).padStart(2, '0')}`,
+        a: g.a, b: g.b, c: g.c,
+        alpha: g.alpha, beta: g.beta, gamma: g.gamma,
+        wavelength: g.wavelength,
+        na: Math.max(1, Math.round(g.na || 1)),
+        nb: Math.max(1, Math.round(g.nb || 1)),
+        nc: Math.max(1, Math.round(g.nc || 1)),
       }))
-      const firstGroup = batchResults.value.find(item => item.success && (item.data?.workDir || item.data?.fullMillerContent))
-      selectedSingleLabel.value = firstGroup?.label || ''
-      selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
-      browseMode.value = 'single'
-      keepBrowseExpanded.value = true
-      browseExpanded.value = true
-      if (visualizerReady.value && firstGroup) {
-        importSelectionKey.value += 1
+
+      const res = await api.supercellBatchFullmiller(payload)
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        batchResults.value = res.data.map((item, i) => ({
+          ...item,
+          label: item.label || item.data?.label || payload[i]?.label || `${t('manual.group', { index: i + 1 })}`,
+        }))
+        const firstGroup = batchResults.value.find(item => item.success && (item.data?.workDir || item.data?.fullMillerContent))
+        selectedSingleLabel.value = firstGroup?.label || ''
+        selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
+        browseMode.value = 'single'
+        keepBrowseExpanded.value = true
+        browseExpanded.value = true
+        if (visualizerReady.value && firstGroup) {
+          importSelectionKey.value += 1
+        } else {
+          importSelectionKey.value = 0
+        }
+        if (!res.success) {
+          error.value = res.message || t('manual.someGroupsFailed')
+        }
       } else {
-        importSelectionKey.value = 0
-      }
-      if (!res.success) {
-        error.value = res.message || t('manual.someGroupsFailed')
+        error.value = res.message || t('manual.generationFailed')
       }
     } else {
-      error.value = res.message || t('manual.generationFailed')
+      const payload = groups.map((g, idx) => ({
+        label: `manual_${String(idx + 1).padStart(2, '0')}`,
+        a: g.a, b: g.b, c: g.c,
+        alpha: g.alpha, beta: g.beta, gamma: g.gamma,
+        wavelength: g.wavelength,
+      }))
+
+      const res = await api.manualBatchFullmiller(payload)
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        batchResults.value = res.data.map((item, i) => ({
+          ...item,
+          label: item.label || item.data?.label || payload[i]?.label || `${t('manual.group', { index: i + 1 })}`,
+        }))
+        const firstGroup = batchResults.value.find(item => item.success && (item.data?.workDir || item.data?.fullMillerContent))
+        selectedSingleLabel.value = firstGroup?.label || ''
+        selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
+        browseMode.value = 'single'
+        keepBrowseExpanded.value = true
+        browseExpanded.value = true
+        if (visualizerReady.value && firstGroup) {
+          importSelectionKey.value += 1
+        } else {
+          importSelectionKey.value = 0
+        }
+        if (!res.success) {
+          error.value = res.message || t('manual.someGroupsFailed')
+        }
+      } else {
+        error.value = res.message || t('manual.generationFailed')
+      }
     }
   } catch (e) {
     error.value = e.message || t('manual.requestFailed')
@@ -399,6 +503,35 @@ const downloadResult = (data, idx) => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 16px;
+}
+
+.supercell-inputs {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.supercell-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+}
+
+.supercell-section h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.supercell-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+.supercell-info-row {
+  background: var(--bg-surface-alt);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
 }
 
 .input-group {

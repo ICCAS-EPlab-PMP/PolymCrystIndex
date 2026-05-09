@@ -81,7 +81,7 @@ export const ColormapRenderer = {
           return [255, Math.round(255 - 1020 * (v - 0.75)), 0]
         }
       
-      case '灰地':
+      case '灰度':
       default:
         const g = Math.round(255 * v)
         return [g, g, g]
@@ -131,7 +131,7 @@ export const ColormapRenderer = {
         return [[0, 'rgb(0,0,255)'], [0.5, 'rgb(128,128,255)'], [1, 'rgb(255,0,0)']]
       case '彩虹':
         return 'Portland'
-      case '灰地':
+      case '灰度':
       default:
         return [[0, 'rgb(0,0,0)'], [1, 'rgb(255,255,255)']]
     }

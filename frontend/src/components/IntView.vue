@@ -192,16 +192,83 @@
               <a v-if="sessionId" :href="exportUrl" class="btn-outline" download>{{ t('peakExtraction.exportCsv') }}</a>
             </div>
           </div>
+
+          <div class="section-card save-records-card">
+            <div class="section-header">
+              <h3>保存用户提取数据 <span class="count-badge">{{ visibleSavedRecords.length }}</span></h3>
+            </div>
+            <div class="save-records-form">
+              <div class="form-field-stack save-record-name-field">
+                <label for="int-save-record-name">记录集名称</label>
+                <input
+                  id="int-save-record-name"
+                  v-model.trim="saveRecordName"
+                  type="text"
+                  class="input-small"
+                  placeholder="例如：integrated-hdpe-session-1"
+                />
+              </div>
+              <div class="btn-row save-record-actions">
+                <button class="btn-primary" :disabled="!sessionId || isSavingRecords" @click="handleSaveRecords">
+                  {{ isSavingRecords ? '保存中...' : '保存当前记录' }}
+                </button>
+                <button class="btn-outline" :disabled="isRefreshingSavedRecords" @click="fetchSavedRecords()">
+                  {{ isRefreshingSavedRecords ? '刷新中...' : '刷新列表' }}
+                </button>
+              </div>
+            </div>
+            <p class="save-records-hint">列表按名称显示最近一次保存；若名称重复，会先给出覆盖提示，再保留最新版本用于重新加载。</p>
+            <div v-if="saveFeedback.message" :class="['save-records-feedback', `is-${saveFeedback.type}`]">
+              {{ saveFeedback.message }}
+            </div>
+            <div v-if="visibleSavedRecords.length" class="saved-record-list">
+              <article v-for="item in visibleSavedRecords" :key="item.id" class="saved-record-item">
+                <div class="saved-record-copy">
+                  <div class="saved-record-heading">
+                    <strong>{{ item.name }}</strong>
+                    <span class="saved-record-source">来源：{{ savedRecordSourceLabel(item.namespace) }}</span>
+                  </div>
+                  <div class="saved-record-meta">
+                    <span>时间：{{ formatSavedAt(item.saved_at) }}</span>
+                    <span>条目数：{{ item.record_count }}</span>
+                  </div>
+                </div>
+                <button
+                  class="btn-outline"
+                  :disabled="!sessionId || loadingRecordId === item.id"
+                  @click="handleLoadSavedRecord(item)"
+                >
+                  {{ loadingRecordId === item.id ? '加载中...' : '重新加载' }}
+                </button>
+              </article>
+            </div>
+            <div v-else class="empty-saved-records">
+              {{ isRefreshingSavedRecords ? '正在读取已保存记录...' : '还没有已保存的积分图提取记录。' }}
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :visible="overwriteDialog.visible"
+      :title="overwriteDialog.title"
+      :message="overwriteDialog.message"
+      :confirmText="overwriteDialog.confirmText"
+      :cancelText="overwriteDialog.cancelText"
+      type="danger"
+      @confirm="confirmOverwrite(true)"
+      @cancel="confirmOverwrite(false)"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { intApi } from '@/api/peakExtractionApi'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ColormapRenderer from '@/utils/diffraction/ColormapRenderer'
 
 const { t } = useI18n()
 
@@ -236,27 +303,123 @@ const sliceCenter = ref(null)
 const roughSel    = ref(null)
 const sp = ref({ az_int_w: 1.0, q_int_w: 0.01, q_disp_r: 0.2, az_disp_r: 20.0 })
 const pfP = ref({ prominence: 100, width: 1.0 })
-const cropP = ref({ az_crop_enabled: false, convention: 'cw', psi_offset: 0.0, az_crop_min: -30.0, az_crop_max: 120.0 })
+const cropP = ref({ az_crop_enabled: false, convention: 'ccw', psi_offset: 0.0, az_crop_min: -30.0, az_crop_max: 120.0 })
 
 const selectedQ  = ref(null)
 const selectedAz = ref(null)
 const foundPeaks = ref(null)
 
 const peakRecords = ref([])
+const saveRecordName = ref('')
+const savedRecords = ref([])
+const isSavingRecords = ref(false)
+const isRefreshingSavedRecords = ref(false)
+const loadingRecordId = ref('')
+const saveFeedback = ref({ type: 'info', message: '' })
+const overwriteDialog = ref({
+  visible: false,
+  title: '',
+  message: '',
+  confirmText: '继续保存',
+  cancelText: '取消',
+  resolver: null,
+})
 const exportUrl  = computed(() => sessionId.value ? intApi.exportCsv(sessionId.value) : '#')
+const visibleSavedRecords = computed(() => {
+  const latestByName = new Map()
+  for (const item of savedRecords.value) {
+    const key = normalizeRecordName(item.name)
+    if (!latestByName.has(key)) latestByName.set(key, item)
+  }
+  return Array.from(latestByName.values())
+})
 
 let _qSliceInited = false
 let _azSliceInited = false
 let _heatmapEventsBound = false
+let _emptyCropToastShown = false
 
 const canRecord = computed(() => {
   if (mode.value === 'precise') return selectedQ.value != null && selectedAz.value != null
   return foundPeaks.value && (foundPeaks.value.q_peaks.length || foundPeaks.value.az_peaks.length)
 })
 
-const plotlyCmap = computed(() => ({
-  '灰度': 'Greys', '反转灰度': 'Greys_r', '热力图': 'Hot', '彩虹': 'Jet',
-}[colormap.value] || 'Greys'))
+const plotlyCmap = computed(() => ColormapRenderer.getPlotlyColorscale(colormap.value))
+
+function normalizeRecordName(name) {
+  return (name || '').trim().toLocaleLowerCase()
+}
+
+function savedRecordSourceLabel(namespace) {
+  return namespace === 'integrated' ? '积分图峰提取' : namespace || '未知来源'
+}
+
+function formatSavedAt(value) {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
+function setSaveFeedback(type, message) {
+  saveFeedback.value = { type, message }
+}
+
+function findSameNameRecord(name) {
+  const normalized = normalizeRecordName(name)
+  if (!normalized) return null
+  return visibleSavedRecords.value.find(item => normalizeRecordName(item.name) === normalized) || null
+}
+
+function requestOverwriteConfirmation(existing) {
+  return new Promise(resolve => {
+    overwriteDialog.value = {
+      visible: true,
+      title: '确认同名覆盖保存',
+      message: `已存在名称为“${existing.name}”的记录集（${formatSavedAt(existing.saved_at)}，${existing.record_count} 条）。继续保存后，列表会以这次保存的最新版本作为可重新加载项。`,
+      confirmText: '继续保存',
+      cancelText: '取消',
+      resolver: resolve,
+    }
+  })
+}
+
+function confirmOverwrite(confirmed) {
+  const resolver = overwriteDialog.value.resolver
+  overwriteDialog.value = {
+    visible: false,
+    title: '',
+    message: '',
+    confirmText: '继续保存',
+    cancelText: '取消',
+    resolver: null,
+  }
+  resolver?.(confirmed)
+}
+
+async function fetchSavedRecords({ quiet = false } = {}) {
+  if (!quiet) isRefreshingSavedRecords.value = true
+  try {
+    const { data } = await intApi.listSavedRecords()
+    savedRecords.value = Array.isArray(data.items) ? data.items : []
+  } catch (err) {
+    if (!quiet) {
+      const detail = err.response?.data?.detail || err.message
+      setSaveFeedback('error', `读取已保存记录失败：${detail}`)
+      window.$toast?.(detail, true)
+    }
+  } finally {
+    if (!quiet) isRefreshingSavedRecords.value = false
+  }
+}
 
 async function onLoadFile(e) {
   const file = e.target.files[0]; if (!file) return
@@ -288,6 +451,7 @@ async function onLoadFile(e) {
     clearSlices()
     emit('status', `Loaded: ${file.name}`)
     window.$toast?.(`Loaded ${file.name}`)
+    await fetchSavedRecords({ quiet: true })
   } catch(err) { window.$toast?.(err.response?.data?.detail || err.message, true) }
 }
 
@@ -342,9 +506,11 @@ function restoreView() {
 function drawHeatmap() {
   if (!zData.value.length) return
   import('plotly.js-dist-min').then(Plotly => {
+    const filtered = getFilteredHeatmapData()
     const traces = buildTraces()
-    const layout = buildLayout()
+    const layout = buildLayout(filtered)
     Plotly.react(heatmapDiv.value, traces, layout, { responsive: true, displayModeBar: false, scrollZoom: true })
+    notifyEmptyCropState(filtered.hasData)
 
     if (!_heatmapEventsBound) {
       heatmapDiv.value.on('plotly_click', ev => {
@@ -374,8 +540,7 @@ function drawHeatmap() {
 
 function buildTraces() {
   const filtered = getFilteredHeatmapData()
-
-  const heatTrace = {
+  const traces = [{
     type: 'heatmap',
     z: filtered.z,
     x: qAxis.value,
@@ -385,8 +550,8 @@ function buildTraces() {
     zmax: contrastMax.value,
     showscale: false,
     hovertemplate: 'q=%{x:.4f}<br>Az=%{y:.2f}°<br>I=%{z:.0f}<extra></extra>',
-  }
-  const traces = [heatTrace]
+    connectgaps: false,
+  }]
 
   if (peakRecords.value.length) {
     const recs = peakRecords.value.filter(r => isAzInCrop(r.azimuth))
@@ -406,7 +571,7 @@ function buildTraces() {
   return traces
 }
 
-function buildLayout() {
+function buildLayout(filtered = getFilteredHeatmapData()) {
   const cropRange = getCropAzRange()
   let yRange = null
   if (!cropRange) {
@@ -416,6 +581,21 @@ function buildLayout() {
   }
 
   const annotations = []
+  if (!filtered.hasData) {
+    annotations.push({
+      xref: 'paper',
+      yref: 'paper',
+      x: 0.5,
+      y: 0.5,
+      text: t('peakExtraction.cropOutsideRange'),
+      showarrow: false,
+      font: { color: '#d8eeff', size: 15 },
+      bgcolor: 'rgba(0,0,0,0.45)',
+      bordercolor: 'rgba(122,214,251,0.5)',
+      borderwidth: 1,
+      borderpad: 6,
+    })
+  }
   if (peakRecords.value.length) {
     const recs = peakRecords.value.filter(r => isAzInCrop(r.azimuth))
     for (const r of recs) {
@@ -439,12 +619,13 @@ function buildLayout() {
 
   return {
     margin: { t: 30, b: 50, l: 55, r: 30 },
-    xaxis: { title: 'q (Å⁻¹)', range: [qMin.value, qMax.value] },
-    yaxis: { title: 'Azimuth (°)', ...(yRange ? { range: yRange } : {}) },
+    xaxis: { title: 'q (Å⁻¹)' },
+    yaxis: { title: 'Azimuth (°)' },
     title: { text: t('peakExtraction.integration2DTitle'), font: { size: 13 } },
     dragmode: mode.value === 'rough' ? 'select' : 'pan',
     legend: { x: 1, xanchor: 'right', y: 1 },
     annotations,
+    uirevision: 'int-heatmap',
   }
 }
 
@@ -452,6 +633,21 @@ let _refreshTimer = null
 function refreshHeatmap() {
   clearTimeout(_refreshTimer)
   _refreshTimer = setTimeout(drawHeatmap, 200)
+}
+
+function notifyEmptyCropState(hasData) {
+  if (!cropP.value.az_crop_enabled) {
+    _emptyCropToastShown = false
+    return
+  }
+  if (!hasData) {
+    if (!_emptyCropToastShown) {
+      window.$toast?.(t('peakExtraction.cropOutsideRange'))
+      _emptyCropToastShown = true
+    }
+    return
+  }
+  _emptyCropToastShown = false
 }
 
 async function fetchSlices() {
@@ -472,7 +668,7 @@ async function fetchSlices() {
       psi_offset: cropP.value.psi_offset,
     })
     await nextTick()
-    if ((!data.az_values.length || !data.q_values.length) && cropP.value.az_crop_enabled) {
+    if (data.empty_crop) {
       window.$toast?.(t('peakExtraction.cropOutsideRange'))
     }
     drawSlices(data)
@@ -601,15 +797,14 @@ function getCropAzRange() {
 }
 
 function getFilteredHeatmapData() {
-  const az = []
-  const z  = []
-  for (let i = 0; i < azAxis.value.length; i++) {
-    if (isAzInCrop(azAxis.value[i])) {
-      az.push(azAxis.value[i])
-      z.push(zData.value[i])
-    }
-  }
-  return { az, z }
+  const az = [...azAxis.value]
+  const z = azAxis.value.map((azValue, rowIndex) => {
+    if (isAzInCrop(azValue)) return [...(zData.value[rowIndex] || [])]
+    const row = zData.value[rowIndex] || []
+    return row.map(() => null)
+  })
+  const hasData = azAxis.value.some(azValue => isAzInCrop(azValue))
+  return { az, z, hasData }
 }
 
 function _addFreeClickListener(el, onPick) {
@@ -669,7 +864,6 @@ function onCropChange() {
   selectedQ.value = null
   selectedAz.value = null
   foundPeaks.value = null
-  clearSlices()
   drawHeatmap()
 }
 
@@ -690,7 +884,7 @@ async function findPeaks() {
       psi_offset: cropP.value.psi_offset,
     })
     foundPeaks.value = data
-    if (!data.q_peaks.length && !data.az_peaks.length && cropP.value.az_crop_enabled) {
+    if (data.empty_crop) {
       window.$toast?.(t('peakExtraction.cropOutsideRange'))
     }
     await fetchSlices()
@@ -734,6 +928,79 @@ async function clearRecords() {
   peakRecords.value = []
   refreshHeatmap()
 }
+
+async function handleSaveRecords() {
+  if (!sessionId.value) {
+    const message = '请先载入积分图，再保存提取记录。'
+    setSaveFeedback('warning', message)
+    window.$toast?.(message, true)
+    return
+  }
+  if (!peakRecords.value.length) {
+    const message = '当前没有可保存的提取记录。'
+    setSaveFeedback('warning', message)
+    window.$toast?.(message, true)
+    return
+  }
+
+  const name = saveRecordName.value.trim()
+  const sameNameRecord = findSameNameRecord(name)
+  if (sameNameRecord) {
+    const confirmed = await requestOverwriteConfirmation(sameNameRecord)
+    if (!confirmed) {
+      setSaveFeedback('info', `已取消保存“${sameNameRecord.name}”的新版本。`)
+      return
+    }
+  }
+
+  isSavingRecords.value = true
+  try {
+    const { data } = await intApi.saveRecords({ session_id: sessionId.value, name })
+    const savedRecord = data.saved_record
+    await fetchSavedRecords({ quiet: true })
+    saveRecordName.value = savedRecord?.name || name
+    setSaveFeedback('success', `已保存“${savedRecord?.name || '未命名记录集'}”，共 ${savedRecord?.record_count ?? peakRecords.value.length} 条记录。`)
+    window.$toast?.(`已保存记录集：${savedRecord?.name || '未命名记录集'}`)
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.message
+    setSaveFeedback('error', `保存失败：${detail}`)
+    window.$toast?.(detail, true)
+  } finally {
+    isSavingRecords.value = false
+  }
+}
+
+async function handleLoadSavedRecord(item) {
+  if (!sessionId.value) {
+    const message = '请先载入积分图，再加载已保存记录。'
+    setSaveFeedback('warning', message)
+    window.$toast?.(message, true)
+    return
+  }
+
+  loadingRecordId.value = item.id
+  try {
+    const { data } = await intApi.loadRecords({ session_id: sessionId.value, record_id: item.id })
+    peakRecords.value = Array.isArray(data.records) ? data.records : []
+    saveRecordName.value = item.name || saveRecordName.value
+    rtab.value = 'records'
+    refreshHeatmap()
+    const loaded = data.loaded_record || item
+    setSaveFeedback('success', `已加载“${loaded.name || item.name}”，共 ${loaded.record_count ?? peakRecords.value.length} 条记录。`)
+    emit('status', `Loaded saved integrated records: ${loaded.name || item.name}`)
+    window.$toast?.(`已加载记录集：${loaded.name || item.name}`)
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.message
+    setSaveFeedback('error', `加载失败：${detail}`)
+    window.$toast?.(detail, true)
+  } finally {
+    loadingRecordId.value = ''
+  }
+}
+
+onMounted(() => {
+  fetchSavedRecords()
+})
 </script>
 
 <style scoped>
@@ -1074,5 +1341,120 @@ async function clearRecords() {
   border-radius: 10px;
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.save-records-card {
+  gap: 12px;
+}
+
+.save-records-form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.save-record-name-field {
+  flex: 1 1 240px;
+}
+
+.save-record-actions {
+  margin-top: 0;
+}
+
+.save-records-hint {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.save-records-feedback {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 0.8125rem;
+}
+
+.save-records-feedback.is-success {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #0f766e;
+}
+
+.save-records-feedback.is-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #92400e;
+}
+
+.save-records-feedback.is-error {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #b91c1c;
+}
+
+.save-records-feedback.is-info {
+  background: var(--primary-bg);
+  border-color: rgba(30, 64, 175, 0.2);
+  color: var(--primary);
+}
+
+.saved-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.saved-record-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--bg-surface-alt);
+}
+
+.saved-record-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.saved-record-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+
+.saved-record-source {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.saved-record-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.empty-saved-records {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  background: var(--bg-surface-alt);
 }
 </style>

@@ -217,16 +217,82 @@
               <a v-if="sessionId" :href="exportTxtUrl" class="btn-outline" download style="color:var(--primary);">Export TXT</a>
             </div>
           </div>
+
+          <div class="section-card save-records-card">
+            <div class="section-header">
+              <h3>保存用户提取数据 <span class="count-badge">{{ visibleSavedRecords.length }}</span></h3>
+            </div>
+            <div class="save-records-form">
+              <div class="form-field-stack save-record-name-field">
+                <label for="raw-save-record-name">记录集名称</label>
+                <input
+                  id="raw-save-record-name"
+                  v-model.trim="saveRecordName"
+                  type="text"
+                  class="input-small"
+                  placeholder="例如：raw-hdpe-session-1"
+                />
+              </div>
+              <div class="btn-group save-record-actions">
+                <button class="btn-primary" :disabled="!sessionId || isSavingRecords" @click="handleSaveRecords">
+                  {{ isSavingRecords ? '保存中...' : '保存当前记录' }}
+                </button>
+                <button class="btn-outline" :disabled="isRefreshingSavedRecords" @click="fetchSavedRecords()">
+                  {{ isRefreshingSavedRecords ? '刷新中...' : '刷新列表' }}
+                </button>
+              </div>
+            </div>
+            <p class="save-records-hint">列表按名称显示最近一次保存；若名称重复，会先给出覆盖提示，再保留最新版本用于重新加载。</p>
+            <div v-if="saveFeedback.message" :class="['save-records-feedback', `is-${saveFeedback.type}`]">
+              {{ saveFeedback.message }}
+            </div>
+            <div v-if="visibleSavedRecords.length" class="saved-record-list">
+              <article v-for="item in visibleSavedRecords" :key="item.id" class="saved-record-item">
+                <div class="saved-record-copy">
+                  <div class="saved-record-heading">
+                    <strong>{{ item.name }}</strong>
+                    <span class="saved-record-source">来源：{{ savedRecordSourceLabel(item.namespace) }}</span>
+                  </div>
+                  <div class="saved-record-meta">
+                    <span>时间：{{ formatSavedAt(item.saved_at) }}</span>
+                    <span>条目数：{{ item.record_count }}</span>
+                  </div>
+                </div>
+                <button
+                  class="btn-outline"
+                  :disabled="!sessionId || loadingRecordId === item.id"
+                  @click="handleLoadSavedRecord(item)"
+                >
+                  {{ loadingRecordId === item.id ? '加载中...' : '重新加载' }}
+                </button>
+              </article>
+            </div>
+            <div v-else class="empty-saved-records">
+              {{ isRefreshingSavedRecords ? '正在读取已保存记录...' : '还没有已保存的原始图提取记录。' }}
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :visible="overwriteDialog.visible"
+      :title="overwriteDialog.title"
+      :message="overwriteDialog.message"
+      :confirmText="overwriteDialog.confirmText"
+      :cancelText="overwriteDialog.cancelText"
+      type="danger"
+      @confirm="confirmOverwrite(true)"
+      @cancel="confirmOverwrite(false)"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { rawApi } from '@/api/peakExtractionApi'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ImageCanvas from './ImageCanvas.vue'
 
 const { t } = useI18n()
@@ -269,6 +335,20 @@ const intP   = ref({ azimuth_range_half: 5, radial_range_half: 0.35, npt: 500, n
 const zoomB64    = ref(null)
 const currentPoint = ref(null)
 const records    = ref([])
+const saveRecordName = ref('')
+const savedRecords = ref([])
+const isSavingRecords = ref(false)
+const isRefreshingSavedRecords = ref(false)
+const loadingRecordId = ref('')
+const saveFeedback = ref({ type: 'info', message: '' })
+const overwriteDialog = ref({
+  visible: false,
+  title: '',
+  message: '',
+  confirmText: '继续保存',
+  cancelText: '取消',
+  resolver: null,
+})
 
 const intData    = ref(null)
 const selectedQ  = ref(null)
@@ -314,6 +394,15 @@ const markerList = computed(() =>
   records.value.map((r, i) => ({ x: r.x, y: r.y, color: '#ff3300', label: `${i+1}` }))
 )
 
+const visibleSavedRecords = computed(() => {
+  const latestByName = new Map()
+  for (const item of savedRecords.value) {
+    const key = normalizeRecordName(item.name)
+    if (!latestByName.has(key)) latestByName.set(key, item)
+  }
+  return Array.from(latestByName.values())
+})
+
 const exportUrl    = computed(() => {
   if (!sessionId.value) return '#'
   const base = rawApi.exportCsv(sessionId.value)
@@ -325,6 +414,81 @@ const exportTxtUrl = computed(() => {
   const base = rawApi.exportCsv(sessionId.value).replace('/export-csv/', '/export-txt/')
   return psiOffset.value !== 0 ? `${base}?psi_offset=${psiOffset.value}` : base
 })
+
+function normalizeRecordName(name) {
+  return (name || '').trim().toLocaleLowerCase()
+}
+
+function savedRecordSourceLabel(namespace) {
+  return namespace === 'raw' ? '原始图峰提取' : namespace || '未知来源'
+}
+
+function formatSavedAt(value) {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
+function setSaveFeedback(type, message) {
+  saveFeedback.value = { type, message }
+}
+
+function findSameNameRecord(name) {
+  const normalized = normalizeRecordName(name)
+  if (!normalized) return null
+  return visibleSavedRecords.value.find(item => normalizeRecordName(item.name) === normalized) || null
+}
+
+function requestOverwriteConfirmation(existing, name) {
+  return new Promise(resolve => {
+    overwriteDialog.value = {
+      visible: true,
+      title: '确认同名覆盖保存',
+      message: `已存在名称为“${existing.name}”的记录集（${formatSavedAt(existing.saved_at)}，${existing.record_count} 条）。继续保存后，列表会以这次保存的最新版本作为可重新加载项。`,
+      confirmText: '继续保存',
+      cancelText: '取消',
+      resolver: resolve,
+    }
+  })
+}
+
+function confirmOverwrite(confirmed) {
+  const resolver = overwriteDialog.value.resolver
+  overwriteDialog.value = {
+    visible: false,
+    title: '',
+    message: '',
+    confirmText: '继续保存',
+    cancelText: '取消',
+    resolver: null,
+  }
+  resolver?.(confirmed)
+}
+
+async function fetchSavedRecords({ quiet = false } = {}) {
+  if (!quiet) isRefreshingSavedRecords.value = true
+  try {
+    const { data } = await rawApi.listSavedRecords()
+    savedRecords.value = Array.isArray(data.items) ? data.items : []
+  } catch (err) {
+    if (!quiet) {
+      const detail = err.response?.data?.detail || err.message
+      setSaveFeedback('error', `读取已保存记录失败：${detail}`)
+      window.$toast?.(detail, true)
+    }
+  } finally {
+    if (!quiet) isRefreshingSavedRecords.value = false
+  }
+}
 
 async function onLoadFile(e) {
   const file = e.target.files[0]; if (!file) return
@@ -355,6 +519,7 @@ async function onLoadFile(e) {
     imageCanvasRef.value?.resetView()
     emit('status', `Loaded: ${file.name} (${data.orig_width}×${data.orig_height})`)
     window.$toast?.(`Loaded ${file.name}`)
+    await fetchSavedRecords({ quiet: true })
   } catch(err) {
     window.$toast?.(err.response?.data?.detail || err.message, true)
   }
@@ -678,6 +843,78 @@ async function clearRecords() {
   await rawApi.clearRecords(sessionId.value)
   records.value = []
 }
+
+async function handleSaveRecords() {
+  if (!sessionId.value) {
+    const message = '请先载入原始图，再保存提取记录。'
+    setSaveFeedback('warning', message)
+    window.$toast?.(message, true)
+    return
+  }
+  if (!records.value.length) {
+    const message = '当前没有可保存的提取记录。'
+    setSaveFeedback('warning', message)
+    window.$toast?.(message, true)
+    return
+  }
+
+  const name = saveRecordName.value.trim()
+  const sameNameRecord = findSameNameRecord(name)
+  if (sameNameRecord) {
+    const confirmed = await requestOverwriteConfirmation(sameNameRecord, name)
+    if (!confirmed) {
+      setSaveFeedback('info', `已取消保存“${sameNameRecord.name}”的新版本。`)
+      return
+    }
+  }
+
+  isSavingRecords.value = true
+  try {
+    const { data } = await rawApi.saveRecords({ session_id: sessionId.value, name })
+    const savedRecord = data.saved_record
+    await fetchSavedRecords({ quiet: true })
+    saveRecordName.value = savedRecord?.name || name
+    setSaveFeedback('success', `已保存“${savedRecord?.name || '未命名记录集'}”，共 ${savedRecord?.record_count ?? records.value.length} 条记录。`)
+    window.$toast?.(`已保存记录集：${savedRecord?.name || '未命名记录集'}`)
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.message
+    setSaveFeedback('error', `保存失败：${detail}`)
+    window.$toast?.(detail, true)
+  } finally {
+    isSavingRecords.value = false
+  }
+}
+
+async function handleLoadSavedRecord(item) {
+  if (!sessionId.value) {
+    const message = '请先载入原始图，再加载已保存记录。'
+    setSaveFeedback('warning', message)
+    window.$toast?.(message, true)
+    return
+  }
+
+  loadingRecordId.value = item.id
+  try {
+    const { data } = await rawApi.loadRecords({ session_id: sessionId.value, record_id: item.id })
+    records.value = Array.isArray(data.records) ? data.records : []
+    saveRecordName.value = item.name || saveRecordName.value
+    rtab.value = 'records'
+    const loaded = data.loaded_record || item
+    setSaveFeedback('success', `已加载“${loaded.name || item.name}”，共 ${loaded.record_count ?? records.value.length} 条记录。`)
+    emit('status', `Loaded saved raw records: ${loaded.name || item.name}`)
+    window.$toast?.(`已加载记录集：${loaded.name || item.name}`)
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.message
+    setSaveFeedback('error', `加载失败：${detail}`)
+    window.$toast?.(detail, true)
+  } finally {
+    loadingRecordId.value = ''
+  }
+}
+
+onMounted(() => {
+  fetchSavedRecords()
+})
 
 // Clean up Plotly instances when component is unmounted to avoid memory leaks
 onUnmounted(() => {
@@ -1104,5 +1341,120 @@ onUnmounted(() => {
   opacity: 0.5;
   color: var(--text-muted);
   font-size: 0.875rem;
+}
+
+.save-records-card {
+  gap: 12px;
+}
+
+.save-records-form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.save-record-name-field {
+  flex: 1 1 240px;
+}
+
+.save-record-actions {
+  align-items: center;
+}
+
+.save-records-hint {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.save-records-feedback {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 0.8125rem;
+}
+
+.save-records-feedback.is-success {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #0f766e;
+}
+
+.save-records-feedback.is-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #92400e;
+}
+
+.save-records-feedback.is-error {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #b91c1c;
+}
+
+.save-records-feedback.is-info {
+  background: var(--primary-bg);
+  border-color: rgba(30, 64, 175, 0.2);
+  color: var(--primary);
+}
+
+.saved-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.saved-record-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--bg-surface-alt);
+}
+
+.saved-record-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.saved-record-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+
+.saved-record-source {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.saved-record-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.empty-saved-records {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  background: var(--bg-surface-alt);
 }
 </style>

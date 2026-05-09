@@ -3,32 +3,46 @@
     <div class="main-container">
       <aside class="sidebar">
         <nav class="tab-nav">
-          <button class="tab-item active" style="pointer-events: none;">
+          <button class="tab-item" :class="{ active: activeMode === 'forward' }" @click="activeMode = 'forward'">
             <component :is="IconGlide" class="tab-icon" />
             <span class="tab-label">{{ t('glide.sidebarTitle') }}</span>
+          </button>
+          <button class="tab-item" :class="{ active: activeMode === 'reverse' }" @click="activeMode = 'reverse'">
+            <component :is="IconReverseGlide" class="tab-icon" />
+            <span class="tab-label">{{ t('glide.reverseSidebarTitle') }}</span>
+          </button>
+          <button class="tab-item" :class="{ active: activeMode === 'supercell-glide' }" @click="activeMode = 'supercell-glide'">
+            <component :is="IconSupercellGlide" class="tab-icon" />
+            <span class="tab-label">{{ t('glide.supercellGlideSidebarTitle') }}</span>
           </button>
         </nav>
 
         <div class="sidebar-footer">
           <div class="status-indicator">
             <span class="status-dot"></span>
-            <span class="status-text">{{ t('glide.title') }}</span>
+            <span class="status-text">{{ activeTitle }}</span>
           </div>
         </div>
       </aside>
 
       <main class="content">
-        <GlidePanel />
+        <GlidePanel :mode="activeMode" />
       </main>
     </div>
   </div>
 </template>
 
 <script setup>
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+const activeMode = ref('forward')
+const activeTitle = computed(() => {
+  if (activeMode.value === 'reverse') return t('glide.reverseSidebarTitle')
+  if (activeMode.value === 'supercell-glide') return t('glide.supercellGlideSidebarTitle')
+  return t('glide.sidebarTitle')
+})
 
 const GlidePanel = defineAsyncComponent(() => import('@/components/GlidePanel.vue'))
 
@@ -37,6 +51,25 @@ const IconGlide = {
     <path d="M4 7h12l4 4H8z"/>
     <path d="M4 13h12l4 4H8z"/>
     <path d="M4 7v10"/>
+  </svg>`
+}
+
+const IconReverseGlide = {
+  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 7H8L4 11h12z"/>
+    <path d="M20 13H8l-4 4h12z"/>
+    <path d="M20 7v10"/>
+  </svg>`
+}
+
+const IconSupercellGlide = {
+  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
+    <path d="M11 8h3"/>
+    <path d="M11 17h3"/>
   </svg>`
 }
 </script>
@@ -119,6 +152,14 @@ const IconGlide = {
 
 .tab-label {
   flex: 1;
+}
+
+.tab-meta {
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--status-warning, #f59e0b);
 }
 
 .sidebar-footer {

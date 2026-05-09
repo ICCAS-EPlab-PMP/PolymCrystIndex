@@ -3,32 +3,38 @@
     <div class="main-container">
       <aside class="sidebar">
         <nav class="tab-nav">
-          <button class="tab-item active" style="pointer-events: none;">
+          <button class="tab-item" :class="{ active: activeMode === 'cell' }" @click="activeMode = 'cell'">
             <component :is="IconManual" class="tab-icon" />
             <span class="tab-label">{{ t('manual.sidebarTitle') }}</span>
+          </button>
+          <button class="tab-item" :class="{ active: activeMode === 'supercell' }" @click="activeMode = 'supercell'">
+            <component :is="IconSupercell" class="tab-icon" />
+            <span class="tab-label">{{ t('manual.supercellTab') }}</span>
           </button>
         </nav>
 
         <div class="sidebar-footer">
           <div class="status-indicator">
             <span class="status-dot"></span>
-            <span class="status-text">{{ t('manual.title') }}</span>
+            <span class="status-text">{{ activeTitle }}</span>
           </div>
         </div>
       </aside>
 
       <main class="content">
-        <ManualCellPanel />
+        <ManualCellPanel :mode="activeMode" />
       </main>
     </div>
   </div>
 </template>
 
 <script setup>
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+const activeMode = ref('cell')
+const activeTitle = computed(() => (activeMode.value === 'supercell' ? t('manual.supercellTab') : t('manual.sidebarTitle')))
 
 const ManualCellPanel = defineAsyncComponent(() => import('@/components/ManualCellPanel.vue'))
 
@@ -38,6 +44,15 @@ const IconManual = {
     <line x1="3" y1="9" x2="21" y2="9"/>
     <line x1="9" y1="3" x2="9" y2="21"/>
     <line x1="15" y1="3" x2="15" y2="21"/>
+  </svg>`
+}
+
+const IconSupercell = {
+  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
   </svg>`
 }
 </script>

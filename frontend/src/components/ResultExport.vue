@@ -301,6 +301,23 @@
         </div>
       </div>
     </div>
+
+    <div v-if="hasResults" class="bottom-navigation">
+      <button v-if="mode === 'indexing-subtab'" class="btn-nav-to-results" @click="navigateToResultsProcessing">
+        {{ t('results.goToResultsProcessing') || 'Go to Results & Processing' }}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12,5 19,12 12,19"/>
+        </svg>
+      </button>
+      <button v-else class="btn-nav-to-indexing" @click="navigateToIndexingResults">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="19" y1="12" x2="5" y2="12"/>
+          <polyline points="12,19 5,12 12,5"/>
+        </svg>
+        {{ t('results.backToIndexingResults') || '← Back to Indexing Results' }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -320,10 +337,15 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  mode: {
+    type: String,
+    default: 'indexing-subtab',
+    validator: (v) => ['indexing-subtab', 'results-page'].includes(v),
+  },
 })
 
 const { t } = useI18n()
-const emit = defineEmits(['navigate'])
+const emit = defineEmits(['navigate', 'results-loaded', 'go-to-preview'])
 const router = useRouter()
 const route = useRoute()
 
@@ -357,6 +379,7 @@ const maxDeviationHPsi = ref(1)
 const maxDeviationKPsi = ref(1)
 const maxDeviationLPsi = ref(1)
 const currentTaskId = ref(null)
+const resultWorkDir = ref(null)
 const currentView = ref('reset')
 const peakSymmetryGroups = ref([])
 const peakSymmetryConfig = ref({ enabled: false, mergeTq: 0.02, mergeTa: 1.0, mergeGradientEnabled: false, mergeGradientThreshold: 0.0 })
@@ -370,11 +393,32 @@ const formatPeakIndices = (indices) => Array.isArray(indices) ? indices.join(', 
 const getMillerQ = (m) => Number(m?.qcalc ?? m?.q ?? 0)
 const getMillerPsi = (m) => Number(m?.psicalc ?? m?.psi ?? 0)
 
+const navigateToResultsProcessing = () => {
+  const query = {}
+  if (resultWorkDir.value) {
+    query.workDir = resultWorkDir.value
+  }
+  router.push({ path: '/app/results', query })
+}
+
+const navigateToIndexingResults = () => {
+  router.push({
+    path: '/app/indexing',
+    query: {
+      subtab: 'results',
+    },
+  })
+}
+
 const startAnalysis = () => {
   emit('navigate', 'console')
   if (route.path === '/app/results') {
     router.push('/app/indexing')
   }
+}
+
+const goToPreview = () => {
+  emit('go-to-preview')
 }
 
 const setView = (view) => {
@@ -470,6 +514,7 @@ const loadResults = async () => {
       peakSymmetryGroups.value = Array.isArray(result.data.peakSymmetryGroups) ? result.data.peakSymmetryGroups : []
       peakSymmetryConfig.value = result.data.peakSymmetryConfig || peakSymmetryConfig.value
       glideBatchOutputs.value = result.data.glideBatchOutputs || glideBatchOutputs.value
+      resultWorkDir.value = result.data.workDir || null
 
       if (result.data.qualityMetrics) {
         rFactor.value = result.data.qualityMetrics.r_factor || 0
@@ -490,6 +535,7 @@ const loadResults = async () => {
       }
       
       hasResults.value = true
+      emit('results-loaded', result.data)
     }
   } catch (error) {
     hasResults.value = false
@@ -640,7 +686,7 @@ const exportHDF5 = async () => {
     URL.revokeObjectURL(url)
   } catch (error) {
     const hdf5Data = {
-      version: '1.8.3',
+      version: '1.8.4',
       timestamp: new Date().toISOString(),
       cellParameters: cellParams.value,
       millerIndices: millerData.value,
@@ -793,6 +839,32 @@ watch(() => props.resultData, async (newData) => {
 .success-banner svg {
   width: 24px;
   height: 24px;
+}
+
+.btn-go-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--secondary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-left: auto;
+}
+
+.btn-go-preview:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-go-preview svg {
+  width: 14px;
+  height: 14px;
 }
 
 .results-grid {
@@ -1265,5 +1337,41 @@ watch(() => props.resultData, async (newData) => {
   .export-options {
     grid-template-columns: 1fr;
   }
+}
+
+.bottom-navigation {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.btn-nav-to-results,
+.btn-nav-to-indexing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 32px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.btn-nav-to-results:hover,
+.btn-nav-to-indexing:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-nav-to-results svg,
+.btn-nav-to-indexing svg {
+  width: 18px;
+  height: 18px;
 }
 </style>

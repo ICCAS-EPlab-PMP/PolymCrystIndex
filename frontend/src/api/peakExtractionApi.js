@@ -16,6 +16,9 @@ export const rawApi = {
   recordPoint:   (body)    => api.post('/peak/raw/record-point', body),
   deleteRecord:  (body)    => api.post('/peak/raw/delete-record', body),
   clearRecords:  (sid)     => api.post('/peak/raw/clear-records', { session_id: sid }),
+  saveRecords:   (body)    => api.post('/peak/raw/save-records', body),
+  listSavedRecords: ()     => api.get('/peak/raw/saved-records'),
+  loadRecords:   (body)    => api.post('/peak/raw/load-records', body),
   calcPixel:     (body)    => api.post('/peak/raw/calc-pixel', body),
   exportCsv:     (sid)     => `/api/peak/raw/export-csv/${sid}`,
 }
@@ -31,5 +34,8 @@ export const intApi = {
   recordPeaks:    (body)  => api.post('/peak/integrated/record-peaks', body),
   deleteRecord:   (body)  => api.post('/peak/integrated/delete-record', body),
   clearRecords:   (sid)   => api.post('/peak/integrated/clear-records', { session_id: sid }),
+  saveRecords:    (body)  => api.post('/peak/integrated/save-records', body),
+  listSavedRecords: ()    => api.get('/peak/integrated/saved-records'),
+  loadRecords:    (body)  => api.post('/peak/integrated/load-records', body),
   exportCsv:      (sid)   => `/api/peak/integrated/export-csv/${sid}`,
 }

@@ -1,11 +1,15 @@
 <template>
   <div class="glide-panel">
     <div class="page-header">
-      <h2>{{ t('glide.title') }}</h2>
-      <p>{{ t('glide.subtitle') }}</p>
+      <div class="page-header-row">
+        <div>
+          <h2>{{ panelTitle }}</h2>
+          <p>{{ panelSubtitle }}</p>
+        </div>
+      </div>
     </div>
 
-    <div class="glide-form">
+    <div v-if="!isReverseMode && !isSupercellGlideMode" class="glide-form">
       <div class="form-section">
         <h3>{{ t('glide.baseCellParams') }}</h3>
         <div class="cell-inputs">
@@ -79,6 +83,87 @@
       </button>
     </div>
 
+    <div v-else-if="isReverseMode" class="glide-form reverse-form">
+      <div class="reverse-intro-card">
+        <strong>{{ t('glide.reverseIntroTitle') }}</strong>
+        <p>{{ t('glide.reverseIntroDesc') }}</p>
+        <p class="reverse-auto-notice">{{ t('glide.reverseAutoDetectNotice') }}</p>
+      </div>
+
+      <div class="form-section">
+        <h3>{{ t('glide.baseCellParams') }}</h3>
+        <div class="cell-inputs">
+          <div class="input-group">
+            <label>a (Å)</label>
+            <input type="number" v-model.number="reverseCell.a" step="0.001" min="0.01" />
+          </div>
+          <div class="input-group">
+            <label>b (Å)</label>
+            <input type="number" v-model.number="reverseCell.b" step="0.001" min="0.01" />
+          </div>
+          <div class="input-group">
+            <label>c (Å)</label>
+            <input type="number" v-model.number="reverseCell.c" step="0.001" min="0.01" />
+          </div>
+          <div class="input-group">
+            <label>α (°)</label>
+            <input type="number" v-model.number="reverseCell.alpha" step="0.01" min="0.01" max="180" />
+          </div>
+          <div class="input-group">
+            <label>β (°)</label>
+            <input type="number" v-model.number="reverseCell.beta" step="0.01" min="0.01" max="180" />
+          </div>
+          <div class="input-group">
+            <label>γ (°)</label>
+            <input type="number" v-model.number="reverseCell.gamma" step="0.01" min="0.01" max="180" />
+          </div>
+          <div class="input-group">
+            <label>Wavelength (Å)</label>
+            <input type="number" v-model.number="reverseCell.wavelength" step="0.001" min="0.01" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>{{ t('glide.reverseCandidates') }}</h3>
+        <div v-for="(candidate, idx) in reverseCandidates" :key="idx" class="glide-group-row">
+          <div class="input-group">
+            <label>{{ t('glide.label') }}</label>
+            <input type="text" v-model="candidate.label" :placeholder="t('glide.reverseLabelPlaceholder')" />
+          </div>
+          <div class="input-group" :title="t('glide.nATip')">
+            <label>{{ t('glide.nA') }} <span class="hint-icon" :title="t('glide.nATip')">ⓘ</span></label>
+            <input type="number" v-model.number="candidate.nA" step="1" @change="enforceInt(candidate, 'nA')" />
+          </div>
+          <div class="input-group" :title="t('glide.nBTip')">
+            <label>{{ t('glide.nB') }} <span class="hint-icon" :title="t('glide.nBTip')">ⓘ</span></label>
+            <input type="number" v-model.number="candidate.nB" step="1" @change="enforceInt(candidate, 'nB')" />
+          </div>
+          <div class="input-group" :title="t('glide.l0Tip')">
+            <label>{{ t('glide.l0') }} <span class="hint-icon" :title="t('glide.l0Tip')">ⓘ</span></label>
+            <input type="number" v-model.number="candidate.l0" step="1" @change="enforceInt(candidate, 'l0')" />
+          </div>
+          <button class="glide-remove-btn" @click="removeReverseCandidate(idx)" :title="t('glide.removeCandidate')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <button class="btn-add-group" @click="addReverseCandidate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          {{ t('glide.addCandidate') }}
+        </button>
+      </div>
+
+      <button class="btn-generate" @click="generateReverse" :disabled="reverseGenerating">
+        <svg v-if="!reverseGenerating" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 7H8L4 11h12z"/>
+          <path d="M20 13H8l-4 4h12z"/>
+          <path d="M20 7v10"/>
+        </svg>
+        <span v-if="reverseGenerating" class="spinner"></span>
+        {{ reverseGenerating ? t('glide.reverseGenerating') : t('glide.reverseGenerate') }}
+      </button>
+    </div>
+
     <div v-if="error" class="error-banner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
@@ -88,7 +173,7 @@
       <span>{{ error }}</span>
     </div>
 
-    <div v-if="results" class="results-section">
+    <div v-if="!isReverseMode && !isSupercellGlideMode && results" class="results-section">
       <div class="success-banner">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
@@ -139,7 +224,7 @@
           {{ browseExpanded ? t('glide.quickBrowseCollapse') : t('glide.quickBrowseExpand') }}
         </button>
 
-        <div v-if="browseExpanded" class="quick-browse-content">
+        <div v-show="browseExpanded" class="quick-browse-content">
           <div class="browse-mode-switch">
             <label class="mode-option">
               <input v-model="browseMode" type="radio" value="single" />
@@ -194,16 +279,225 @@
         </div>
       </div>
     </div>
+
+    <div v-if="isReverseMode && reverseResult" class="results-section">
+      <div class="success-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+          <polyline points="22,4 12,14.01 9,11.01"/>
+        </svg>
+        <span>{{ t('glide.analysisComplete', { count: reverseResult.candidateResults.length }) }}</span>
+      </div>
+
+      <div v-if="reverseResult.inputCell" class="base-cell-info">
+        <span class="info-label">{{ t('glide.reverseDirectCell') }}</span>
+        <span class="info-value">
+          {{ reverseResult.inputCell.a.toFixed(3) }}, {{ reverseResult.inputCell.b.toFixed(3) }}, {{ reverseResult.inputCell.c.toFixed(3) }},
+          {{ reverseResult.inputCell.alpha.toFixed(2) }}, {{ reverseResult.inputCell.beta.toFixed(2) }}, {{ reverseResult.inputCell.gamma.toFixed(2) }}
+        </span>
+      </div>
+
+      <div v-if="reverseResult.reciprocalParams" class="base-cell-info">
+        <span class="info-label">{{ t('glide.computedReciprocal') }}</span>
+        <span class="info-value">
+          a*={{ reverseResult.reciprocalParams.aStar.toFixed(6) }}, b*={{ reverseResult.reciprocalParams.bStar.toFixed(6) }}, γ*={{ reverseResult.reciprocalParams.gammaStar.toFixed(2) }}
+        </span>
+      </div>
+
+      <div v-if="reverseResult.reciprocalParams" class="base-cell-info">
+        <span class="info-label">{{ t('glide.computedProjection') }}</span>
+        <span class="info-value">
+          a<sub>投影</sub>={{ reverseResult.reciprocalParams.aStar > 1e-12 ? (1 / reverseResult.reciprocalParams.aStar).toFixed(4) : '∞' }} Å,
+          b<sub>投影</sub>={{ reverseResult.reciprocalParams.bStar > 1e-12 ? (1 / reverseResult.reciprocalParams.bStar).toFixed(4) : '∞' }} Å
+        </span>
+      </div>
+
+      <div v-for="candidate in reverseResult.candidateResults" :key="candidate.label" class="glide-result-card">
+        <div class="glide-result-header">
+          <span class="group-badge">{{ candidate.label }}</span>
+          <span class="glide-input-info">nA={{ candidate.nA }}, nB={{ candidate.nB }}, l₀={{ candidate.l0 }}</span>
+        </div>
+        <div class="glide-result-body">
+          <div v-if="candidate.cellParams" class="cell-info">
+            <span class="cell-label">{{ t('glide.cell') }}:</span>
+            <span class="cell-value">
+              {{ candidate.cellParams.a.toFixed(3) }}, {{ candidate.cellParams.b.toFixed(3) }}, {{ candidate.cellParams.c.toFixed(3) }},
+              {{ candidate.cellParams.alpha.toFixed(2) }}, {{ candidate.cellParams.beta.toFixed(2) }}, {{ candidate.cellParams.gamma.toFixed(2) }}
+            </span>
+          </div>
+          <div v-if="candidate.volume !== null && candidate.volume !== undefined" class="cell-info">
+            <span class="cell-label">{{ t('glide.volume') }}:</span>
+            <span class="cell-value">{{ candidate.volume.toFixed(3) }} Å³</span>
+          </div>
+          <div v-if="candidate.totalReflections" class="reflection-info">
+            {{ candidate.totalReflections }} {{ t('glide.reflections') }}
+          </div>
+          <button v-if="candidate.fullMillerContent" class="btn-download-sm" @click="downloadReverseCandidate(candidate)">{{ t('glide.download') }}</button>
+          <span v-if="candidate.message" class="cell-label">{{ candidate.message }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="isSupercellGlideMode" class="glide-form">
+      <div class="form-section">
+        <h3>{{ t('glide.baseCellParams') }}</h3>
+        <div class="cell-inputs">
+          <div class="input-group">
+            <label>a (Å)</label>
+            <input type="number" v-model.number="scGlideCell.a" step="0.001" min="0.01" />
+          </div>
+          <div class="input-group">
+            <label>b (Å)</label>
+            <input type="number" v-model.number="scGlideCell.b" step="0.001" min="0.01" />
+          </div>
+          <div class="input-group">
+            <label>c (Å)</label>
+            <input type="number" v-model.number="scGlideCell.c" step="0.001" min="0.01" />
+          </div>
+          <div class="input-group">
+            <label>α (°)</label>
+            <input type="number" v-model.number="scGlideCell.alpha" step="0.01" min="0.01" max="180" />
+          </div>
+          <div class="input-group">
+            <label>β (°)</label>
+            <input type="number" v-model.number="scGlideCell.beta" step="0.01" min="0.01" max="180" />
+          </div>
+          <div class="input-group">
+            <label>γ (°)</label>
+            <input type="number" v-model.number="scGlideCell.gamma" step="0.01" min="0.01" max="180" />
+          </div>
+          <div class="input-group">
+            <label>Wavelength (Å)</label>
+            <input type="number" v-model.number="scGlideCell.wavelength" step="0.001" min="0.01" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>{{ t('glide.supercellGlideFactors') }}</h3>
+        <div class="sc-glide-factors-row">
+          <div class="input-group" :title="t('glide.supercellGlideFactorsTip')">
+            <label>na (a轴) <span class="hint-icon" :title="t('glide.supercellGlideFactorsTip')">ⓘ</span></label>
+            <input type="number" v-model.number="scGlideFactors.na" step="1" min="1" @change="enforceInt(scGlideFactors, 'na')" />
+          </div>
+          <div class="input-group" :title="t('glide.supercellGlideFactorsTip')">
+            <label>nb (b轴) <span class="hint-icon" :title="t('glide.supercellGlideFactorsTip')">ⓘ</span></label>
+            <input type="number" v-model.number="scGlideFactors.nb" step="1" min="1" @change="enforceInt(scGlideFactors, 'nb')" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>{{ t('glide.supercellGlideShearParams') }}</h3>
+        <div v-for="(group, idx) in scGlideGroups" :key="idx" class="glide-group-row">
+          <div class="input-group">
+            <label>{{ t('glide.label') }}</label>
+            <input type="text" v-model="group.label" :placeholder="t('glide.labelPlaceholder')" />
+          </div>
+          <div class="input-group" :title="t('glide.nATip')">
+            <label>{{ t('glide.nA') }} <span class="hint-icon" :title="t('glide.nATip')">ⓘ</span></label>
+            <input type="number" v-model.number="group.nA" step="1" @change="enforceInt(group, 'nA')" />
+          </div>
+          <div class="input-group" :title="t('glide.nBTip')">
+            <label>{{ t('glide.nB') }} <span class="hint-icon" :title="t('glide.nBTip')">ⓘ</span></label>
+            <input type="number" v-model.number="group.nB" step="1" @change="enforceInt(group, 'nB')" />
+          </div>
+          <div class="input-group" :title="t('glide.l0Tip')">
+            <label>{{ t('glide.l0') }} <span class="hint-icon" :title="t('glide.l0Tip')">ⓘ</span></label>
+            <input type="number" v-model.number="group.l0" step="1" @change="enforceInt(group, 'l0')" />
+          </div>
+          <button class="glide-remove-btn" @click="removeScGlideGroup(idx)" :title="t('glide.removeGroup')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <button class="btn-add-group" @click="addScGlideGroup">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          {{ t('glide.addGroup') }}
+        </button>
+      </div>
+
+      <button class="btn-generate" @click="generateScGlide" :disabled="scGlideGenerating">
+        <svg v-if="!scGlideGenerating" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+          <line x1="4" y1="22" x2="4" y2="15"/>
+        </svg>
+        <span v-if="scGlideGenerating" class="spinner"></span>
+        {{ scGlideGenerating ? t('glide.generating') : t('glide.generate') }}
+      </button>
+    </div>
+
+    <div v-if="isSupercellGlideMode && scGlideResult" class="results-section">
+      <div class="success-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+          <polyline points="22,4 12,14.01 9,11.01"/>
+        </svg>
+        <span>{{ t('glide.analysisComplete', { count: scGlideResult.glideBatchOutputs.groups.length }) }}</span>
+      </div>
+
+      <div v-if="scGlideResult.baseCell" class="base-cell-info">
+        <span class="info-label">{{ t('glide.baseCell') }} ({{ Math.round(scGlideFactors.na) }}×{{ Math.round(scGlideFactors.nb) }})</span>
+        <span class="info-value">
+          {{ scGlideResult.baseCell.a.toFixed(3) }}, {{ scGlideResult.baseCell.b.toFixed(3) }}, {{ scGlideResult.baseCell.c.toFixed(3) }},
+          {{ scGlideResult.baseCell.alpha.toFixed(2) }}, {{ scGlideResult.baseCell.beta.toFixed(2) }}, {{ scGlideResult.baseCell.gamma.toFixed(2) }}
+        </span>
+      </div>
+
+      <div v-for="group in scGlideResult.glideBatchOutputs.groups" :key="group.label" class="glide-result-card">
+        <div class="glide-result-header">
+          <span class="group-badge">{{ group.label }}</span>
+          <span class="glide-input-info" v-if="group.input">
+            nA={{ group.input.nA }}, nB={{ group.input.nB }}, l₀={{ group.input.l0 }}
+          </span>
+        </div>
+        <div class="glide-result-body">
+          <div v-if="group.cellParams" class="cell-info">
+            <span class="cell-label">{{ t('glide.cell') }}:</span>
+            <span class="cell-value">
+              {{ group.cellParams.a.toFixed(3) }}, {{ group.cellParams.b.toFixed(3) }}, {{ group.cellParams.c.toFixed(3) }},
+              {{ group.cellParams.alpha.toFixed(2) }}, {{ group.cellParams.beta.toFixed(2) }}, {{ group.cellParams.gamma.toFixed(2) }}
+            </span>
+          </div>
+          <div v-if="group.volume !== null && group.volume !== undefined" class="cell-info">
+            <span class="cell-label">{{ t('glide.volume') }}:</span>
+            <span class="cell-value">{{ group.volume.toFixed(3) }} Å³</span>
+          </div>
+          <div class="reflection-info">
+            {{ group.totalReflections }} {{ t('glide.reflections') }}
+          </div>
+          <button class="btn-download-sm" @click="downloadGroup(group)">{{ t('glide.download') }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/index'
 import Visualizer from '@/components/Visualizer.vue'
 
+const props = defineProps({
+  mode: {
+    type: String,
+    default: 'forward'
+  }
+})
+
 const { t } = useI18n()
+const isReverseMode = computed(() => props.mode === 'reverse')
+const isSupercellGlideMode = computed(() => props.mode === 'supercell-glide')
+const panelTitle = computed(() => {
+  if (isReverseMode.value) return t('glide.reverseTitle')
+  if (isSupercellGlideMode.value) return t('glide.supercellGlideTitle')
+  return t('glide.title')
+})
+const panelSubtitle = computed(() => {
+  if (isReverseMode.value) return t('glide.reverseSubtitle')
+  if (isSupercellGlideMode.value) return t('glide.supercellGlideSubtitle')
+  return t('glide.subtitle')
+})
 
 const baseCell = reactive({
   a: 7.40,
@@ -219,9 +513,42 @@ const glideGroups = reactive([
   { label: '', nA: 1, nB: 0, l0: 1 }
 ])
 
+const reverseCell = reactive({
+  a: 7.40,
+  b: 4.93,
+  c: 2.54,
+  alpha: 90.0,
+  beta: 90.0,
+  gamma: 90.0,
+  wavelength: 1.542
+})
+
+const reverseCandidates = reactive([
+  { label: '', nA: 0, nB: 0, l0: 1 }
+])
+
+const scGlideCell = reactive({
+  a: 7.40,
+  b: 4.93,
+  c: 2.54,
+  alpha: 90.0,
+  beta: 90.0,
+  gamma: 90.0,
+  wavelength: 1.542
+})
+
+const scGlideFactors = reactive({ na: 2, nb: 2 })
+const scGlideGroups = reactive([
+  { label: '', nA: 0, nB: 0, l0: 1 }
+])
+
 const generating = ref(false)
+const reverseGenerating = ref(false)
+const scGlideGenerating = ref(false)
 const error = ref(null)
 const results = ref(null)
+const reverseResult = ref(null)
+const scGlideResult = ref(null)
 const browseExpanded = ref(false)
 const keepBrowseExpanded = ref(false)
 const browseMode = ref('single')
@@ -249,9 +576,7 @@ const selectedGroups = computed(() => {
   return browsableGroups.value.filter(group => group.label === selectedSingleLabel.value).slice(0, 1)
 })
 
-const hasBrowsableGroups = computed(() => {
-  return browsableGroups.value.length > 0
-})
+const hasBrowsableGroups = computed(() => browsableGroups.value.length > 0)
 
 const toggleOverlayGroup = (label) => {
   if (selectedOverlayLabels.value.includes(label)) {
@@ -301,7 +626,10 @@ watch([
   }
 }, { deep: true })
 
-/** Force a field to integer */
+watch(() => props.mode, () => {
+  error.value = null
+})
+
 const enforceInt = (group, field) => {
   if (group[field] == null || Number.isNaN(group[field])) {
     group[field] = 0
@@ -320,9 +648,71 @@ const removeGroup = (idx) => {
   }
 }
 
+const addReverseCandidate = () => {
+  reverseCandidates.push({ label: '', nA: 0, nB: 0, l0: 1 })
+}
+
+const removeReverseCandidate = (idx) => {
+  if (reverseCandidates.length > 1) {
+    reverseCandidates.splice(idx, 1)
+  }
+}
+
+const addScGlideGroup = () => {
+  scGlideGroups.push({ label: '', nA: 0, nB: 0, l0: 1 })
+}
+
+const removeScGlideGroup = (idx) => {
+  if (scGlideGroups.length > 1) {
+    scGlideGroups.splice(idx, 1)
+  }
+}
+
+const generateScGlide = async () => {
+  error.value = null
+  scGlideGenerating.value = true
+  scGlideResult.value = null
+
+  const validGroups = scGlideGroups.filter(g => Math.round(g.l0) !== 0)
+  if (validGroups.length === 0) {
+    error.value = t('glide.errorNoGroup')
+    scGlideGenerating.value = false
+    return
+  }
+
+  const intGroups = validGroups.map(g => ({
+    ...g,
+    nA: Math.round(g.nA),
+    nB: Math.round(g.nB),
+    l0: Math.round(g.l0),
+  }))
+
+  const na = Math.round(scGlideFactors.na)
+  const nb = Math.round(scGlideFactors.nb)
+
+  try {
+    const res = await api.glideBatchFullmiller(
+      scGlideCell.a * na, scGlideCell.b * nb, scGlideCell.c,
+      scGlideCell.alpha, scGlideCell.beta, scGlideCell.gamma,
+      scGlideCell.wavelength,
+      intGroups
+    )
+    if (res.success && res.data) {
+      scGlideResult.value = res.data
+    } else {
+      error.value = res.message || t('glide.generationFailed')
+    }
+  } catch (e) {
+    error.value = e.message || t('glide.requestFailed')
+  } finally {
+    scGlideGenerating.value = false
+  }
+}
+
 const generate = async () => {
   error.value = null
   generating.value = true
+  reverseResult.value = null
 
   const validGroups = glideGroups.filter(g => Math.round(g.l0) !== 0)
   if (validGroups.length === 0) {
@@ -331,7 +721,6 @@ const generate = async () => {
     return
   }
 
-  // Ensure integer values for nA, nB, l0
   const intGroups = validGroups.map(g => ({
     ...g,
     nA: Math.round(g.nA),
@@ -369,6 +758,44 @@ const generate = async () => {
   }
 }
 
+const generateReverse = async () => {
+  error.value = null
+  reverseGenerating.value = true
+  reverseResult.value = null
+
+  const validCandidates = reverseCandidates.filter(candidate => Math.round(candidate.l0) !== 0)
+  if (validCandidates.length === 0) {
+    error.value = t('glide.reverseErrorNoCandidate')
+    reverseGenerating.value = false
+    return
+  }
+
+  const intCandidates = validCandidates.map(candidate => ({
+    ...candidate,
+    nA: Math.round(candidate.nA),
+    nB: Math.round(candidate.nB),
+    l0: Math.round(candidate.l0)
+  }))
+
+  try {
+    const res = await api.reverseGlideFullmiller(
+      reverseCell.a, reverseCell.b, reverseCell.c,
+      reverseCell.alpha, reverseCell.beta, reverseCell.gamma,
+      reverseCell.wavelength,
+      intCandidates
+    )
+    if (res.success && res.data) {
+      reverseResult.value = res.data
+    } else {
+      error.value = res.message || t('glide.generationFailed')
+    }
+  } catch (e) {
+    error.value = e.message || t('glide.requestFailed')
+  } finally {
+    reverseGenerating.value = false
+  }
+}
+
 const downloadGroup = (group) => {
   if (!group.fullMillerContent) return
   const blob = new Blob([group.fullMillerContent], { type: 'text/plain' })
@@ -379,15 +806,33 @@ const downloadGroup = (group) => {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+const downloadReverseCandidate = (candidate) => {
+  if (!candidate.fullMillerContent) return
+  const blob = new Blob([candidate.fullMillerContent], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `FullMiller_${candidate.label}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <style scoped>
 .glide-panel {
-  max-width: 1000px;
+  max-width: 1160px;
 }
 
 .page-header {
   margin-bottom: 24px;
+}
+
+.page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .page-header h2 {
@@ -397,6 +842,18 @@ const downloadGroup = (group) => {
 
 .page-header p {
   color: var(--text-secondary);
+}
+
+.pending-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--status-warning, #f59e0b);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .glide-form {
@@ -418,10 +875,48 @@ const downloadGroup = (group) => {
   margin-bottom: 12px;
 }
 
+.reverse-intro-card {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.reverse-intro-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+
+.reverse-intro-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.reverse-auto-notice {
+  margin-top: 8px !important;
+  font-style: italic;
+  color: var(--status-warning, #f59e0b) !important;
+  font-size: 0.8125rem !important;
+}
+
+.sc-glide-factors-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  max-width: 400px;
+}
+
 .cell-inputs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 16px;
+}
+
+.reverse-inputs {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .input-group {
@@ -590,14 +1085,28 @@ const downloadGroup = (group) => {
   font-weight: 600;
 }
 
-.success-banner svg {
+.success-banner svg,
+.pending-banner svg {
   width: 20px;
   height: 20px;
+}
+
+.pending-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-lg);
+  color: var(--status-warning, #f59e0b);
+  font-weight: 600;
 }
 
 .base-cell-info {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 12px 16px;
   background: var(--bg-surface);
@@ -616,6 +1125,9 @@ const downloadGroup = (group) => {
   font-weight: 700;
   font-family: 'Fira Code', monospace;
   color: var(--primary);
+  flex: 1 1 320px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .glide-result-card {
@@ -628,6 +1140,7 @@ const downloadGroup = (group) => {
 .glide-result-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 12px 16px;
   background: var(--bg-surface-alt);
@@ -645,10 +1158,18 @@ const downloadGroup = (group) => {
   font-weight: 700;
 }
 
+.group-badge.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--status-warning, #f59e0b);
+}
+
 .glide-input-info {
   font-family: 'Fira Code', monospace;
   font-size: 0.8125rem;
   color: var(--text-secondary);
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .glide-result-body {
@@ -661,6 +1182,7 @@ const downloadGroup = (group) => {
 .cell-info {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -675,6 +1197,8 @@ const downloadGroup = (group) => {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .reflection-info {
@@ -811,47 +1335,10 @@ const downloadGroup = (group) => {
   background: var(--primary-bg);
 }
 
-.group-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.group-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: var(--bg-surface-alt);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.group-chip:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.group-chip.selected {
-  background: var(--primary-bg);
-  border-color: var(--primary);
-  color: var(--primary);
-  font-weight: 600;
-}
-
 .chip-count {
   font-size: 0.6875rem;
   color: var(--text-muted);
   font-weight: 400;
-}
-
-.group-chip.selected .chip-count {
-  color: var(--primary);
 }
 
 .overlay-limit {
@@ -868,11 +1355,73 @@ const downloadGroup = (group) => {
   margin-top: 4px;
 }
 
+.reverse-placeholder-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reverse-placeholder-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reverse-placeholder-reason {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.reverse-placeholder-copy {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.reverse-request-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.reverse-request-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-alt);
+}
+
+.reverse-candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reverse-candidate-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
 .quick-browse-empty {
   font-size: 0.8125rem;
   color: var(--text-muted);
   text-align: center;
   padding: 12px 0;
   margin: 0;
+}
+
+@media (max-width: 900px) {
+  .page-header-row {
+    flex-direction: column;
+  }
 }
 </style>

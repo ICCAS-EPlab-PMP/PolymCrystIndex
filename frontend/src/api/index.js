@@ -108,6 +108,10 @@ export const api = {
     return request.get('/status')
   },
 
+  async checkForUpdates() {
+    return request.get('/update/check')
+  },
+
   async parsePoniFile(file) {
     const formData = new FormData()
     formData.append('file', file)
@@ -273,6 +277,16 @@ export const api = {
   async glideBatchFullmiller(a, b, c, alpha, beta, gamma, wavelength, glideGroups) {
     return request.post('/analysis/glide-batch', {
       a, b, c, alpha, beta, gamma, wavelength, glideGroups
+    })
+  },
+
+  async supercellBatchFullmiller(groups) {
+    return request.post('/analysis/supercell-fullmiller', { groups })
+  },
+
+  async reverseGlideFullmiller(a, b, c, alpha, beta, gamma, wavelength, glideCandidates) {
+    return request.post('/analysis/reverse-glide', {
+      a, b, c, alpha, beta, gamma, wavelength, glideCandidates
     })
   },
 

@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.8.3'
+    version: 'v1.8.4'
   },
   home: {
     selectModule: 'Select Module',
@@ -23,14 +23,17 @@ export default {
       expand: 'Expand Summary',
       collapse: 'Collapse Summary',
       collapsedSummary: 'Expand to review the contents of this release.',
-      versionValue: 'v 1.8.3',
+      versionValue: 'v 1.8.4',
       keywords: {
         manualCell: 'Manual cell parameters - new feature',
         glideC: 'c-axis glide visualization',
         indexingVisual: 'indexing visualization',
         utf16Import: 'UTF-16 file import support',
         angleWarning: 'psi angle range warnings',
-        uiPolish: 'UI layout and interaction improvements'
+        uiPolish: 'UI layout and interaction improvements',
+        fixedLMode: 'Fixed-l constraint mode',
+        resultFlow: 'Result verification flow improvements',
+        markerSize: 'Miller marker visibility'
       },
       dateLabel: 'Change Date',
       types: {
@@ -53,7 +56,51 @@ export default {
           date: '2026.4.17',
           title: 'Indexing Program Visualization',
           summary: 'Visualization inside the indexing workflow is now better integrated, so image, parameter, and marker changes can be reviewed in one place.'
+        },
+        fixedLMode: {
+          date: '2026.4.26',
+          title: 'Fixed-l Constraint Mode',
+          summary: 'Support fixed-l value constraint during genetic algorithm indexing to improve convergence for known layer spacing scenarios.'
+        },
+        resultFlow: {
+          date: '2026.4.26',
+          title: 'Result Verification Flow',
+          summary: 'Button-based navigation between indexing and results pages, with automatic outputMiller preloading for seamless review.'
+        },
+        markerSize: {
+          date: '2026.4.26',
+          title: 'Improved Miller Marker Visibility',
+          summary: 'Increased marker sizes and line widths on both raw and integrated images for clearer identification.'
         }
+      },
+      checkForUpdates: 'Check for Updates',
+      checking: 'Checking...',
+      alreadyLatest: 'You are on the latest version (v1.8.4)',
+      alreadyLatestToast: 'Check complete: you are already on the latest published version.',
+      statusLabel: 'Update Status',
+      currentVersion: 'Current Version',
+      latestVersion: 'Latest Published Version',
+      localPublishedVersion: 'Local Release Record',
+      checkedFrom: 'Checked From',
+      openOfficial: 'Open Official Site',
+      openGithub: 'View GitHub',
+      fallbackNotice: 'This result was obtained from the fallback source and may lag behind the latest GitHub release.',
+      sources: {
+        github: 'GitHub',
+        gitee: 'Gitee (fallback)',
+        none: 'No remote source available'
+      },
+      statusText: {
+        update_available: 'New Version Available',
+        up_to_date: 'Already on the Latest Published Version',
+        ahead_of_release: 'Current Version Is Ahead of the Published Release',
+        check_unavailable: 'Unable to Complete Update Check'
+      },
+      summary: {
+        updateAvailable: 'Your current version is {current}, while the latest published version is {latest}. You can open the official site or GitHub to review the release.',
+        latest: 'The current runtime version {current} matches the latest published release.',
+        aheadOfRelease: 'The current runtime version {current} is ahead of the latest published release {latest}, which usually means you are running a local development build or unpublished server code.',
+        unavailable: 'Latest release information could not be retrieved from remote sources. Please try again later.'
       }
     }
   },
@@ -100,7 +147,8 @@ export default {
     parameters: 'Parameters',
     analysis: 'Analysis',
     results: 'Results',
-    visualizer: 'Visualizer'
+    visualizer: 'Visualizer',
+    backToIndexing: 'Back to Indexing'
   },
   status: {
     idle: 'Ready',
@@ -180,7 +228,8 @@ export default {
     continue: 'Continue to Parameters',
     fileEmpty: 'File is empty',
     formatError: 'Each line must contain at least 3 columns (q, psi, intensity)',
-    numericError: 'Contains non-numeric characters'
+    numericError: 'Contains non-numeric characters',
+    dataPreview: 'Data Preview'
   },
   params: {
     title: 'Parameter Setup',
@@ -245,6 +294,14 @@ export default {
     mergeGradientThresholdHint: 'Threshold for gradient direction consistency. 0 disables gradient check.',
     fixedPeakSummaryReady: '{count} fixed peaks ready to submit.',
     fixedPeakSummaryEmpty: 'No fixed peaks provided. Leave blank to disable fixhkl.txt.',
+    fixedLTitle: 'Fixed Layer (l)',
+    fixedLTip: 'When enabled, the layer number l of specified peaks is fixed to the user-provided value, while h and k are freely determined by the search algorithm. This mode is mutually exclusive with fixed peak (HKL) mode.',
+    fixedLToggle: 'Enable fixed layer mode',
+    fixedLFormatLabel: 'peak_index l',
+    fixedLPlaceholder: '1 0\n3 1',
+    fixedLHint: 'One peak per line. Format: peak_index l, where peak_index is the observed diffraction peak number and l is the specified layer number.',
+    fixedLSummaryReady: 'Prepared {count} fixed layer entries.',
+    fixedLSummaryEmpty: 'No fixed layer text provided.',
     glideSummaryEmpty: 'No glide groups configured. Analysis will run without glide-shear batches.',
     glideSummaryReady: '{count} glide groups configured.',
     glideSummaryInvalid: 'Warning: {count} group(s) have l0 = 0 (invalid).',
@@ -292,6 +349,7 @@ export default {
     noResultsDesc: 'Run an analysis to see results here',
     startAnalysis: 'Start Analysis',
     analysisComplete: 'Analysis Complete - Best Structure Found',
+    goToPreview: 'Go to Results Preview',
     unitCellParams: 'Unit Cell Parameters',
     millerIndices: 'Miller Indices',
     totalReflections: 'Total Reflections',
@@ -342,7 +400,9 @@ export default {
     fullMillerLabel: 'FullMiller',
     outputMillerLabel: 'outputMiller',
     cellLabel: 'Cell',
-    mergeGradientLabel: 'Merge Gradient'
+    mergeGradientLabel: 'Merge Gradient',
+    goToResultsProcessing: 'Go to Results & Processing',
+    backToIndexingResults: '← Back to Indexing Results'
   },
   visualizer: {
     title: 'Miller Index Visualizer',
@@ -367,6 +427,8 @@ export default {
     points: 'pts',
     notLoaded: 'Not loaded',
     saveMarkedImage: 'Save Image',
+    clearFullMiller: 'Clear FullMiller',
+    clearOutputMiller: 'Clear outputMiller',
     clearAllMarkers: 'Clear All',
     clearMarkers: 'Clear Markers',
     poniStatus: 'PONI Status',
@@ -746,9 +808,19 @@ export default {
     subtitle: 'Enter base cell parameters and multiple glide shear groups to generate FullMiller results.',
     baseCellParams: 'Base Cell Parameters',
     sidebarTitle: 'Simple c-Glide Shear',
+    reverseSidebarTitle: 'Reverse Glide',
+    reverseTitle: 'Reverse Glide Analysis',
+    reverseSubtitle: 'Enter direct cell parameters and candidate glide parameters to explore the most likely glide mode.',
+    reverseIntroTitle: 'About This Feature',
+    reverseIntroDesc: 'This feature helps explore the most likely glide mode. Enter direct cell parameters and set multiple candidate glide shear parameters (nA, nB, l₀). The system will compute reciprocal parameters a*, b*, γ*, and show projection lengths a-proj=1/a*, b-proj=1/b* to help identify which glide mode best matches observed data.',
+    reverseAutoDetectNotice: 'Automatic glide detection will be available in the next major release.',
+    reverseDirectCell: 'Input Cell',
+    computedReciprocal: 'Computed Reciprocal Parameters',
+    computedProjection: 'Projection Lengths',
     glideShearGroups: 'Glide Shear Parameters',
     label: 'Label',
     labelPlaceholder: 'e.g. glide_01',
+    reverseLabelPlaceholder: 'e.g. reverse_01',
     nA: 'nA',
     nATip: 'Glide shear component along a-axis (integer, can be negative)',
     nB: 'nB',
@@ -780,7 +852,25 @@ export default {
     overlayHint: 'Select multiple groups to overlay, up to 5 groups.',
     liveSyncHint: 'After importing image/PONI once, switching groups or regenerating will refresh markers automatically.',
     selectedCount: '{count} group(s) selected',
-    overlayLimit: 'Max overlay limit reached (5 groups)'
+    overlayLimit: 'Max overlay limit reached (5 groups)',
+    reverseCellParams: 'Reverse glide input parameters',
+    aStar: 'a*',
+    bStar: 'b*',
+    gammaStar: 'γ*',
+    reverseCandidates: 'Candidate Glide Parameters',
+    l: 'l',
+    n: 'n',
+    addCandidate: 'Add Candidate',
+    removeCandidate: 'Remove candidate',
+    reverseGenerate: 'Generate Reverse Glide',
+    reverseGenerating: 'Generating...',
+    reverseErrorNoCandidate: 'At least one glide group with non-zero l₀ is required',
+    supercellGlideSidebarTitle: 'Supercell Glide',
+    supercellGlideTitle: 'Supercell Glide Analysis',
+    supercellGlideSubtitle: 'First expand the supercell along a and b directions, then apply glide shear to the supercell.',
+    supercellGlideFactors: 'Supercell Factors (a, b directions)',
+    supercellGlideFactorsTip: 'Positive integers. Expand a by na, b by nb first, then apply glide shear to the supercell.',
+    supercellGlideShearParams: 'Glide Shear Parameters',
   },
   manual: {
     title: 'Manual Cell Parameters',
@@ -809,6 +899,16 @@ export default {
     overlayHint: 'Select multiple groups to overlay, up to 5 groups.',
     liveSyncHint: 'After importing image/PONI once, switching groups or regenerating will refresh markers automatically.',
     selectedCount: '{count} group(s) selected',
-    overlayLimit: 'Max overlay limit reached (5 groups)'
+    overlayLimit: 'Max overlay limit reached (5 groups)',
+    supercellTab: 'Supercell',
+    supercellTitle: 'Supercell Generation',
+    supercellSubtitle: 'Enter unit cell parameters and supercell multiplication factors to generate expanded FullMiller results.',
+    supercellFactors: 'Supercell Factors',
+    na: 'na (a-axis)',
+    nb: 'nb (b-axis)',
+    nc: 'nc (c-axis)',
+    supercellFactorTip: 'Positive integers. The cell parameters are multiplied: a*=a·na, b*=b·nb, c*=c·nc, angles unchanged.',
+    supercellGenerate: 'Generate Supercell FullMiller ({count}×)',
+    supercellInfo: 'Supercell: {na}×{nb}×{nc} = {total} cells'
   }
 }

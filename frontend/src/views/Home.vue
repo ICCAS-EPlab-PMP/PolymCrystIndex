@@ -154,7 +154,47 @@
           <button class="updates-toggle" @click="updatesExpanded = !updatesExpanded">
             {{ updatesExpanded ? t('home.recentUpdates.collapse') : t('home.recentUpdates.expand') }}
           </button>
+          <button v-if="isLocal" class="updates-check" :disabled="isCheckingUpdate" @click="checkForUpdates">
+            {{ isCheckingUpdate ? t('home.recentUpdates.checking') : t('home.recentUpdates.checkForUpdates') }}
+          </button>
         </div>
+      </div>
+
+      <div v-if="updateCheckResult && isLocal" class="update-status-panel" :class="`status-${updateCheckResult.status}`">
+        <div class="update-status-main">
+          <div class="update-status-copy">
+            <span class="update-status-label">{{ t('home.recentUpdates.statusLabel') }}</span>
+            <h4>{{ t(`home.recentUpdates.statusText.${updateCheckResult.status}`) }}</h4>
+            <p>{{ getUpdateSummary(updateCheckResult) }}</p>
+          </div>
+          <div v-if="updateCheckResult.hasUpdate" class="update-status-links">
+            <button class="status-link-button primary" @click="openExternal(updateCheckResult.officialUrl)">{{ t('home.recentUpdates.openOfficial') }}</button>
+            <button class="status-link-button" @click="openExternal(updateCheckResult.githubUrl)">{{ t('home.recentUpdates.openGithub') }}</button>
+          </div>
+        </div>
+
+        <dl class="update-meta-grid">
+          <div>
+            <dt>{{ t('home.recentUpdates.currentVersion') }}</dt>
+            <dd>{{ updateCheckResult.currentVersion || '--' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('home.recentUpdates.latestVersion') }}</dt>
+            <dd>{{ updateCheckResult.latestVersion || '--' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('home.recentUpdates.checkedFrom') }}</dt>
+            <dd>{{ t(`home.recentUpdates.sources.${updateCheckResult.checkedFrom || 'none'}`) }}</dd>
+          </div>
+          <div v-if="updateCheckResult.localPublishedVersion">
+            <dt>{{ t('home.recentUpdates.localPublishedVersion') }}</dt>
+            <dd>{{ updateCheckResult.localPublishedVersion }}</dd>
+          </div>
+        </dl>
+
+        <p v-if="updateCheckResult.fallbackUsed" class="update-status-note">
+          {{ t('home.recentUpdates.fallbackNotice') }}
+        </p>
       </div>
 
       <div v-if="updatesExpanded" class="updates-grid">
@@ -180,6 +220,7 @@
 <script setup>
 import { defineAsyncComponent, computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import api from '@/api'
 import { isLocalProfile } from '@/services/runtime'
 
 const { t } = useI18n()
@@ -194,14 +235,69 @@ import manualIcon from '@icon/manual.svg'
 
 const isLocal = computed(() => isLocalProfile())
 const updatesExpanded = ref(false)
+const isCheckingUpdate = ref(false)
+const updateCheckResult = ref(null)
 
 const updateItems = [
-  { key: 'manualCell', type: 'feature' },
-  { key: 'glideVisual', type: 'feature' },
-  { key: 'indexingVisual', type: 'notice' },
+  { key: 'fixedLMode', type: 'feature' },
+  { key: 'resultFlow', type: 'feature' },
+  { key: 'markerSize', type: 'fix' },
 ]
 
-const updateKeywordKeys = ['manualCell', 'glideC', 'indexingVisual']
+const updateKeywordKeys = ['fixedLMode', 'resultFlow', 'markerSize']
+
+const getUpdateSummary = result => {
+  if (!result) return ''
+  if (result.status === 'update_available') {
+    return t('home.recentUpdates.summary.updateAvailable', {
+      current: result.currentVersion,
+      latest: result.latestVersion
+    })
+  }
+  if (result.status === 'ahead_of_release') {
+    return t('home.recentUpdates.summary.aheadOfRelease', {
+      current: result.currentVersion,
+      latest: result.latestVersion || '--'
+    })
+  }
+  if (result.status === 'up_to_date') {
+    return t('home.recentUpdates.summary.latest', {
+      current: result.currentVersion
+    })
+  }
+  return t('home.recentUpdates.summary.unavailable')
+}
+
+const openExternal = url => {
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+const checkForUpdates = async () => {
+  isCheckingUpdate.value = true
+  try {
+    const response = await api.checkForUpdates()
+    updateCheckResult.value = response?.data || null
+    if (updateCheckResult.value?.status === 'up_to_date') {
+      window.$toast?.(t('home.recentUpdates.alreadyLatestToast'))
+    }
+  } catch (error) {
+    updateCheckResult.value = {
+      status: 'check_unavailable',
+      hasUpdate: false,
+      fallbackUsed: false,
+      currentVersion: null,
+      latestVersion: null,
+      checkedFrom: 'none',
+      localPublishedVersion: null,
+      officialUrl: null,
+      githubUrl: null,
+    }
+    window.$toast?.(error?.message || t('home.recentUpdates.summary.unavailable'))
+  } finally {
+    isCheckingUpdate.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -643,6 +739,135 @@ const updateKeywordKeys = ['manualCell', 'glideC', 'indexingVisual']
   cursor: pointer;
 }
 
+.updates-check {
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.updates-check:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.updates-check:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.update-status-panel {
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.update-status-panel.status-update_available {
+  border-color: rgba(59, 130, 246, 0.26);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(248, 250, 252, 0.94));
+}
+
+.update-status-panel.status-ahead_of_release {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.96), rgba(248, 250, 252, 0.94));
+}
+
+.update-status-panel.status-check_unavailable {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.96), rgba(248, 250, 252, 0.94));
+}
+
+.update-status-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.update-status-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-status-copy h4,
+.update-status-copy p {
+  margin: 0;
+}
+
+.update-status-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.update-status-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.status-link-button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status-link-button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.update-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.update-meta-grid div {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.update-meta-grid dt {
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.update-meta-grid dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.update-status-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
 .updates-collapsed-summary {
   margin: 0;
   color: var(--text-secondary);
@@ -768,6 +993,14 @@ const updateKeywordKeys = ['manualCell', 'glideC', 'indexingVisual']
 
   .updates-inline-lines {
     width: 100%;
+  }
+
+  .update-status-main {
+    flex-direction: column;
+  }
+
+  .update-meta-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

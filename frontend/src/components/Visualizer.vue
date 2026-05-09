@@ -47,6 +47,8 @@
               </div>
               <div class="btn-row">
                 <button class="btn" :disabled="!raw.imageLoaded" @click="saveRawImage">{{ t('visualizer.saveMarkedImage') }}</button>
+                <button class="btn" :disabled="!raw.imageLoaded || raw.fullCount === 0" @click="clearRawMillerType('full')">{{ t('visualizer.clearFullMiller') }}</button>
+                <button class="btn" :disabled="!raw.imageLoaded || raw.outputCount === 0" @click="clearRawMillerType('output')">{{ t('visualizer.clearOutputMiller') }}</button>
                 <button class="btn" :disabled="!raw.imageLoaded" @click="clearRawMiller">{{ t('visualizer.clearAllMarkers') }}</button>
               </div>
             </div>
@@ -181,6 +183,10 @@
             <div class="placeholder-text" v-else>
               {{ t('visualizer.pleaseImportDiffractionImage') }}<br/>
               (.tif / .edf / .cbf)
+              <template v-if="raw.fullCount > 0 || raw.outputCount > 0">
+                <br/>
+                FullMiller: {{ raw.fullCount }} / outputMiller: {{ raw.outputCount }}
+              </template>
             </div>
           </div>
         </div>
@@ -216,7 +222,9 @@
               </div>
               <div class="btn-row">
                 <button class="btn" :disabled="!int2d.imageLoaded" @click="saveIntImage">{{ t('visualizer.saveMarkedImage') }}</button>
-                <button class="btn" :disabled="!int2d.imageLoaded" @click="clearIntMiller">{{ t('visualizer.clearMarkers') }}</button>
+                <button class="btn" :disabled="!int2d.imageLoaded || int2d.fullCount === 0" @click="clearIntMillerType('full')">{{ t('visualizer.clearFullMiller') }}</button>
+                <button class="btn" :disabled="!int2d.imageLoaded || int2d.outputCount === 0" @click="clearIntMillerType('output')">{{ t('visualizer.clearOutputMiller') }}</button>
+                <button class="btn" :disabled="!int2d.imageLoaded" @click="clearIntMiller">{{ t('visualizer.clearAllMarkers') }}</button>
               </div>
             </div>
           </div>
@@ -440,7 +448,7 @@ const int2d = reactive({
     qMin: 0.0, qMax: 1.0, azMin: -180.0, azMax: 180.0,
     colormap: '灰度', mode: 'Linear', cmin: 0, cmax: 65535,
     convention: 'ccw', psiOffset: 0.0,
-    azCropEnabled: false, azCropMin: -10.0, azCropMax: 120.0,
+    azCropEnabled: false, azCropMin: -30.0, azCropMax: 120.0,
   },
 })
 
@@ -648,6 +656,14 @@ async function clearRawMiller() {
   await renderRaw()
 }
 
+async function clearRawMillerType(type) {
+  await axios.delete(`${API_BASE}/raw/miller?miller_type=${type}`)
+  if (type === 'full') raw.fullCount = 0
+  else if (type === 'output') raw.outputCount = 0
+  setStatus(type === 'full' ? 'FullMiller cleared' : 'outputMiller cleared')
+  await renderRaw()
+}
+
 async function renderRaw() {
   if (!raw.imageLoaded) return
   loading.value = true
@@ -669,6 +685,8 @@ async function renderRaw() {
       use_pyfai: true,
     })
     raw.imageSrc = data.image
+    raw.fullCount = data.full_miller_count ?? 0
+    raw.outputCount = data.output_miller_count ?? 0
     const msg = `Rendered | FullMiller: ${data.full_miller_count} pts | outputMiller: ${data.output_miller_count} pts${data.pyfai_used ? ' | pyFAI ✓' : ' | Manual geometry'}`
     setStatus(msg)
   } finally {
@@ -682,8 +700,6 @@ async function applyRawParams() {
 
 async function refreshRawView() {
   await renderRaw()
-  await nextTick()
-  resetZoom('raw', 8)
   setStatus('View refreshed, Miller points recalculated and centered')
 }
 
@@ -784,6 +800,14 @@ async function clearIntMiller() {
   await renderInt()
 }
 
+async function clearIntMillerType(type) {
+  await axios.delete(`${API_BASE}/int/miller?miller_type=${type}`)
+  if (type === 'full') int2d.fullCount = 0
+  else if (type === 'output') int2d.outputCount = 0
+  setStatus(type === 'full' ? 'FullMiller cleared' : 'outputMiller cleared')
+  await renderInt()
+}
+
 async function applyIntRanges() {
   try {
     await axios.put(`${API_BASE}/int/coordinate-ranges`, {
@@ -815,6 +839,8 @@ async function renderInt() {
       az_crop_max: int2d.p.azCropMax,
     })
     int2d.imageSrc = data.image
+    int2d.fullCount = data.full_miller_count ?? 0
+    int2d.outputCount = data.output_miller_count ?? 0
     setStatus(`Rendered | FullMiller: ${data.full_miller_count} pts | outputMiller: ${data.output_miller_count} pts`)
   } finally {
     loading.value = false
@@ -860,6 +886,17 @@ async function loadFromWorkDir(dir) {
   loading.value = true
   try {
     const { data } = await axios.post(`${API_BASE}/raw/load-workdir`, { work_dir: dir })
+    if (data.full_miller_count !== undefined) raw.fullCount = data.full_miller_count
+    if (data.output_miller_count !== undefined) raw.outputCount = data.output_miller_count
+    if (data.poni) {
+      raw.poniLoaded = true
+      raw.p.wl = data.poni.wl || raw.p.wl
+      raw.p.px = data.poni.px || raw.p.px
+      raw.p.py = data.poni.py || raw.p.py
+      raw.p.cx = data.poni.cx || raw.p.cx
+      raw.p.cy = data.poni.cy || raw.p.cy
+      raw.p.dist = data.poni.dist || raw.p.dist
+    }
     if (data.image_loaded) {
       raw.imageLoaded = true
       raw.imgW = data.width || 0
@@ -868,22 +905,13 @@ async function loadFromWorkDir(dir) {
       raw.imgMax = Math.ceil(data.max || 65535)
       raw.p.cmin = Math.floor(data.p01 ?? data.min ?? 0)
       raw.p.cmax = Math.ceil(data.p99 ?? data.max ?? 65535)
-      if (data.poni) {
-        raw.poniLoaded = true
-        raw.p.wl = data.poni.wl || raw.p.wl
-        raw.p.px = data.poni.px || raw.p.px
-        raw.p.py = data.poni.py || raw.p.py
-        raw.p.cx = data.poni.cx || raw.p.cx
-        raw.p.cy = data.poni.cy || raw.p.cy
-        raw.p.dist = data.poni.dist || raw.p.dist
-      }
-      if (data.full_miller_count !== undefined) raw.fullCount = data.full_miller_count
-      if (data.output_miller_count !== undefined) raw.outputCount = data.output_miller_count
       await renderRaw()
       await nextTick()
       resetZoom('raw', 8)
       setStatus(data.message || `Loaded from workDir: ${dir}`)
       emit('raw-session-ready')
+    } else {
+      setStatus(data.message || `Markers preloaded from workDir: ${dir}. Import an image to render them.`)
     }
   } catch (err) {
     setStatus('Error loading workDir: ' + (err.response?.data?.detail || err.message))
@@ -908,7 +936,8 @@ async function loadOverlayGroups() {
       full_miller_content: g.fullMillerContent || '',
     }))
     const { data } = await axios.post(`${API_BASE}/raw/set-miller-content`, { groups })
-    raw.fullCount = data.total_count || 0
+    raw.fullCount = data.full_miller_count ?? 0
+    raw.outputCount = data.output_miller_count ?? raw.outputCount
     setStatus(data.message || `Overlay: ${groups.length} group(s) loaded`)
     await renderRaw()
   } catch (err) {
@@ -928,8 +957,8 @@ async function loadIntOverlayGroups() {
       full_miller_content: g.fullMillerContent || '',
     }))
     const { data } = await axios.post(`${API_BASE}/int/set-miller-content`, { groups })
-    int2d.fullCount = data.total_count || 0
-    int2d.outputCount = 0
+    int2d.fullCount = data.full_miller_count ?? 0
+    int2d.outputCount = data.output_miller_count ?? int2d.outputCount
     setStatus(data.message || `2D overlay: ${groups.length} group(s) loaded`)
     await renderInt()
   } catch (err) {
@@ -953,11 +982,6 @@ watch(() => props.importRequestKey, async (newKey, oldKey) => {
   if (canLoadInt) {
     await loadIntOverlayGroups()
   }
-})
-
-watch(activePanel, async (panel) => {
-  await nextTick()
-  scheduleResetZoom(panel, 4)
 })
 
 onBeforeUnmount(() => {

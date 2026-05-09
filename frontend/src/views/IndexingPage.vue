@@ -39,7 +39,7 @@
           <DataImport v-if="activeSubTab === 'data'" :uploaded-file-data="dataFile" @data-loaded="handleDataLoaded" @file-removed="handleFileRemoved" />
           <ParamsSetup v-else-if="activeSubTab === 'params'" :params="gaParams" />
           <Console v-else-if="activeSubTab === 'console'" :params="gaParams" :data-file="dataFile" :task-id="currentTaskId" @navigate="handleNavigate" @task-started="handleTaskStarted" @run-status-change="handleRunStatusChange" />
-          <ResultExport v-else-if="activeSubTab === 'results'" @navigate="handleNavigate" />
+          <ResultExport v-else-if="activeSubTab === 'results'" mode="indexing-subtab" @navigate="handleNavigate" />
         </transition>
       </main>
     </div>
@@ -47,10 +47,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, markRaw, h, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, markRaw, h, defineAsyncComponent, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 
 const { t } = useI18n()
+const route = useRoute()
 
 const DataImport = defineAsyncComponent(() => import('@/components/DataImport.vue'))
 const ParamsSetup = defineAsyncComponent(() => import('@/components/ParamsSetup.vue'))
@@ -118,7 +120,7 @@ const indexSubTabs = [
   { id: 'results', label: 'Results', icon: markRaw(IconChartBar) },
 ]
 
-const activeSubTab = ref('data')
+const activeSubTab = ref(route.query.subtab === 'results' ? 'results' : 'data')
 const dataFile = ref(null)
 const runStatus = ref('idle')
 const currentTaskId = ref(null)
@@ -162,6 +164,8 @@ const gaParams = reactive({
   custK: 5,
   custL: 0,
   fixedPeakText: '',
+  fixLModeEnabled: false,
+  fixedLText: '',
   ompThreads: 1,
   glideBatches: []
 })
@@ -210,6 +214,17 @@ const handleRunStatusChange = (status) => {
 const handleNavigate = (tab) => {
   activeSubTab.value = tab
 }
+
+const handleGoToPreview = () => {
+  router.push('/app/results')
+}
+
+// Auto-switch to Results sub-tab on indexing completion
+watch(runStatus, (newStatus) => {
+  if (newStatus === 'completed') {
+    activeSubTab.value = 'results'
+  }
+})
 
 </script>
 

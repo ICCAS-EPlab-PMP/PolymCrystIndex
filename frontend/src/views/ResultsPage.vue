@@ -2,22 +2,25 @@
   <div class="results-page">
     <main class="main-content">
       <section class="results-section visualizer-section">
-        <Visualizer />
+        <Visualizer :workDir="workDir" />
       </section>
       <section class="results-section export-section">
-        <ResultExport @navigate="handleNavigate" />
+        <ResultExport mode="results-page" @navigate="handleNavigate" />
       </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { defineAsyncComponent } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, defineAsyncComponent } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const Visualizer = defineAsyncComponent(() => import('@/components/Visualizer.vue'))
 const ResultExport = defineAsyncComponent(() => import('@/components/ResultExport.vue'))
+const route = useRoute()
 const router = useRouter()
+
+const workDir = computed(() => route.query.workDir || '')
 
 const handleNavigate = (target) => {
   if (target === 'console') {

@@ -97,7 +97,7 @@
           <div class="param-subgroup">
             <h4 class="title-with-hint">{{ t('params.fixedPeakTitle') }} <span class="hint-icon" :title="t('params.fixedPeakTip')">ⓘ</span></h4>
             <label class="toggle-item">
-              <input type="checkbox" v-model="localParams.fixModeEnabled" />
+              <input type="checkbox" v-model="localParams.fixModeEnabled" @change="onFixHklModeChange" />
               <span class="toggle-label">{{ t('params.fixedPeakToggle') }}</span>
             </label>
             <div v-if="localParams.fixModeEnabled" class="param-group">
@@ -111,6 +111,26 @@
               />
               <span class="param-hint">{{ t('params.fixedPeakHint') }}</span>
               <span class="param-hint">{{ fixedPeakSummary }}</span>
+            </div>
+          </div>
+
+          <div class="param-subgroup">
+            <h4 class="title-with-hint">{{ t('params.fixedLTitle') }} <span class="hint-icon" :title="t('params.fixedLTip')">ⓘ</span></h4>
+            <label class="toggle-item">
+              <input type="checkbox" v-model="localParams.fixLModeEnabled" @change="onFixLModeChange" />
+              <span class="toggle-label">{{ t('params.fixedLToggle') }}</span>
+            </label>
+            <div v-if="localParams.fixLModeEnabled" class="param-group">
+              <label for="fixed-l-text">{{ t('params.fixedLFormatLabel') }}</label>
+              <textarea
+                id="fixed-l-text"
+                v-model="localParams.fixedLText"
+                class="fixed-peak-textarea"
+                spellcheck="false"
+                :placeholder="t('params.fixedLPlaceholder')"
+              />
+              <span class="param-hint">{{ t('params.fixedLHint') }}</span>
+              <span class="param-hint">{{ fixedLSummary }}</span>
             </div>
           </div>
         </div>
@@ -385,6 +405,8 @@ const defaultParams = {
   custL: 0,
   fixModeEnabled: false,
   fixedPeakText: '',
+  fixLModeEnabled: false,
+  fixedLText: '',
   ompThreads: 1,
   glideBatches: []
 }
@@ -482,6 +504,27 @@ const fixedPeakSummary = computed(() => {
     ? t('params.fixedPeakSummaryReady', { count: fixedPeakCount.value })
     : t('params.fixedPeakSummaryEmpty')
 })
+
+const fixedLSummary = computed(() => {
+  const text = localParams.fixedLText?.trim()
+  if (!text) return t('params.fixedLSummaryEmpty')
+  const lines = text.split('\n').filter(l => l.trim())
+  return t('params.fixedLSummaryReady', { count: lines.length })
+})
+
+const onFixLModeChange = () => {
+  if (localParams.fixLModeEnabled) {
+    localParams.fixModeEnabled = false
+    localParams.fixedPeakText = ''
+  }
+}
+
+const onFixHklModeChange = () => {
+  if (localParams.fixModeEnabled) {
+    localParams.fixLModeEnabled = false
+    localParams.fixedLText = ''
+  }
+}
 
 const resetParams = () => {
   Object.assign(localParams, defaultParams)

@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.8.3'
+    version: 'v1.8.4'
   },
   home: {
     selectModule: '选择功能模块',
@@ -23,14 +23,17 @@ export default {
       expand: '展开摘要',
       collapse: '收起摘要',
       collapsedSummary: '点击展开可查看本次版本更新内容。',
-      versionValue: 'v 1.8.3',
+      versionValue: 'v 1.8.4',
       keywords: {
         manualCell: '手动晶胞参数-新功能',
         glideC: '晶胞参数c轴滑移可视化',
         indexingVisual: '指标化程序可视化',
         utf16Import: 'UTF-16文件导入支持',
         angleWarning: 'psi角度范围预警',
-        uiPolish: 'UI布局与交互改进'
+        uiPolish: 'UI布局与交互改进',
+        fixedLMode: '固定l约束模式',
+        resultFlow: '结果验证流程改进',
+        markerSize: 'Miller标记可见性'
       },
       dateLabel: '改动日期',
       types: {
@@ -53,7 +56,51 @@ export default {
           date: '2026.4.17',
           title: '指标化程序可视化',
           summary: '指标化程序中的结果浏览与可视化联动已进一步增强，方便在同一工作流内查看图像、参数与标记变化。'
+        },
+        fixedLMode: {
+          date: '2026.4.26',
+          title: '固定l约束模式',
+          summary: '支持在遗传算法指标化过程中固定l值约束，提升已知层间距场景下的收敛效率。'
+        },
+        resultFlow: {
+          date: '2026.4.26',
+          title: '结果验证流程',
+          summary: '指标化与结果页间采用按钮导航，自动预载outputMiller，实现更流畅的结果复核。'
+        },
+        markerSize: {
+          date: '2026.4.26',
+          title: 'Miller标记可见性增强',
+          summary: '增大原始图和积分图上Miller标记的尺寸和线宽，提升标记辨识度。'
         }
+      },
+      checkForUpdates: '检查更新',
+      checking: '检查中...',
+      alreadyLatest: '当前已是最新版本 (v1.8.4)',
+      alreadyLatestToast: '已完成检查：当前已是最新版本。',
+      statusLabel: '更新状态',
+      currentVersion: '当前版本',
+      latestVersion: '已发布最新版本',
+      localPublishedVersion: '本地发布记录',
+      checkedFrom: '检查来源',
+      openOfficial: '前往官网',
+      openGithub: '查看 GitHub',
+      fallbackNotice: '本次检查已自动回退到备用源，结果可能略晚于 GitHub 正式发布。',
+      sources: {
+        github: 'GitHub',
+        gitee: 'Gitee（备用）',
+        none: '未获取到远程源'
+      },
+      statusText: {
+        update_available: '发现新版本',
+        up_to_date: '当前已是最新发布版',
+        ahead_of_release: '当前版本高于已发布版本',
+        check_unavailable: '暂时无法完成更新检查'
+      },
+      summary: {
+        updateAvailable: '当前版本为 {current}，已发布最新版本为 {latest}。你可以前往官网或 GitHub 查看详情。',
+        latest: '当前运行版本 {current} 已与已发布版本保持一致。',
+        aheadOfRelease: '当前运行版本 {current} 高于已发布版本 {latest}，这通常表示你正在使用本地开发版或尚未发布的服务器端代码。',
+        unavailable: '未能从远程发布源获取最新版本信息，请稍后重试。'
       }
     }
   },
@@ -100,7 +147,8 @@ export default {
     parameters: '参数设置',
     analysis: '运行分析',
     results: '结果导出',
-    visualizer: '可视化'
+    visualizer: '可视化',
+    backToIndexing: '返回指标化'
   },
   status: {
     idle: '就绪',
@@ -180,7 +228,8 @@ export default {
     continue: '继续设置参数',
     fileEmpty: '文件为空',
     formatError: '每行必须包含至少3列 (q, psi, intensity)',
-    numericError: '包含非数字字符'
+    numericError: '包含非数字字符',
+    dataPreview: '数据预览'
   },
   params: {
     title: '参数设置',
@@ -245,6 +294,14 @@ export default {
     mergeGradientThresholdHint: '用于判断梯度方向一致性的阈值，0 表示禁用梯度判断',
     fixedPeakSummaryReady: '已准备 {count} 个固定峰。',
     fixedPeakSummaryEmpty: '未提供固定峰文本。留空将禁用 fixhkl.txt。',
+    fixedLTitle: '固定层号 (l)',
+    fixedLTip: '启用后，指定峰的层号 l 将被固定为用户输入值，而 h 和 k 由搜索算法自由确定。此模式与固定峰(HKL)模式互斥。',
+    fixedLToggle: '启用固定层号模式',
+    fixedLFormatLabel: 'peak_index l',
+    fixedLPlaceholder: '1 0\n3 1',
+    fixedLHint: '每行一个峰。格式为 peak_index l，其中 peak_index 对应观测衍射峰的序号，l 为指定的层号。',
+    fixedLSummaryReady: '已准备 {count} 个固定层号。',
+    fixedLSummaryEmpty: '未提供固定层号文本。',
     glideSummaryEmpty: '尚未配置 glide 组。分析将不会生成 glide-shear 批次。',
     glideSummaryReady: '已配置 {count} 个 glide 组。',
     glideSummaryInvalid: '警告：有 {count} 个分组的 l0 = 0（无效）。',
@@ -292,6 +349,7 @@ export default {
     noResultsDesc: '运行分析后将在此显示结果',
     startAnalysis: '开始分析',
     analysisComplete: '分析完成 - 最佳结构已找到',
+    goToPreview: '直达结果预览',
     unitCellParams: '晶胞参数',
     millerIndices: 'Miller 索引',
     totalReflections: '总反射数',
@@ -342,7 +400,9 @@ export default {
     fullMillerLabel: 'FullMiller',
     outputMillerLabel: 'outputMiller',
     cellLabel: '晶胞',
-    mergeGradientLabel: '合并梯度'
+    mergeGradientLabel: '合并梯度',
+    goToResultsProcessing: '前往结果处理',
+    backToIndexingResults: '← 返回指标化结果'
   },
   visualizer: {
     title: 'Miller 索引可视化',
@@ -367,6 +427,8 @@ export default {
     points: '点',
     notLoaded: '未加载',
     saveMarkedImage: '保存图像',
+    clearFullMiller: '清除 FullMiller',
+    clearOutputMiller: '清除 outputMiller',
     clearAllMarkers: '清除全部',
     clearMarkers: '清除标记',
     poniStatus: 'PONI 状态',
@@ -746,9 +808,19 @@ export default {
     subtitle: '输入基准晶胞参数和多组滑移剪切参数，批量生成 FullMiller 结果。',
     baseCellParams: '基准晶胞参数',
     sidebarTitle: '简易c滑移',
+    reverseSidebarTitle: '反向滑移探索',
+    reverseTitle: '反向滑移探索',
+    reverseSubtitle: '输入直接晶胞参数，通过多组候选滑移参数探索最可能的滑移方式。',
+    reverseIntroTitle: '功能说明',
+    reverseIntroDesc: '本功能用于探索最可能的滑移方式。输入直接晶胞参数后，设置多组候选滑移剪切参数（nA、nB、l₀），系统将计算对应的倒易参数 a*、b*、γ*，并给出投影长度 a投影=1/a*、b投影=1/b*，帮助判断哪种滑移方式与观测数据最为吻合。',
+    reverseAutoDetectNotice: '自动滑移检测功能将由下一个大版本更新提供。',
+    reverseDirectCell: '输入晶胞',
+    computedReciprocal: '计算得到的倒易参数',
+    computedProjection: '投影长度',
     glideShearGroups: '滑移剪切参数',
     label: '标签',
     labelPlaceholder: '例如 glide_01',
+    reverseLabelPlaceholder: '例如 reverse_01',
     nA: 'nA',
     nATip: '沿 a 轴的滑移剪切分量（整数，可为负值）',
     nB: 'nB',
@@ -780,7 +852,25 @@ export default {
     overlayHint: '可勾选多个分组进行叠加显示，最多 5 组。',
     liveSyncHint: '导入一次图片/PONI 后，切换分组或重新生成会自动刷新当前标记。',
     selectedCount: '当前已选择 {count} 组',
-    overlayLimit: '已达最大叠加数（5 组）'
+    overlayLimit: '已达最大叠加数（5 组）',
+    reverseCellParams: 'reverse glide 输入参数',
+    aStar: 'a*',
+    bStar: 'b*',
+    gammaStar: 'γ*',
+    reverseCandidates: '候选滑移参数',
+    l: 'l',
+    n: 'n',
+    addCandidate: '新增候选',
+    removeCandidate: '移除该候选',
+    reverseGenerate: '生成反向滑移结果',
+    reverseGenerating: '生成中...',
+    reverseErrorNoCandidate: '至少需要一组 l₀ 不为零的滑移参数',
+    supercellGlideSidebarTitle: '超胞滑移',
+    supercellGlideTitle: '超胞滑移分析',
+    supercellGlideSubtitle: '先沿 a、b 方向扩展超胞，再对超胞晶胞施加滑移剪切变换。',
+    supercellGlideFactors: '超胞倍数（a、b 方向）',
+    supercellGlideFactorsTip: '正整数。先将 a 乘以 na、b 乘以 nb 得到超胞，再对超胞施加滑移。',
+    supercellGlideShearParams: '滑移剪切参数',
   },
   manual: {
     title: '手动晶胞参数',
@@ -809,6 +899,16 @@ export default {
     overlayHint: '可勾选多个分组进行叠加显示，最多 5 组。',
     liveSyncHint: '导入一次图片/PONI 后，切换分组或重新生成会自动刷新当前标记。',
     selectedCount: '当前已选择 {count} 组',
-    overlayLimit: '已达最大叠加数（5 组）'
+    overlayLimit: '已达最大叠加数（5 组）',
+    supercellTab: '超胞',
+    supercellTitle: '超胞生成',
+    supercellSubtitle: '输入晶胞参数和超胞倍数，生成扩展的 FullMiller 结果。',
+    supercellFactors: '超胞倍数',
+    na: 'na (a轴)',
+    nb: 'nb (b轴)',
+    nc: 'nc (c轴)',
+    supercellFactorTip: '正整数。晶胞参数乘以倍数：a*=a·na, b*=b·nb, c*=c·nc，角度不变。',
+    supercellGenerate: '生成超胞 FullMiller（{count}×）',
+    supercellInfo: '超胞：{na}×{nb}×{nc} = {total} 个晶胞'
   }
 }

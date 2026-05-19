@@ -90,18 +90,6 @@ def _sign(value: int) -> int:
     return 0
 
 
-def _check_merge_gradient(peaks: Sequence[Dict[str, Any]], threshold: float) -> bool:
-    """Check if candidate peaks have merge gradient (converging toward same position).
-
-    Algorithm TBD - current framework:
-    - threshold=0: skip check (pass)
-    - threshold>0: check gradient convergence
-    TODO: Fill in when user defines specific gradient calculation
-    """
-    if threshold <= 0:
-        return True
-    return True
-
 
 def _hk_rule_details(peaks: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     abs_h_values = {abs(peak["h"]) for peak in peaks}
@@ -170,8 +158,6 @@ def _build_group(
     peaks: Sequence[Dict[str, Any]],
     q_threshold: float,
     angle_threshold: float,
-    merge_gradient_enabled: bool = False,
-    merge_gradient_threshold: float = 0.0,
 ) -> Dict[str, Any]:
     normalized_peaks = sorted(peaks, key=lambda item: item["peakIndex"])
     within_threshold, max_delta_q, max_delta_angle, pair_checks = (
@@ -181,8 +167,6 @@ def _build_group(
     member_count = len(normalized_peaks)
 
     gradient_passed = False
-    if merge_gradient_enabled:
-        gradient_passed = _check_merge_gradient(normalized_peaks, merge_gradient_threshold)
 
     return {
         "groupType": f"{member_count}-peak",
@@ -198,11 +182,6 @@ def _build_group(
         },
         "hkRulePassed": hk_details["hkRulePassed"],
         "hkRule": hk_details,
-        "mergeGradient": {
-            "enabled": merge_gradient_enabled,
-            "passed": gradient_passed,
-            "threshold": merge_gradient_threshold,
-        },
         "members": normalized_peaks,
     }
 
@@ -211,8 +190,6 @@ def identify_peak_symmetry_groups(
     peaks: Iterable[Dict[str, Any]],
     q_threshold: float = DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD,
     angle_threshold: float = DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD,
-    merge_gradient_enabled: bool = False,
-    merge_gradient_threshold: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """Build symmetric 2-peak / 4-peak joint candidate groups.
 
@@ -248,8 +225,6 @@ def identify_peak_symmetry_groups(
                         combo,
                         q_threshold,
                         angle_threshold,
-                        merge_gradient_enabled,
-                        merge_gradient_threshold,
                     )
                     if group["withinThreshold"]["passed"] and group["hkRulePassed"]:
                         matched_group = group
@@ -270,8 +245,6 @@ def build_peak_symmetry_groups_from_results(
     miller_data: Sequence[Dict[str, Any]],
     q_threshold: float = DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD,
     angle_threshold: float = DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD,
-    merge_gradient_enabled: bool = False,
-    merge_gradient_threshold: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """Secondary / reporting-only helper — zips observed peaks with Miller assignments.
 
@@ -302,6 +275,5 @@ def build_peak_symmetry_groups_from_results(
         paired_peaks,
         q_threshold=q_threshold,
         angle_threshold=angle_threshold,
-        merge_gradient_enabled=merge_gradient_enabled,
-        merge_gradient_threshold=merge_gradient_threshold,
     )
+

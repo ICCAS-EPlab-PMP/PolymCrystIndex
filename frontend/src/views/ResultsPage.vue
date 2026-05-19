@@ -2,7 +2,7 @@
   <div class="results-page">
     <main class="main-content">
       <section class="results-section visualizer-section">
-        <Visualizer :workDir="workDir" />
+        <Visualizer resultType="indexing" :workDir="workDir" />
       </section>
       <section class="results-section export-section">
         <ResultExport mode="results-page" @navigate="handleNavigate" />

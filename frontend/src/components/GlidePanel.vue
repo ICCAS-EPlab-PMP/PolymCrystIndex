@@ -269,6 +269,7 @@
           <div v-if="selectedGroups.length > 0" class="shared-visualizer">
             <Visualizer
               resultType="glide"
+              :workDir="selectedVisualizerWorkDir"
               :overlayGroups="selectedGroups"
               :importRequestKey="importSelectionKey"
               @raw-session-ready="handleVisualizerReady"
@@ -334,6 +335,70 @@
           </div>
           <button v-if="candidate.fullMillerContent" class="btn-download-sm" @click="downloadReverseCandidate(candidate)">{{ t('glide.download') }}</button>
           <span v-if="candidate.message" class="cell-label">{{ candidate.message }}</span>
+        </div>
+      </div>
+
+      <div v-if="hasBrowsableGroups" class="quick-browse-section">
+        <button class="quick-browse-toggle" @click="toggleBrowseExpanded">
+          <svg class="chevron-icon" :class="{ expanded: browseExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6,9 12,15 18,9"/>
+          </svg>
+          {{ browseExpanded ? t('glide.quickBrowseCollapse') : t('glide.quickBrowseExpand') }}
+        </button>
+
+        <div v-show="browseExpanded" class="quick-browse-content">
+          <div class="browse-mode-switch">
+            <label class="mode-option">
+              <input v-model="browseMode" type="radio" value="single" />
+              <span>{{ t('glide.browseModeSingle') }}</span>
+            </label>
+            <label class="mode-option">
+              <input v-model="browseMode" type="radio" value="overlay" />
+              <span>{{ t('glide.browseModeOverlay') }}</span>
+            </label>
+          </div>
+
+          <div v-if="browseMode === 'single'" class="selection-panel">
+            <label class="selection-label">{{ t('glide.selectGroup') }}</label>
+            <select v-model="selectedSingleLabel" class="group-select">
+              <option v-for="group in browsableGroups" :key="group.label" :value="group.label">
+                {{ group.label }} · {{ group.totalReflections || 0 }}
+              </option>
+            </select>
+          </div>
+
+          <div v-else class="selection-panel">
+            <label class="selection-label">{{ t('glide.overlaySelectionTitle') }}</label>
+            <p class="quick-browse-hint">{{ t('glide.overlayHint') }}</p>
+            <div class="overlay-checklist">
+              <label v-for="group in browsableGroups" :key="group.label" class="overlay-item" :class="{ active: selectedOverlayLabels.includes(group.label) }">
+                <input
+                  type="checkbox"
+                  :checked="selectedOverlayLabels.includes(group.label)"
+                  :disabled="!selectedOverlayLabels.includes(group.label) && selectedOverlayLabels.length >= 5"
+                  @change="toggleOverlayGroup(group.label)"
+                />
+                <span>{{ group.label }}</span>
+                <span class="chip-count">{{ group.totalReflections || 0 }}</span>
+              </label>
+            </div>
+            <span class="overlay-limit">{{ t('glide.selectedCount', { count: selectedGroups.length }) }}</span>
+            <span v-if="selectedOverlayLabels.length >= 5" class="overlay-limit warning">{{ t('glide.overlayLimit') }}</span>
+          </div>
+
+          <p class="quick-browse-hint">{{ t('glide.liveSyncHint') }}</p>
+
+          <div v-if="selectedGroups.length > 0" class="shared-visualizer">
+            <Visualizer
+              resultType="glide"
+              :workDir="selectedVisualizerWorkDir"
+              :overlayGroups="selectedGroups"
+              :importRequestKey="importSelectionKey"
+              @raw-session-ready="handleVisualizerReady"
+              compact
+            />
+          </div>
+          <p v-else class="quick-browse-empty">{{ t('glide.selectGroup') }}</p>
         </div>
       </div>
     </div>
@@ -468,6 +533,70 @@
           <button class="btn-download-sm" @click="downloadGroup(group)">{{ t('glide.download') }}</button>
         </div>
       </div>
+
+      <div v-if="hasBrowsableGroups" class="quick-browse-section">
+        <button class="quick-browse-toggle" @click="toggleBrowseExpanded">
+          <svg class="chevron-icon" :class="{ expanded: browseExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6,9 12,15 18,9"/>
+          </svg>
+          {{ browseExpanded ? t('glide.quickBrowseCollapse') : t('glide.quickBrowseExpand') }}
+        </button>
+
+        <div v-show="browseExpanded" class="quick-browse-content">
+          <div class="browse-mode-switch">
+            <label class="mode-option">
+              <input v-model="browseMode" type="radio" value="single" />
+              <span>{{ t('glide.browseModeSingle') }}</span>
+            </label>
+            <label class="mode-option">
+              <input v-model="browseMode" type="radio" value="overlay" />
+              <span>{{ t('glide.browseModeOverlay') }}</span>
+            </label>
+          </div>
+
+          <div v-if="browseMode === 'single'" class="selection-panel">
+            <label class="selection-label">{{ t('glide.selectGroup') }}</label>
+            <select v-model="selectedSingleLabel" class="group-select">
+              <option v-for="group in browsableGroups" :key="group.label" :value="group.label">
+                {{ group.label }} · {{ group.totalReflections || 0 }}
+              </option>
+            </select>
+          </div>
+
+          <div v-else class="selection-panel">
+            <label class="selection-label">{{ t('glide.overlaySelectionTitle') }}</label>
+            <p class="quick-browse-hint">{{ t('glide.overlayHint') }}</p>
+            <div class="overlay-checklist">
+              <label v-for="group in browsableGroups" :key="group.label" class="overlay-item" :class="{ active: selectedOverlayLabels.includes(group.label) }">
+                <input
+                  type="checkbox"
+                  :checked="selectedOverlayLabels.includes(group.label)"
+                  :disabled="!selectedOverlayLabels.includes(group.label) && selectedOverlayLabels.length >= 5"
+                  @change="toggleOverlayGroup(group.label)"
+                />
+                <span>{{ group.label }}</span>
+                <span class="chip-count">{{ group.totalReflections || 0 }}</span>
+              </label>
+            </div>
+            <span class="overlay-limit">{{ t('glide.selectedCount', { count: selectedGroups.length }) }}</span>
+            <span v-if="selectedOverlayLabels.length >= 5" class="overlay-limit warning">{{ t('glide.overlayLimit') }}</span>
+          </div>
+
+          <p class="quick-browse-hint">{{ t('glide.liveSyncHint') }}</p>
+
+          <div v-if="selectedGroups.length > 0" class="shared-visualizer">
+            <Visualizer
+              resultType="glide"
+              :workDir="selectedVisualizerWorkDir"
+              :overlayGroups="selectedGroups"
+              :importRequestKey="importSelectionKey"
+              @raw-session-ready="handleVisualizerReady"
+              compact
+            />
+          </div>
+          <p v-else class="quick-browse-empty">{{ t('glide.selectGroup') }}</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -558,12 +687,26 @@ const importSelectionKey = ref(0)
 const visualizerReady = ref(false)
 
 const browsableGroups = computed(() => {
-  const groups = results.value?.glideBatchOutputs?.groups || []
+  if (isReverseMode.value) {
+    const groups = reverseResult.value?.candidateResults || []
+    return groups
+      .filter(g => (g.workDir || g.fullMillerContent || g.outputMillerContent))
+      .map(g => ({
+        label: g.label,
+        fullMillerContent: g.fullMillerContent || '',
+        outputMillerContent: g.outputMillerContent || '',
+        workDir: g.workDir || '',
+        totalReflections: g.totalReflections || 0,
+      }))
+  }
+
+  const groups = (isSupercellGlideMode.value ? scGlideResult.value : results.value)?.glideBatchOutputs?.groups || []
   return groups
-    .filter(g => (g.workDir || g.fullMillerContent))
+    .filter(g => (g.workDir || g.fullMillerContent || g.outputMillerContent))
     .map(g => ({
       label: g.label,
       fullMillerContent: g.fullMillerContent || '',
+      outputMillerContent: g.outputMillerContent || '',
       workDir: g.workDir || '',
       totalReflections: g.totalReflections || 0,
     }))
@@ -575,6 +718,8 @@ const selectedGroups = computed(() => {
   }
   return browsableGroups.value.filter(group => group.label === selectedSingleLabel.value).slice(0, 1)
 })
+
+const selectedVisualizerWorkDir = computed(() => selectedGroups.value[0]?.workDir || '')
 
 const hasBrowsableGroups = computed(() => browsableGroups.value.length > 0)
 
@@ -786,6 +931,17 @@ const generateReverse = async () => {
     )
     if (res.success && res.data) {
       reverseResult.value = res.data
+      const firstGroup = res.data?.candidateResults?.find(g => g.workDir || g.fullMillerContent || g.outputMillerContent)
+      selectedSingleLabel.value = firstGroup?.label || ''
+      selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
+      browseMode.value = 'single'
+      keepBrowseExpanded.value = true
+      browseExpanded.value = true
+      if (visualizerReady.value && firstGroup) {
+        importSelectionKey.value += 1
+      } else {
+        importSelectionKey.value = 0
+      }
     } else {
       error.value = res.message || t('glide.generationFailed')
     }

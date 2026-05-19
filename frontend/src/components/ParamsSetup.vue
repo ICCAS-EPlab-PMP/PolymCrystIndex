@@ -298,27 +298,48 @@
             </label>
           </div>
 
-          <div class="special-functions">
-            <h4>{{ t('params.specialFunctions') }}</h4>
+          <!-- 倾斜优化后续选项：伪正交约束、强制直角归正、衍射峰唯一指派 -->
+          <div class="post-tilt-options">
             <label class="toggle-item">
               <input type="checkbox" v-model="localParams.pseuOrth" />
               <span class="toggle-label">{{ t('params.pseudoOrth') }}</span>
             </label>
 
-            <label class="toggle-item disabled-toggle" aria-disabled="true">
-              <input type="checkbox" :checked="false" disabled />
-              <span class="toggle-label">{{ t('params.peakSymmetryMode') }} <span class="hint-icon" :title="t('params.peakSymmetryTip')">ⓘ</span></span>
+            <!-- Angle zeroing re-evaluation -->
+            <label class="toggle-item">
+              <input type="checkbox" v-model="localParams.angleZeroingEnabled" @change="onAngleZeroingToggle" />
+              <span class="toggle-label">{{ t('params.angleZeroingToggle') }} <span class="hint-icon" :title="t('params.angleZeroingTip')">ⓘ</span></span>
             </label>
-            <div class="peak-symmetry-thresholds disabled-thresholds">
+            <div v-if="localParams.angleZeroingEnabled" class="peak-symmetry-thresholds">
+              <p class="angle-zeroing-notice">{{ t('params.angleZeroingNotice') }}</p>
               <div class="weight-item">
-                <label>{{ t('params.peakSymmetryTq') }}</label>
-                <input type="number" :value="defaultParams.symmetryTq" step="0.01" min="0" disabled />
-                <p class="threshold-hint">{{ t('params.peakSymmetryTqHint') }}</p>
+                <label>{{ t('params.angleZeroingThreshold') }}</label>
+                <input type="number" v-model.number="localParams.angleZeroingThreshold" step="0.1" min="0.1" max="10" />
               </div>
               <div class="weight-item">
-                <label>{{ t('params.peakSymmetryTa') }}</label>
-                <input type="number" :value="defaultParams.symmetryTa" step="0.1" min="0" disabled />
-                <p class="threshold-hint">{{ t('params.peakSymmetryTaHint') }}</p>
+                <label>{{ t('params.angleZeroingTolerance') }}</label>
+                <input type="number" v-model.number="localParams.angleZeroingTolerance" step="0.1" min="0" max="5" />
+              </div>
+            </div>
+
+            <!-- Fixed-angle re-optimization toggle -->
+            <label v-if="localParams.angleZeroingEnabled" class="toggle-item" style="margin-left: 24px;">
+              <input type="checkbox" v-model="localParams.angleZeroingRefineEnabled" />
+              <span class="toggle-label">{{ t('params.angleZeroingRefineToggle') }} <span class="hint-icon" :title="t('params.angleZeroingRefineTip')">ⓘ</span></span>
+            </label>
+            <p v-if="localParams.angleZeroingEnabled && localParams.angleZeroingRefineEnabled" class="angle-zeroing-notice" style="margin-left: 48px; font-size: 12px;">
+              {{ t('params.angleZeroingRefineWarning') }}
+            </p>
+
+            <!-- Unique peak assignment (formerly deduplicate) -->
+            <label class="toggle-item">
+              <input type="checkbox" v-model="localParams.deduplicateEnabled" />
+              <span class="toggle-label">{{ t('params.deduplicateToggle') }} <span class="hint-icon" :title="t('params.deduplicateTip')">ⓘ</span></span>
+            </label>
+            <div v-if="localParams.deduplicateEnabled" class="peak-symmetry-thresholds" style="margin-left: 24px;">
+              <div class="weight-item">
+                <label>{{ t('params.deduplicatePenaltyLabel') }}</label>
+                <input type="number" v-model.number="localParams.deduplicatePenalty" step="0.1" min="1.0" max="100.0" />
               </div>
             </div>
           </div>
@@ -394,11 +415,12 @@ const defaultParams = {
   lmMode: true,
   tiltCheck: false,
   pseuOrth: false,
-  peakSymmetryEnabled: false,
-  symmetryTq: 0.02,
-  symmetryTa: 1.0,
-  mergeGradientEnabled: false,
-  mergeGradientThreshold: 0.0,
+  angleZeroingEnabled: false,
+  angleZeroingThreshold: 1.0,
+  angleZeroingTolerance: 0.5,
+  angleZeroingRefineEnabled: false,
+  deduplicateEnabled: false,
+  deduplicatePenalty: 1.0,
   hklMode: 'Default',
   custH: 5,
   custK: 5,
@@ -412,9 +434,6 @@ const defaultParams = {
 }
 
 const localParams = reactive({ ...props.params })
-localParams.peakSymmetryEnabled = false
-localParams.symmetryTq = defaultParams.symmetryTq
-localParams.symmetryTa = defaultParams.symmetryTa
 const expandedSections = reactive({
   ga: true,
   cell: true,
@@ -450,9 +469,6 @@ onBeforeUnmount(() => {
 
 watch(() => props.params, (newParams) => {
   Object.assign(localParams, newParams)
-  localParams.peakSymmetryEnabled = false
-  localParams.symmetryTq = defaultParams.symmetryTq
-  localParams.symmetryTa = defaultParams.symmetryTa
 }, { deep: true })
 
 watch(adminMaxOmpThreads, (maxThreads) => {
@@ -468,23 +484,6 @@ watch(() => localParams.ompThreads, (value) => {
   }
 })
 
-watch(() => localParams.symmetryTq, (value) => {
-  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
-    localParams.symmetryTq = defaultParams.symmetryTq
-  }
-})
-
-watch(() => localParams.symmetryTa, (value) => {
-  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
-    localParams.symmetryTa = defaultParams.symmetryTa
-  }
-})
-
-watch(() => localParams.mergeGradientThreshold, (value) => {
-  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
-    localParams.mergeGradientThreshold = defaultParams.mergeGradientThreshold
-  }
-})
 
 const ratioSum = computed(() => {
   return localParams.liveRatio + localParams.exchangeRatio + localParams.mutateRatio + localParams.newRatio
@@ -526,15 +525,16 @@ const onFixHklModeChange = () => {
   }
 }
 
+const onAngleZeroingToggle = () => {
+  // 不使用 window.confirm()——在 Electron 中会阻塞渲染进程导致输入框失焦
+  // 蓝色提示条 (angle-zeroing-notice) 已在展开区域展示功能说明
+}
+
 const resetParams = () => {
   Object.assign(localParams, defaultParams)
-  localParams.peakSymmetryEnabled = false
 }
 
 const saveParams = () => {
-  localParams.peakSymmetryEnabled = false
-  localParams.symmetryTq = defaultParams.symmetryTq
-  localParams.symmetryTa = defaultParams.symmetryTa
   Object.assign(props.params, localParams)
   saveNotice.value = t('params.saved')
   if (typeof window !== 'undefined') {
@@ -965,20 +965,10 @@ const saveParams = () => {
   border-top: 1px solid var(--border);
 }
 
-.special-functions {
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.special-functions h4 {
-  font-size: 0.875rem;
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: var(--text-secondary);
-}
-
-.peak-symmetry-config {
-  margin-top: 16px;
+.post-tilt-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
@@ -988,6 +978,18 @@ const saveParams = () => {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   margin-top: 12px;
+}
+
+.angle-zeroing-notice {
+  grid-column: 1 / -1;
+  background: var(--primary-bg, #eef2ff);
+  border: 1px solid var(--primary, #4f46e5);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 4px;
 }
 
 .threshold-hint {

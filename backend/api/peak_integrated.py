@@ -175,6 +175,13 @@ def _az_mask_for_crop(azv, crop_start, crop_end):
     return np.array([_angle_in_crop(a, crop_start, crop_end) for a in azv], dtype=bool)
 
 
+def _mean_or_zeros(data: np.ndarray, axis: int, fallback_size: int) -> np.ndarray:
+    if data.size == 0:
+        return np.zeros(fallback_size)
+    mean = np.nanmean(data, axis=axis)
+    return np.nan_to_num(mean, nan=0.0)
+
+
 @router.post("/load")
 async def load_image(file: UploadFile = File(...)):
     """Upload a .npy or .tif 2D integration file."""
@@ -343,34 +350,18 @@ def get_slice(req: SliceReq):
     az_range = sess["az_range"]
     rows, cols = data.shape
 
-    if req.az_crop_enabled and req.az_crop_min is not None and req.az_crop_max is not None:
-        crop_start = _psi_to_az(req.az_crop_min, req.convention, req.psi_offset)
-        crop_end   = _psi_to_az(req.az_crop_max, req.convention, req.psi_offset)
-        azv_all = np.linspace(az_range[0], az_range[1], rows)
-        crop_mask = _az_mask_for_crop(azv_all, crop_start, crop_end)
-    else:
-        crop_start = None
-        crop_end   = None
-        crop_mask  = None
+    def _row(az):
+        return int(np.clip(round((az - az_range[0]) / (az_range[1] - az_range[0]) * (rows - 1)), 0, rows - 1))
 
-    def _row(az): return int(np.clip(round((az - az_range[0]) / (az_range[1] - az_range[0]) * (rows-1)), 0, rows-1))
-    def _col(q):  return int(np.clip(round((q  - q_range[0])  / (q_range[1]  - q_range[0])  * (cols-1)), 0, cols-1))
+    def _col(q):
+        return int(np.clip(round((q - q_range[0]) / (q_range[1] - q_range[0]) * (cols - 1)), 0, cols - 1))
 
     az0 = req.center_az - req.az_int_width / 2
     az1 = req.center_az + req.az_int_width / 2
     r0, r1 = sorted([_row(az0), _row(az1)])
-    r0 = max(0, r0); r1 = min(rows-1, r1)
-    empty_crop = False
-    if crop_mask is not None:
-        slab_rows = np.where(crop_mask[r0:r1+1])[0] + r0
-        if len(slab_rows) == 0:
-            empty_crop = True
-            iq = np.array([])
-        else:
-            iq = np.mean(data[slab_rows, :], axis=0)
-    else:
-        slab = data[r0:r1+1, :]
-        iq   = np.mean(slab, axis=0) if slab.shape[0] > 0 else np.zeros(cols)
+    r0 = max(0, r0); r1 = min(rows - 1, r1)
+    slab = data[r0:r1+1, :]
+    iq = _mean_or_zeros(slab, axis=0, fallback_size=cols)
     qv   = np.linspace(q_range[0], q_range[1], cols)
 
     q0 = req.center_q - req.q_int_width / 2
@@ -378,19 +369,14 @@ def get_slice(req: SliceReq):
     c0, c1 = sorted([_col(q0), _col(q1)])
     c0 = max(0, c0); c1 = min(cols-1, c1)
     slab2 = data[:, c0:c1+1]
-    iaz   = np.mean(slab2, axis=1) if slab2.shape[1] > 0 else np.zeros(rows)
+    iaz   = _mean_or_zeros(slab2, axis=1, fallback_size=rows)
     azv   = np.linspace(az_range[0], az_range[1], rows)
 
     qd0, qd1   = req.center_q - req.q_display_range/2, req.center_q + req.q_display_range/2
     azd0, azd1 = req.center_az - req.az_display_range/2, req.center_az + req.az_display_range/2
     mask_q  = (qv  >= qd0) & (qv  <= qd1)
     mask_az = (azv >= azd0) & (azv <= azd1)
-    if crop_mask is not None:
-        mask_az = mask_az & crop_mask
-        if not np.any(mask_az):
-            empty_crop = True
-
-    if empty_crop:
+    if not np.any(mask_az):
         return {
             "q_values": [],
             "i_q": [],
@@ -419,27 +405,12 @@ def find_peaks_in_region(req: FindPeaksReq):
     qv  = np.linspace(q_range[0],  q_range[1],  cols)
     azv = np.linspace(az_range[0], az_range[1], rows)
 
-    if req.az_crop_enabled and req.az_crop_min is not None and req.az_crop_max is not None:
-        crop_start = _psi_to_az(req.az_crop_min, req.convention, req.psi_offset)
-        crop_end   = _psi_to_az(req.az_crop_max, req.convention, req.psi_offset)
-        crop_mask  = _az_mask_for_crop(azv, crop_start, crop_end)
-    else:
-        crop_mask = None
-
-    def row_idx(az): return int(np.clip(np.argmin(np.abs(azv - az)), 0, rows-1))
+    def row_idx(az): return int(np.clip(np.argmin(np.abs(azv - az)), 0, rows - 1))
     def col_idx(q):  return int(np.clip(np.argmin(np.abs(qv  - q)),  0, cols-1))
 
     r0, r1 = sorted([row_idx(req.az_min), row_idx(req.az_max)])
-    empty_crop = False
-    if crop_mask is not None:
-        valid_rows = np.where(crop_mask[r0:r1+1])[0] + r0
-        if len(valid_rows) == 0:
-            empty_crop = True
-            iq_full = np.array([])
-        else:
-            iq_full = np.mean(data[valid_rows, :], axis=0)
-    else:
-        iq_full = np.mean(data[r0:r1+1, :], axis=0) if r1 >= r0 else np.zeros(cols)
+    slab_rows = data[r0:r1+1, :]
+    iq_full = _mean_or_zeros(slab_rows, axis=0, fallback_size=cols)
     qi0, qi1 = sorted([col_idx(req.q_min), col_idx(req.q_max)])
     q_pks: list[dict] = []
     if qi1 > qi0:
@@ -448,27 +419,16 @@ def find_peaks_in_region(req: FindPeaksReq):
             q_pks.append({"q": float(qv[qi0+i]), "intensity": float(iq_full[qi0+i])})
 
     c0, c1 = sorted([col_idx(req.q_min), col_idx(req.q_max)])
-    iaz_full = np.mean(data[:, c0:c1+1], axis=1) if c1 >= c0 else np.zeros(rows)
+    iaz_full = _mean_or_zeros(data[:, c0:c1+1], axis=1, fallback_size=rows)
     ai0, ai1 = sorted([row_idx(req.az_min), row_idx(req.az_max)])
-    if crop_mask is not None:
-        peak_candidates = np.where(crop_mask[ai0:ai1+1])[0] + ai0
-        if len(peak_candidates) == 0:
-            empty_crop = True
-            az_pks = []
-        else:
-            iaz_crop = iaz_full[peak_candidates]
-            pks, _ = find_peaks(iaz_crop, prominence=req.prominence, width=req.width)
-            az_pks = [{"azimuth": float(azv[peak_candidates[i]]), "intensity": float(iaz_crop[i])} for i in pks]
-    elif ai1 >= ai0:
+    if ai1 >= ai0:
         az_pks = []
-        pks, _ = find_peaks(iaz_full[ai0:ai1+1], prominence=req.prominence, width=req.width)
+        az_window = iaz_full[ai0:ai1+1]
+        pks, _ = find_peaks(az_window, prominence=req.prominence, width=req.width)
         for i in pks:
-            az_pks.append({"azimuth": float(azv[ai0+i]), "intensity": float(iaz_full[ai0+i])})
+            az_pks.append({"azimuth": float(azv[ai0+i]), "intensity": float(az_window[i])})
     else:
         az_pks = []
-
-    if empty_crop:
-        return {"q_peaks": [], "az_peaks": [], "empty_crop": True}
 
     return {"q_peaks": q_pks, "az_peaks": az_pks, "empty_crop": False}
 

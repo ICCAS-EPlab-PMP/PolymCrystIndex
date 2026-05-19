@@ -1,7 +1,7 @@
 {
   "name": "polymcrystindex-electron",
-  "version": "1.8.4",
-  "polymcrystindexDisplayVersion": "1.8.4",
+  "version": "1.9.0",
+  "polymcrystindexDisplayVersion": "1.9.0",
   "private": true,
   "author": "PolymCrystIndex Team",
   "description": "Electron shell for the Workspace local desktop build",

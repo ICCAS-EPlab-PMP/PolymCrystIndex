@@ -59,9 +59,12 @@ class AnalysisParams(BaseModel):
     peakSymmetryEnabled: bool = False
     symmetryTq: float = Field(default=0.2, ge=0)
     symmetryTa: float = Field(default=2.0, ge=0)
-    mergeGradientEnabled: bool = False
-    mergeGradientThreshold: float = Field(default=0.0, ge=0)
-    duplicate: bool = False
+    angleZeroingEnabled: bool = False
+    angleZeroingThreshold: float = Field(default=1.0, ge=0.1)
+    angleZeroingTolerance: float = Field(default=0.5, ge=0.0)
+    angleZeroingRefineEnabled: bool = False
+    deduplicateEnabled: bool = False
+    deduplicatePenalty: float = Field(default=1.0, ge=1.0)
 
     @model_validator(mode="before")
     @classmethod
@@ -246,6 +249,27 @@ class SupercellBatchRequest(BaseModel):
 
 class SupercellBatchResponse(BaseModel):
     """Response for batch supercell FullMiller generation."""
+
+    success: bool = True
+    data: Optional[List[dict]] = None
+    message: Optional[str] = None
+
+
+class MultiFullMillerItem(BaseModel):
+    """One FullMiller file in a multi-import request."""
+
+    label: str = Field(default="")
+    content: str = Field(min_length=1)
+
+
+class MultiFullMillerRequest(BaseModel):
+    """Request to parse multiple FullMiller.txt contents."""
+
+    files: List[MultiFullMillerItem] = Field(min_length=1)
+
+
+class MultiFullMillerResponse(BaseModel):
+    """Response for multi FullMiller parsing."""
 
     success: bool = True
     data: Optional[List[dict]] = None

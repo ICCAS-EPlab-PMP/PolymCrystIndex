@@ -2,7 +2,7 @@
   "appId": "com.polymcrystindex.desktop",
   "productName": "PolymCrystIndex",
   "directories": {
-    "output": "../../execute/electron/dist"
+    "output": "../../execute/electron/dist-pre"
   },
   "afterPack": "./scripts/after-pack.js",
   "files": [
@@ -13,7 +13,7 @@
   ],
   "extraResources": [
     {
-      "from": "../../execute/electron/stage/workspace",
+      "from": "../../execute/electron/stage-pre/workspace",
       "to": "workspace"
     },
     {
@@ -21,7 +21,7 @@
       "to": "icon/polymindex.ico"
     }
   ],
-  "asar": true,
+  "asar": false,
   "win": {
     "icon": "../icon/polymindex.ico",
     "signAndEditExecutable": false,

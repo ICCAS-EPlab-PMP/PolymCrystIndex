@@ -31,6 +31,8 @@ from models.analysis import (
     ReverseGlideResponse,
     SupercellBatchRequest,
     SupercellBatchResponse,
+    MultiFullMillerRequest,
+    MultiFullMillerResponse,
 )
 from services.task_manager import TaskManager, TaskStatus
 from services.indexing_service import IndexingService
@@ -152,8 +154,6 @@ async def run_analysis(
     _normalize_glide_batch_labels(request)
     request.params.symmetryTq = max(0.0, request.params.symmetryTq or 0.2)
     request.params.symmetryTa = max(0.0, request.params.symmetryTa or 2.0)
-    request.params.mergeGradientEnabled = bool(request.params.mergeGradientEnabled or False)
-    request.params.mergeGradientThreshold = max(0.0, request.params.mergeGradientThreshold or 0.0)
 
     data_file_path = request.dataFile.replace("\\", "/") if request.dataFile else None
 
@@ -512,3 +512,45 @@ async def supercell_batch_fullmiller(
         )
     except Exception as exc:
         return SupercellBatchResponse(success=False, message=str(exc))
+
+
+@router.post("/multi-fullmiller", response_model=MultiFullMillerResponse)
+async def multi_fullmiller_parse(
+    request: MultiFullMillerRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """v1.8.5: 解析多组 FullMiller.txt 内容为 millerData。
+
+    前端上传多个 FullMiller.txt 文件内容，后端解析为结构化 millerData，
+    用于结果页多组 FullMiller 叠加对比显示。
+    """
+    from services import diffraction_utils
+
+    results = []
+    for fitem in request.files:
+        label = fitem.label or f"import_{len(results) + 1:02d}"
+        try:
+            miller_data = diffraction_utils.parse_fullmiller_to_miller_data(
+                fitem.content
+            )
+            results.append({
+                "label": label,
+                "millerData": miller_data,
+                "reflectionCount": len(miller_data),
+                "success": True,
+            })
+        except Exception as exc:
+            results.append({
+                "label": label,
+                "millerData": [],
+                "reflectionCount": 0,
+                "success": False,
+                "error": str(exc),
+            })
+
+    all_success = all(r.get("success") for r in results)
+    return MultiFullMillerResponse(
+        success=all_success,
+        data=results,
+        message=None if all_success else "Some files failed to parse",
+    )

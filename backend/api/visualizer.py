@@ -139,6 +139,7 @@ class MillerOverlayGroup(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     label: str = ""
     content: str = Field(default="", alias="full_miller_content")
+    output_content: str = Field(default="", alias="output_miller_content")
 
 
 class RawSetMillerBody(BaseModel):
@@ -327,23 +328,32 @@ async def raw_upload_miller(
 
 @router.post("/raw/set-miller-content")
 def raw_set_miller_content(body: RawSetMillerBody):
-    """Directly set up to 5 FullMiller groups from raw text content for overlay preview."""
-    merged: List[dict] = []
+    """Directly set overlay Miller groups from raw text content for preview."""
+    merged_full: List[dict] = []
+    merged_output: List[dict] = []
     accepted_groups = body.groups[:5]
     for idx, group in enumerate(accepted_groups):
-        parsed = MillerFileParser.parse(group.content or "")
-        for pt in parsed:
-            merged.append({
+        parsed_full = MillerFileParser.parse(group.content or "")
+        parsed_output = MillerFileParser.parse(group.output_content or "")
+        for pt in parsed_full:
+            merged_full.append({
                 **pt,
                 "overlay_index": idx,
                 "overlay_label": group.label or f"group_{idx + 1}",
             })
-    raw_state.full_miller = merged
+        for pt in parsed_output:
+            merged_output.append({
+                **pt,
+                "overlay_index": idx,
+                "overlay_label": group.label or f"group_{idx + 1}",
+            })
+    raw_state.full_miller = merged_full
+    raw_state.output_miller = merged_output
     return {
-        "message": f"已装载 {len(accepted_groups)} 组 FullMiller 叠加数据",
+        "message": f"已装载 {len(accepted_groups)} 组 Miller 叠加数据",
         "group_count": len(accepted_groups),
-        "count": len(merged),
-        "total_count": len(merged),
+        "count": len(merged_full) + len(merged_output),
+        "total_count": len(merged_full) + len(merged_output),
         "full_miller_count": len(raw_state.full_miller),
         "output_miller_count": len(raw_state.output_miller),
     }
@@ -385,8 +395,9 @@ def raw_load_workdir(body: WorkDirBody):
 
     image_path = _find_first_existing(work_dir, ["*.tif", "*.tiff", "*.edf", "*.cbf", "*.img"])
     poni_path = _find_first_existing(work_dir, ["*.poni"])
-    full_miller_path = work_dir / "FullMiller.txt"
-    output_miller_path = work_dir / "outputMiller.txt"
+    result_dir = work_dir / "result"
+    full_miller_path = _find_first_existing(work_dir, ["FullMiller.txt", "result/FullMiller.txt"])
+    output_miller_path = _find_first_existing(work_dir, ["outputMiller.txt", "result/outputMiller.txt"])
 
     result = {
         "image_loaded": False,
@@ -399,6 +410,8 @@ def raw_load_workdir(body: WorkDirBody):
         "poni": None,
         "full_miller_count": 0,
         "output_miller_count": 0,
+        "full_miller_content": "",
+        "output_miller_content": "",
         "message": "",
     }
 
@@ -421,15 +434,19 @@ def raw_load_workdir(body: WorkDirBody):
             result["message"] = f"加载工作目录图像失败: {exc}"
             return result
 
-    if full_miller_path.exists():
-        raw_state.full_miller = MillerFileParser.parse(full_miller_path.read_text(encoding='utf-8', errors='replace'))
+    if full_miller_path and full_miller_path.exists():
+        full_text = full_miller_path.read_text(encoding='utf-8', errors='replace')
+        raw_state.full_miller = MillerFileParser.parse(full_text)
         result["full_miller_count"] = len(raw_state.full_miller)
+        result["full_miller_content"] = full_text
     else:
         raw_state.full_miller = []
 
-    if output_miller_path.exists():
-        raw_state.output_miller = MillerFileParser.parse(output_miller_path.read_text(encoding='utf-8', errors='replace'))
+    if output_miller_path and output_miller_path.exists():
+        output_text = output_miller_path.read_text(encoding='utf-8', errors='replace')
+        raw_state.output_miller = MillerFileParser.parse(output_text)
         result["output_miller_count"] = len(raw_state.output_miller)
+        result["output_miller_content"] = output_text
     else:
         raw_state.output_miller = []
 
@@ -650,23 +667,32 @@ async def int_upload_miller(
 
 @router.post("/int/set-miller-content")
 def int_set_miller_content(body: RawSetMillerBody):
-    """Directly set up to 5 FullMiller groups from raw text content for integrated overlay preview."""
-    merged: List[dict] = []
+    """Directly set overlay Miller groups from raw text content for integrated preview."""
+    merged_full: List[dict] = []
+    merged_output: List[dict] = []
     accepted_groups = body.groups[:5]
     for idx, group in enumerate(accepted_groups):
-        parsed = MillerFileParser.parse(group.content or "")
-        for pt in parsed:
-            merged.append({
+        parsed_full = MillerFileParser.parse(group.content or "")
+        parsed_output = MillerFileParser.parse(group.output_content or "")
+        for pt in parsed_full:
+            merged_full.append({
                 **pt,
                 "overlay_index": idx,
                 "overlay_label": group.label or f"group_{idx + 1}",
             })
-    int_state.full_miller = merged
+        for pt in parsed_output:
+            merged_output.append({
+                **pt,
+                "overlay_index": idx,
+                "overlay_label": group.label or f"group_{idx + 1}",
+            })
+    int_state.full_miller = merged_full
+    int_state.output_miller = merged_output
     return {
-        "message": f"已装载 {len(accepted_groups)} 组 FullMiller 到 2D 积分图",
+        "message": f"已装载 {len(accepted_groups)} 组 Miller 到 2D 积分图",
         "group_count": len(accepted_groups),
-        "count": len(merged),
-        "total_count": len(merged),
+        "count": len(merged_full) + len(merged_output),
+        "total_count": len(merged_full) + len(merged_output),
         "full_miller_count": len(int_state.full_miller),
         "output_miller_count": len(int_state.output_miller),
     }
@@ -801,7 +827,10 @@ def int_render(params: IntRenderParams):
                   facecolor='#1a1a2e', edgecolor='#7ad6fb', labelcolor='#d8eeff')
 
     ax.set_xlim(q_range)
-    ax.set_ylim(az_range)
+    if crop_active:
+        ax.set_ylim(crop_start, crop_end)
+    else:
+        ax.set_ylim(az_range)
 
     ax.grid(True, color='#2a2a4e', linewidth=0.5)
 

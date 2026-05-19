@@ -27,6 +27,10 @@ module fitting_module
     integer :: max_h1_by_cell, max_k1_by_cell, max_l1_by_cell  ! 基于晶胞参数的Miller指数（整数）
     integer :: max_h1_by_q, max_k1_by_q, max_l1_by_q  ! 基于q值的Miller指数（整数）
     real*8 :: max_values(6),min_values(6)
+    integer :: deduplicate_enabled  ! 峰独占开关 (0=关, 1=开), input.txt line 30
+    real*8 :: dedup_penalty  ! 峰独占惩罚系数 (默认1.0), input.txt line 31
+    integer :: dedup_loser(maxdata)  ! 峰独占 loser 标记 (0=非loser, 1=loser)
+    real*8, allocatable :: min_error_list(:)  ! 局部误差列表（从error_cal_initial提升至模块级）
 end module
 
 
@@ -597,7 +601,6 @@ contains
         real(kind=8) :: current_q, current_PHI_or_y1, current_theta
         integer :: current_h, current_k, current_l
         real(kind=8) :: current_V
-        real(kind=8), allocatable :: min_error_list(:)
 
         !初始化
         tilt_angle = 0.0d0
@@ -689,6 +692,9 @@ contains
                     end if
 
                     if (a1 == 0 .and. b1 == 0 .and. c1 == 0) cycle
+
+                    ! l=0: (h,k,0) ≡ (-h,-k,0) — skip one half to avoid duplicate
+                    if (c1 == 0 .and. a1 < 0) cycle
 
                     ! 计算 d 间距 (耗时操作)
                     d = 1.0d0 / sqrt((A11 * a1**2 + B11 * b1**2 + C11 * c1**2 + &
@@ -810,12 +816,280 @@ contains
             end do
         end if
 
-        ! 释放临时数组
-        if (allocated(min_error_list)) deallocate(min_error_list)
-
         return
 
     end subroutine error_cal_initial
+
+    subroutine canonical_hkl(h, k, l, merge_mode, hc, kc, lc)
+        implicit none
+        integer, intent(in) :: h, k, l, merge_mode
+        integer, intent(out) :: hc, kc, lc
+
+        ! 前臵规则：轴向 Friedel 对永远等效（两个指数为零时第三个始终 abs）
+        if (h == 0 .and. k == 0) then
+            hc = 0; kc = 0; lc = abs(l)
+            return
+        else if (h == 0 .and. l == 0) then
+            hc = 0; kc = abs(k); lc = 0
+            return
+        else if (k == 0 .and. l == 0) then
+            hc = abs(h); kc = 0; lc = 0
+            return
+        end if
+
+        if (l == 0) then
+            if (h < 0) then
+                hc = -h; kc = -k; lc = 0
+            else
+                hc = h; kc = k; lc = 0
+            end if
+            return
+        end if
+
+        select case (merge_mode)
+        case (1)
+            ! Friedel / orthogonal: all axes equivalent
+            hc = abs(h)
+            kc = abs(k)
+            lc = abs(l)
+        case (2)
+            ! alpha unique: h is abs'd, k and l retain sign
+            hc = abs(h)
+            kc = k
+            lc = l
+        case (3)
+            ! beta unique: k is abs'd, h and l retain sign
+            hc = h
+            kc = abs(k)
+            lc = l
+        case (4)
+            ! gamma unique: l is abs'd, h and k retain sign
+            hc = h
+            kc = k
+            lc = abs(l)
+        case default
+            ! No symmetry: no abs
+            hc = h
+            kc = k
+            lc = l
+        end select
+    end subroutine
+
+    subroutine error_cal_dedup(diffraction_num, parm)
+        use fitting_module
+        implicit none
+        integer, intent(in) :: diffraction_num
+        real*8, intent(in) :: parm(:)
+
+        ! Local variables
+        integer :: i, j, loser_idx, dl
+        integer :: merge_mode
+        integer :: canonical_peak(maxdata, 3)
+        logical :: conflict_flag(maxdata), is_loser(maxdata)
+        integer :: h, k, l, l0
+        integer :: best_h, best_k, best_l
+        integer :: hc, kc, lc, hc2, kc2, lc2
+        real*8 :: current_error, best_error
+        real*8 :: q_theo, psi_theo
+        real*8 :: a, b, c, alpha, beta, gamma, V
+        real*8 :: A11, B11, C11, D11, E11, F11
+        real*8 :: d, theta, q, PHI, d1, y1, PHI_asin
+        real*8 :: tilt_angle_rad
+        real*8, parameter :: pi = 3.14159265358979323846d0
+
+        ! E1: Early return if <= 1 peak (no conflicts possible)
+        if (diffraction_num <= 1) return
+
+        ! Recompute cell parameters (same as in error_cal_initial)
+        a = parm(1)
+        b = parm(2)
+        c = parm(3)
+        if (ortho_ab_star == 1) then
+            alpha = parm(4) * pi / 180.0d0
+            beta = parm(5) * pi / 180.0d0
+            gamma = acos(cos(alpha) * cos(beta))
+        else if (crystal_system == 1) then
+            alpha = pi / 2.0d0
+            beta = pi / 2.0d0
+            gamma = pi / 2.0d0
+        else
+            alpha = parm(4) * pi / 180.0d0
+            beta = parm(5) * pi / 180.0d0
+            gamma = parm(6) * pi / 180.0d0
+        end if
+
+        call determine_symmetry_merge_mode(alpha * 180.0d0 / pi, beta * 180.0d0 / pi, gamma * 180.0d0 / pi, merge_mode)
+
+        ! sym_stat=0 时未开启对称归正，dedup 不应使用 canonical 等价，
+        ! 强制 merge_mode=0 使 canonical_hkl 直接返回原值（exact 匹配）
+        if (sym_stat == 0) merge_mode = 0
+
+        V = a * b * c * (1 - cos(alpha)**2 - cos(beta)**2 - cos(gamma)**2 + 2*cos(alpha)*cos(beta)*cos(gamma))**0.5
+        if (isnan(V) .or. V < 0.01d0) V = 10000000.0d0
+
+        A11 = b**2 * c**2 * sin(alpha)**2
+        B11 = a**2 * c**2 * sin(beta)**2
+        C11 = a**2 * b**2 * sin(gamma)**2
+        D11 = a * b * c**2 * (cos(alpha)*cos(beta) - cos(gamma))
+        E11 = a**2 * b * c * (cos(beta)*cos(gamma) - cos(alpha))
+        F11 = a * b**2 * c * (cos(gamma)*cos(alpha) - cos(beta))
+
+        ! Compute tilt_angle_rad locally
+        tilt_angle_rad = 0.0d0
+        if (tilt_check == 1) then
+            tilt_angle_rad = parm(7) * pi / 180.0d0
+        end if
+
+        ! Step 1: Compute canonical HKL for each peak
+        do i = 1, diffraction_num
+            h = nint(Miller_trans(i, 1))
+            k = nint(Miller_trans(i, 2))
+            l = nint(Miller_trans(i, 3))
+            call canonical_hkl(h, k, l, merge_mode, &
+                               canonical_peak(i, 1), canonical_peak(i, 2), canonical_peak(i, 3))
+        end do
+
+        ! Steps 2-3: Detect conflicts, keep best per canonical, mark losers
+        conflict_flag(1:diffraction_num) = .false.
+        is_loser(1:diffraction_num) = .false.
+        dedup_loser(1:diffraction_num) = 0
+
+        do i = 1, diffraction_num
+            if (conflict_flag(i)) cycle
+            do j = i + 1, diffraction_num
+                if (conflict_flag(j)) cycle
+                ! Check if same canonical HKL
+                if (canonical_peak(i, 1) == canonical_peak(j, 1) .and. &
+                    canonical_peak(i, 2) == canonical_peak(j, 2) .and. &
+                    canonical_peak(i, 3) == canonical_peak(j, 3)) then
+                    conflict_flag(i) = .true.
+                    conflict_flag(j) = .true.
+                    ! Winner: lower min_error_list, Loser: higher
+                    if (min_error_list(i) <= min_error_list(j)) then
+                        is_loser(j) = .true.
+                        dedup_loser(j) = 1
+                    else
+                        is_loser(i) = .true.
+                        dedup_loser(i) = 1
+                    end if
+                end if
+            end do
+        end do
+
+        ! Check if any conflicts found — if not, skip Round 2
+        if (.not. any(conflict_flag(1:diffraction_num))) then
+            ! No conflicts, but still re-apply fixhkl if any
+            go to 100
+        end if
+
+        ! Step 4 (Round 2): For each loser, search h/k grid with l±1
+        do i = 1, diffraction_num
+            if (.not. is_loser(i)) cycle
+
+            l0 = nint(Miller_trans(i, 3))
+            best_error = 1.0d30
+            best_h = nint(Miller_trans(i, 1))
+            best_k = nint(Miller_trans(i, 2))
+            best_l = l0
+
+            ! Search all h, k in range, l in {l0-1, l0, l0+1}
+            do h = -max_h1, max_h1
+                do k = -max_k1, max_k1
+                    do dl = -1, 1
+                        l = l0 + dl
+
+                        ! Skip (0,0,0) — physically meaningless
+                        if (h == 0 .and. k == 0 .and. l == 0) cycle
+
+                        ! Check if this (h,k,l) or its canonical equivalent is occupied by a winner
+                        do j = 1, diffraction_num
+                            if (j == i .or. is_loser(j)) cycle
+                            if (nint(Miller_trans(j, 1)) == h .and. &
+                                nint(Miller_trans(j, 2)) == k .and. &
+                                nint(Miller_trans(j, 3)) == l) then
+                                go to 150  ! occupied, skip
+                            end if
+                            ! Canonical equivalence check: (h,k,0) ≡ (-h,-k,0)
+                            call canonical_hkl(nint(Miller_trans(j,1)), nint(Miller_trans(j,2)), &
+                                               nint(Miller_trans(j,3)), merge_mode, hc, kc, lc)
+                            call canonical_hkl(h, k, l, merge_mode, hc2, kc2, lc2)
+                            if (hc == hc2 .and. kc == kc2 .and. lc == lc2) then
+                                go to 150  ! canonically occupied, skip
+                            end if
+                        end do
+
+                        ! Calculate theoretical q and psi for this (h,k,l)
+                        d = 1.0d0 / sqrt( &
+                            (h**2 * A11 + k**2 * B11 + l**2 * C11 + 2*h*k*D11 + 2*k*l*E11 + 2*h*l*F11) / V**2 &
+                        )
+                        if (isnan(d) .or. d <= 0.0d0) cycle
+                        theta = asin(wavelength / (2.0d0 * d))
+                        if (theta /= theta) cycle  ! NaN check
+                        q = (1.0d0 / d) * 2.0d0 * pi
+
+                        ! Calculate psi (PHI in radians)
+                        d1 = 1.0d0 / wavelength * sin(2.0d0 * theta)
+                        if (l == 0) then
+                            y1 = 0.0d0
+                        else
+                            y1 = dble(l) / c
+                        end if
+
+                        if (tilt_check == 1) then
+                            PHI_asin = (y1 / cos(tilt_angle_rad) + 1.0d0 / d * sin(theta) * tan(tilt_angle_rad)) / d1
+                            if (PHI_asin > 1.0d0 .or. PHI_asin < -1.0d0) then
+                                PHI = pi / 2.0d0
+                            else
+                                PHI = asin(PHI_asin)
+                            end if
+                        else
+                            if (y1 / d1 > 1.0d0 .or. y1 / d1 < -1.0d0) then
+                                PHI = pi / 2.0d0
+                            else
+                                PHI = asin(y1 / d1)
+                            end if
+                        end if
+
+                        ! Compute error: same formula as in error_cal_initial
+                        if (level == 1) then
+                            current_error = abs(q - value1(i)) * e3 + abs(PHI * 180.0d0 / pi - value(i)) * e2
+                        else if (level == 2) then
+                            current_error = abs(q - value1(i)) * e3 + abs(y1 - value(i)) * e2
+                        end if
+
+                        ! Track best
+                        if (current_error < best_error) then
+                            best_error = current_error
+                            best_h = h
+                            best_k = k
+                            best_l = l
+                        end if
+150                     continue
+                    end do
+                end do
+            end do
+
+            ! Update Miller_trans for this loser
+            Miller_trans(i, 1) = best_h
+            Miller_trans(i, 2) = best_k
+            Miller_trans(i, 3) = best_l
+            min_error_list(i) = best_error
+        end do
+
+        ! Step 5: Re-apply fixhkl (if any) — fixhkl overrides dedup assignments
+100     if (allocated(fixhkl)) then
+            do k = 1, fixhklfile
+                if (fixlmode == 1) then
+                    Miller_trans(fixhkl(k, 1), 3) = fixhkl(k, 4)
+                else
+                    Miller_trans(fixhkl(k, 1), 1:3) = fixhkl(k, 2:4)
+                end if
+            end do
+        end if
+
+        if (allocated(min_error_list)) deallocate(min_error_list)
+
+    end subroutine
 
     subroutine calcfitval(diffraction_num, nparm, parm, fitval, fitval1, V)
         implicit real*8 (a-h, o-z)
@@ -1027,7 +1301,7 @@ program LMfit
     fixlmode = 0
     ortho_ab_star = 0!初始化a*与b*垂直约束标志
     !文件第一行为波长，第二行为检测器距离，第三行为检测器类型
-    do i=1,29
+    do i=1,31
         if (i==1) then
             read(1,*) wavelength
         else if (i==4) then
@@ -1088,6 +1362,12 @@ program LMfit
             read(1,*) fixhklfile!确定是否固定hkl，如果/=0，则打开hkl文件，读取fixhkl数量的文件
         else if (i == 29) then
             read(1,*) fixlmode
+        else if (i == 30) then
+            read(1,*,iostat=io_status) deduplicate_enabled
+            if (io_status /= 0) deduplicate_enabled = 0
+        else if (i == 31) then
+            read(1,*,iostat=io_status) dedup_penalty
+            if (io_status /= 0 .or. dedup_penalty < 1.0d0) dedup_penalty = 1.0d0
         else
             read(1,*)
         end if 
@@ -1291,9 +1571,21 @@ program LMfit
         !假定q在纵和横
         call error_cal_initial(diffraction_num,parm)
 
+        if (deduplicate_enabled == 1) then
+            call error_cal_dedup(diffraction_num,parm)
+        end if
+
         call lmdif1(calcfiterr,diffraction_num,nparm,parm(:),fiterr(1:diffraction_num),tol,maxcall,info)!cakcfiterr为计算误差程序
         !lmdif提供的是：1.误差数组，2.总观测数据数量，3.拟合参数数量=3+1，4. 拟合参数，5.各个参数的误差，6.收敛限，7最大步数，8.结束信息
 
+        ! Post-LM dedup: 优化后 cell 参数变了，重新分配 Miller 指数 + 检测冲突
+        if (deduplicate_enabled == 1) then
+            ! 用优化后的 parm 重新分配 Miller 指数
+            call error_cal_initial(diffraction_num, parm)
+            call error_cal_dedup(diffraction_num, parm)
+            ! 用新的 Miller_trans 重新计算 fiterr
+            call calcfiterr(diffraction_num, nparm, parm(:), fiterr(1:diffraction_num), 1)
+        end if
 
         !write(*,*) parm(1),parm(2),parm(3),parm(4),parm(5),parm(6),fiterr(1:diffraction_num)
         !导出error
@@ -1308,6 +1600,10 @@ program LMfit
 
             if (isnan(fiterr(j))) then
                 fiterr(j)=100000
+            end if
+            ! 对 dedup loser 峰施加惩罚
+            if (deduplicate_enabled == 1 .and. dedup_loser(j) == 1) then
+                fiterr(j) = fiterr(j) * dedup_penalty
             end if
             error_total(i)=error_total(i)+fiterr(j)
         end do

@@ -182,21 +182,7 @@ const statusPollingTimer = ref(null)
 const logsPollingTimer = ref(null)
 const logMode = ref('summary')
 
-const buildPeakSymmetrySummaryLines = (resultData) => {
-  const groups = Array.isArray(resultData?.peakSymmetryGroups) ? resultData.peakSymmetryGroups : []
-  const twoPeakCount = groups.filter(group => group?.groupType === '2-peak').length
-  const fourPeakCount = groups.filter(group => group?.groupType === '4-peak').length
-  const enabled = Boolean(resultData?.peakSymmetryConfig?.enabled)
 
-  if (!enabled) {
-    return ['[System] Peak symmetry merge mode: disabled']
-  }
-
-  return [
-    `[System] Peak symmetry merge mode: enabled (Tq=${resultData?.peakSymmetryConfig?.mergeTq ?? 0.02}, Ta=${resultData?.peakSymmetryConfig?.mergeTa ?? 1.0})`,
-    `[System] Peak symmetry groups summary: 2-peak=${twoPeakCount}, 4-peak=${fourPeakCount}, total=${groups.length}`
-  ]
-}
 
 const buildGlideSummaryLines = (resultData) => {
   const glide = resultData?.glideBatchOutputs || { enabled: false, groups: [] }
@@ -219,7 +205,6 @@ const appendResultSummaryLogs = async () => {
     }
 
     const summaryLines = [
-      ...buildPeakSymmetrySummaryLines(result.data),
       ...buildGlideSummaryLines(result.data),
     ]
     for (const line of summaryLines) {

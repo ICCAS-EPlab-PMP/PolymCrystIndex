@@ -194,9 +194,9 @@
             </div>
             <!-- ψ offset correction -->
             <div class="form-row" style="margin-bottom:10px;">
-              <label style="min-width:80px;">ψ offset (°)</label>
-              <input type="number" v-model.number="psiOffset" step="0.1" style="width:90px;" />
-              <span class="dimmed" style="font-size:0.75rem; margin-left:6px;">corrected = raw − offset</span>
+              <label style="min-width:80px;">{{ t('peakExtraction.psiOffsetLabel') }}</label>
+               <input type="number" v-model.number="psiOffset" step="0.1" style="width:90px;" />
+               <span class="dimmed" style="font-size:0.75rem; margin-left:6px;">{{ t('peakExtraction.psiOffsetCorrected') }}</span>
             </div>
             <ul class="record-list">
               <li v-for="(r, i) in records" :key="i" class="record-item">
@@ -214,20 +214,20 @@
             <div class="btn-group compact">
               <button class="btn-danger" :disabled="!records.length" @click="clearRecords">{{ t('peakExtraction.clearRecords') }}</button>
               <label class="btn-secondary" :class="{ disabled: !sessionId }">
-                导入 TXT/CSV
-                <input type="file" accept=".txt,.csv" :disabled="!sessionId" @change="onImportRecords" hidden />
-              </label>
-              <a v-if="sessionId" :href="exportUrl" class="btn-outline" download>{{ t('peakExtraction.exportCsv') }}</a>
-              <a v-if="sessionId" :href="exportTxtUrl" class="btn-outline" download style="color:var(--primary);">Export TXT</a>
-              <a v-if="sessionId" :href="exportMarkedImageUrl" class="btn-outline" download>导出标记图片</a>
+                 {{ t('peakExtraction.importTxtCsv') }}
+                 <input type="file" accept=".txt,.csv" :disabled="!sessionId" @change="onImportRecords" hidden />
+               </label>
+               <a v-if="sessionId" :href="exportUrl" class="btn-outline" download>{{ t('peakExtraction.exportCsv') }}</a>
+               <a v-if="sessionId" :href="exportTxtUrl" class="btn-outline" download style="color:var(--primary);">{{ t('peakExtraction.exportTxt') }}</a>
+               <a v-if="sessionId" :href="exportMarkedImageUrl" class="btn-outline" download>{{ t('peakExtraction.exportMarkedImage') }}</a>
             </div>
           </div>
 
           <div class="section-card save-records-card">
             <div class="section-header">
-              <h3>临时记录说明</h3>
+              <h3>{{ t('peakExtraction.tempRecordTitle') }}</h3>
             </div>
-            <p class="save-records-hint">峰提取记录现在只保留在当前会话中，不再写入服务器历史文件。需要复用记录时，请直接导出 txt/csv 或标记图片，再通过上方导入按钮恢复。</p>
+            <p class="save-records-hint">{{ t('peakExtraction.rawTempRecordHint') }}</p>
           </div>
         </div>
       </div>

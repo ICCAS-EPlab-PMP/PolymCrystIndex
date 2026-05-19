@@ -4,10 +4,6 @@ export const buildRunAnalysisPayload = (dataFile, params = {}) => {
   const requestParams = {
     ...params,
     fixedPeakText: typeof params?.fixedPeakText === 'string' ? params.fixedPeakText : '',
-    peakSymmetryEnabled: false,
-    mergeGradientEnabled: Boolean(params?.mergeGradientEnabled),
-    symmetryTq: typeof params?.symmetryTq === 'number' && !Number.isNaN(params.symmetryTq) ? params.symmetryTq : 0.02,
-    symmetryTa: typeof params?.symmetryTa === 'number' && !Number.isNaN(params.symmetryTa) ? params.symmetryTa : 1.0,
     glideBatches: Array.isArray(params?.glideBatches)
       ? params.glideBatches.filter(b => b && Math.abs(Number(b.l0) || 0) > 1e-12).map(b => ({
           label: String(b.label || '').trim(),

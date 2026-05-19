@@ -4,7 +4,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $electronRoot = Resolve-Path (Join-Path $scriptRoot '..')
 $workspaceRoot = Resolve-Path (Join-Path $electronRoot '..')
 $repoRoot = Resolve-Path (Join-Path $workspaceRoot '..')
-$stageRoot = Join-Path $repoRoot 'execute\electron\stage\workspace'
+$stageRoot = Join-Path $repoRoot 'execute\electron\stage-pre\workspace'
 $runtimeSource = Join-Path $repoRoot 'execute\electron\runtime'
 $runtimePythonExe = Join-Path $runtimeSource 'python\python.exe'
 $frontendDist = Join-Path $workspaceRoot 'frontend\dist'
@@ -42,6 +42,7 @@ if (-not $gfortran) {
 
 $mingwBin = Split-Path -Parent $gfortran.Source
 $requiredRuntimeDlls = @(
+    'libgfortran-5.dll',
     'libgcc_s_seh-1.dll',
     'libgomp-1.dll',
     'libquadmath-0.dll'

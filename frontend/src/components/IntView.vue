@@ -2,11 +2,15 @@
   <div class="int-view">
     <div class="content-grid">
       <div class="section-card heatmap-section">
-        <div class="section-header">
-          <h3>{{ t('visualizer.integration2D') }}</h3>
-        </div>
-        <div ref="heatmapDiv" class="heatmap-container"></div>
-      </div>
+         <div class="section-header">
+           <h3>{{ t('visualizer.integration2D') }}</h3>
+         </div>
+         <div ref="heatmapDiv" class="heatmap-container"></div>
+         <div v-if="sessionId" class="slice-plots-inline">
+           <div ref="qSliceDiv" class="chart-container-inline"></div>
+           <div ref="azSliceDiv" class="chart-container-inline"></div>
+         </div>
+       </div>
 
       <div class="left-panel">
 
@@ -101,6 +105,20 @@
           <div v-show="rtab === 'analysis'" class="tab-content">
             <div class="section-card">
               <div class="section-header">
+                <h3>{{ t('peakExtraction.peakList') }}</h3>
+              </div>
+              <div class="selection-info">
+                <span>q: <b>{{ selectedQ != null ? selectedQ.toFixed(5) : '—' }}</b></span>
+                <span>Az: <b>{{ selectedAz != null ? selectedAz.toFixed(2) : '—' }}</b>°</span>
+              </div>
+              <div class="btn-row">
+                <button class="btn-primary" :disabled="!canRecord" @click="recordPeaks">{{ t('peakExtraction.recordPeaks') }}</button>
+                <button class="btn-outline-sm" @click="clearSelection">{{ t('common.clear') || t('visualizer.clear') || 'Clear' }}</button>
+              </div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
                 <h3>{{ t('peakExtraction.importFile') }}</h3>
               </div>
               <div class="btn-group">
@@ -138,14 +156,6 @@
               </div>
             </div>
 
-            <div v-if="sessionId" class="section-card">
-              <div class="section-header">
-                <h3>{{ t('peakExtraction.slicePlots') }}</h3>
-              </div>
-              <div ref="qSliceDiv" class="chart-container"></div>
-              <div ref="azSliceDiv" class="chart-container"></div>
-            </div>
-
             <div v-if="mode === 'rough'" class="section-card">
               <div class="section-header">
                 <h3>{{ t('peakExtraction.findPeaks') }}</h3>
@@ -158,20 +168,6 @@
             <div class="tip-text">{{ t('peakExtraction.autoFindPeaksTip') }}</div>
             <div v-if="foundPeaks" class="peak-info">
               {{ t('peakExtraction.qPeaks') }}: {{ foundPeaks.q_peaks.length }} | {{ t('peakExtraction.azPeaks') }}: {{ foundPeaks.az_peaks.length }}
-            </div>
-          </div>
-
-          <div class="section-card">
-            <div class="section-header">
-              <h3>{{ t('peakExtraction.peakList') }}</h3>
-            </div>
-            <div class="selection-info">
-              <span>q: <b>{{ selectedQ != null ? selectedQ.toFixed(5) : '—' }}</b></span>
-              <span>Az: <b>{{ selectedAz != null ? selectedAz.toFixed(2) : '—' }}</b>°</span>
-            </div>
-            <div class="btn-row">
-              <button class="btn-primary" :disabled="!canRecord" @click="recordPeaks">{{ t('peakExtraction.recordPeaks') }}</button>
-              <button class="btn-outline-sm" @click="clearSelection">{{ t('common.clear') || t('visualizer.clear') || 'Clear' }}</button>
             </div>
           </div>
         </div>
@@ -190,19 +186,19 @@
             <div class="btn-row">
               <button class="btn-danger" :disabled="!peakRecords.length" @click="clearRecords">{{ t('peakExtraction.clearRecords') }}</button>
               <label class="btn-secondary" :class="{ disabled: !sessionId }">
-                导入 TXT/CSV
-                <input type="file" accept=".txt,.csv" :disabled="!sessionId" @change="onImportRecords" hidden />
-              </label>
-              <a v-if="sessionId" :href="exportUrl" class="btn-outline" download>{{ t('peakExtraction.exportCsv') }}</a>
-              <a v-if="sessionId" :href="exportMarkedImageUrl" class="btn-outline" download>导出标记图片</a>
+                 {{ t('peakExtraction.importTxtCsv') }}
+                 <input type="file" accept=".txt,.csv" :disabled="!sessionId" @change="onImportRecords" hidden />
+               </label>
+               <a v-if="sessionId" :href="exportUrl" class="btn-outline" download>{{ t('peakExtraction.exportCsv') }}</a>
+               <a v-if="sessionId" :href="exportMarkedImageUrl" class="btn-outline" download>{{ t('peakExtraction.exportMarkedImage') }}</a>
             </div>
           </div>
 
           <div class="section-card save-records-card">
             <div class="section-header">
-              <h3>临时记录说明</h3>
-            </div>
-            <p class="save-records-hint">积分图峰记录现在只保留在当前会话中，不再写入服务器历史文件。需要复用记录时，请导出 csv 或标记图片，并通过上方导入按钮恢复。</p>
+              <h3>{{ t('peakExtraction.tempRecordTitle') }}</h3>
+             </div>
+             <p class="save-records-hint">{{ t('peakExtraction.intTempRecordHint') }}</p>
           </div>
         </div>
       </div>
@@ -212,7 +208,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { intApi } from '@/api/peakExtractionApi'
 import ColormapRenderer from '@/utils/diffraction/ColormapRenderer'
@@ -270,7 +266,7 @@ const exportMarkedImageUrl = computed(() => {
 })
 let _qSliceInited = false
 let _azSliceInited = false
-let _heatmapEventsBound = false
+let _heatmapClickCleanup = null  // BUG FIX: store DOM click listener cleanup for heatmap
 let _emptyCropToastShown = false
 
 const canRecord = computed(() => {
@@ -282,11 +278,15 @@ const plotlyCmap = computed(() => ColormapRenderer.getPlotlyColorscale(colormap.
 
 async function onLoadFile(e) {
   const file = e.target.files[0]; if (!file) return
+  e.target.value = ''  // BUG FIX: reset input value so same file can be re-imported
   emit('status', `Loading ${file.name}…`)
   try {
-    _heatmapEventsBound = false
+    // BUG FIX: clean up old heatmap DOM click listener before destroying plot
+    if (_heatmapClickCleanup) { _heatmapClickCleanup(); _heatmapClickCleanup = null }
+    // BUG FIX: destroy old Plotly instances synchronously before loading new data
     if (heatmapDiv.value) {
-      import('plotly.js-dist-min').then(Plotly => Plotly.purge(heatmapDiv.value))
+      const Plotly = await import('plotly.js-dist-min')
+      Plotly.purge(heatmapDiv.value)
     }
     const { data } = await intApi.load(file)
     sessionId.value = data.session_id
@@ -364,50 +364,114 @@ async function applyRanges() {
 function restoreView() {
   import('plotly.js-dist-min').then(Plotly => {
     const cropRange = getCropAzRange()
-    let yRange = null
-    if (!cropRange) {
-      yRange = [azMin.value, azMax.value]
-    } else if (!cropRange.wrap) {
-      yRange = [cropRange.start, cropRange.end]
-    }
+    const yRange = cropRange
+      ? [cropRange.start, cropRange.end]
+      : [azMin.value, azMax.value]
     const layoutUpdate = { 'xaxis.range': [qMin.value, qMax.value] }
-    if (yRange) layoutUpdate['yaxis.range'] = yRange
+    layoutUpdate['yaxis.range'] = yRange
     Plotly.relayout(heatmapDiv.value, layoutUpdate)
   })
+}
+
+/**
+ * BUG FIX: Native DOM click handler for heatmap.
+ * Replaces Plotly's plotly_click which is unreliable when dragmode='pan'.
+ * Uses Plotly's axis p2d() to convert pixel → data coordinates, so it works
+ * on every real click regardless of dragmode, zoom state, or plot re-renders.
+ */
+function _addHeatmapClickListener(el, onPick) {
+  let downX = 0, downY = 0
+  let wasDrag = false
+  const DRAG_THRESHOLD = 5
+
+  function onDown(e) {
+    downX = e.clientX; downY = e.clientY
+    wasDrag = false
+  }
+  function onMove(e) {
+    if (wasDrag) return
+    const dx = Math.abs(e.clientX - downX)
+    const dy = Math.abs(e.clientY - downY)
+    if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) wasDrag = true
+  }
+  function onUp(e) {
+    if (wasDrag) return
+    const layout = el._fullLayout
+    if (!layout) return
+    const xaxis = layout.xaxis
+    const yaxis = layout.yaxis
+    if (!xaxis || !yaxis) return
+    const rect = el.getBoundingClientRect()
+    const xPixel = e.clientX - rect.left - xaxis._offset
+    const yPixel = e.clientY - rect.top  - yaxis._offset
+    if (xPixel < 0 || xPixel > xaxis._length) return
+    if (yPixel < 0 || yPixel > yaxis._length) return
+    onPick(xaxis.p2d(xPixel), yaxis.p2d(yPixel))
+  }
+  el.addEventListener('mousedown', onDown)
+  el.addEventListener('mousemove', onMove)
+  el.addEventListener('mouseup', onUp)
+  el.addEventListener('mouseleave', onUp)
+  return () => {
+    el.removeEventListener('mousedown', onDown)
+    el.removeEventListener('mousemove', onMove)
+    el.removeEventListener('mouseup', onUp)
+    el.removeEventListener('mouseleave', onUp)
+  }
 }
 
 function drawHeatmap() {
   if (!zData.value.length) return
   import('plotly.js-dist-min').then(Plotly => {
+    // BUG FIX: preserve zoom/viewport across newPlot so contrast/colormap
+    // changes (via refreshHeatmap) don't reset the user's view.
+    let savedRange = null
+    try {
+      const fl = heatmapDiv.value._fullLayout
+      if (fl && fl.xaxis && fl.yaxis && fl.xaxis.range && fl.yaxis.range) {
+        savedRange = {
+          x: [fl.xaxis.range[0], fl.xaxis.range[1]],
+          y: [fl.yaxis.range[0], fl.yaxis.range[1]],
+        }
+      }
+    } catch (_) { /* ignore */ }
+
     const filtered = getFilteredHeatmapData()
     const traces = buildTraces()
     const layout = buildLayout(filtered)
-    Plotly.react(heatmapDiv.value, traces, layout, { responsive: true, displayModeBar: false, scrollZoom: true })
+
+    // Restore zoom if available
+    if (savedRange) {
+      layout.xaxis.range = savedRange.x
+      layout.yaxis.range = savedRange.y
+    }
+
+    // BUG FIX: use newPlot (not react) so every redraw is fully fresh with
+    // no stale Plotly internals lingering from previous purge.
+    Plotly.newPlot(heatmapDiv.value, traces, layout, { responsive: true, displayModeBar: false, scrollZoom: true })
     notifyEmptyCropState(filtered.hasData)
 
-    if (!_heatmapEventsBound) {
-      heatmapDiv.value.on('plotly_click', ev => {
-        const pt = ev.points[0]
-        if (pt == null) return
-        const q = pt.x, az = pt.y
-        if (mode.value === 'precise') {
-          sliceCenter.value = { q, az }
-          selectedQ.value = null; selectedAz.value = null
-          foundPeaks.value = null
-          fetchSlices()
-        }
-      })
-
-      heatmapDiv.value.on('plotly_selected', ev => {
-        if (!ev?.range || mode.value !== 'rough') return
-        roughSel.value = { q_min: ev.range.x[0], q_max: ev.range.x[1], az_min: ev.range.y[0], az_max: ev.range.y[1] }
-        sliceCenter.value = { q: (roughSel.value.q_min + roughSel.value.q_max) / 2, az: (roughSel.value.az_min + roughSel.value.az_max) / 2 }
-        selectedQ.value = null; selectedAz.value = null; foundPeaks.value = null
+    // BUG FIX: bind native DOM click handler for precise-mode selection.
+    // This always works regardless of dragmode, unlike plotly_click.
+    if (_heatmapClickCleanup) _heatmapClickCleanup()
+    _heatmapClickCleanup = _addHeatmapClickListener(heatmapDiv.value, (q, az) => {
+      if (mode.value === 'precise') {
+        sliceCenter.value = { q, az }
+        selectedQ.value = null; selectedAz.value = null
+        foundPeaks.value = null
         fetchSlices()
-      })
+      }
+    })
 
-      _heatmapEventsBound = true
-    }
+    // BUG FIX: bind plotly_selected for rough-mode box-select.
+    // Plotly.newPlot clears previous event listeners, so this is always fresh.
+    heatmapDiv.value.on('plotly_selected', ev => {
+      if (!ev?.range || mode.value !== 'rough') return
+      roughSel.value = { q_min: ev.range.x[0], q_max: ev.range.x[1], az_min: ev.range.y[0], az_max: ev.range.y[1] }
+      sliceCenter.value = { q: (roughSel.value.q_min + roughSel.value.q_max) / 2, az: (roughSel.value.az_min + roughSel.value.az_max) / 2 }
+      selectedQ.value = null; selectedAz.value = null; foundPeaks.value = null
+      fetchSlices()
+    })
   })
 }
 
@@ -427,18 +491,16 @@ function buildTraces() {
   }]
 
   if (peakRecords.value.length) {
-    const recs = peakRecords.value.filter(r => isAzInCrop(r.azimuth))
-    if (recs.length) {
-      traces.push({
-        type: 'scatter', mode: 'markers',
-        x: recs.map(r => r.q),
-        y: recs.map(r => r.azimuth),
-        marker: { color: '#ff3300', size: 10, symbol: 'x', line: { width: 2 } },
-        name: 'Recorded',
-        showlegend: false,
-        hoverinfo: 'skip',
-      })
-    }
+    const recs = peakRecords.value
+    traces.push({
+      type: 'scatter', mode: 'markers',
+      x: recs.map(r => r.q),
+      y: recs.map(r => r.azimuth),
+      marker: { color: '#ff3300', size: 10, symbol: 'x', line: { width: 2 } },
+      name: 'Recorded',
+      showlegend: false,
+      hoverinfo: 'skip',
+    })
   }
 
   return traces
@@ -446,12 +508,9 @@ function buildTraces() {
 
 function buildLayout(filtered = getFilteredHeatmapData()) {
   const cropRange = getCropAzRange()
-  let yRange = null
-  if (!cropRange) {
-    yRange = [azMin.value, azMax.value]
-  } else if (!cropRange.wrap) {
-    yRange = [cropRange.start, cropRange.end]
-  }
+  const yRange = cropRange
+    ? [cropRange.start, cropRange.end]
+    : [azMin.value, azMax.value]
 
   const annotations = []
   if (!filtered.hasData) {
@@ -470,22 +529,17 @@ function buildLayout(filtered = getFilteredHeatmapData()) {
     })
   }
   if (peakRecords.value.length) {
-    const recs = peakRecords.value.filter(r => isAzInCrop(r.azimuth))
-    for (const r of recs) {
-      const origIdx = peakRecords.value.indexOf(r)
+    for (let ri = 0; ri < peakRecords.value.length; ri++) {
+      const r = peakRecords.value[ri]
       annotations.push({
         x: r.q,
         y: r.azimuth,
-        text: `P${origIdx + 1}`,
+        text: `P${ri + 1}`,
         showarrow: false,
-        font: { color: '#ffffff', size: 16, family: 'Arial Black, Arial, sans-serif' },
-        bordercolor: '#ffffff',
-        borderwidth: 1.5,
-        borderpad: 2,
-        bgcolor: 'rgba(0,0,0,0.55)',
+        font: { color: '#ffffff', size: 10, family: 'Arial, sans-serif' },
         xanchor: 'center',
         yanchor: 'bottom',
-        yshift: 12,
+        yshift: 8,
       })
     }
   }
@@ -493,7 +547,7 @@ function buildLayout(filtered = getFilteredHeatmapData()) {
   return {
     margin: { t: 30, b: 50, l: 55, r: 30 },
     xaxis: { title: 'q (Å⁻¹)' },
-    yaxis: { title: 'Azimuth (°)' },
+    yaxis: { title: 'Azimuth (°)', range: yRange },
     title: { text: t('peakExtraction.integration2DTitle'), font: { size: 13 } },
     dragmode: mode.value === 'rough' ? 'select' : 'pan',
     legend: { x: 1, xanchor: 'right', y: 1 },
@@ -671,12 +725,8 @@ function getCropAzRange() {
 
 function getFilteredHeatmapData() {
   const az = [...azAxis.value]
-  const z = azAxis.value.map((azValue, rowIndex) => {
-    if (isAzInCrop(azValue)) return [...(zData.value[rowIndex] || [])]
-    const row = zData.value[rowIndex] || []
-    return row.map(() => null)
-  })
-  const hasData = azAxis.value.some(azValue => isAzInCrop(azValue))
+  const z = zData.value.map(row => [...(row || [])])
+  const hasData = azAxis.value.length > 0
   return { az, z, hasData }
 }
 
@@ -802,6 +852,16 @@ async function clearRecords() {
   refreshHeatmap()
 }
 
+// BUG FIX: clean up native DOM listeners and Plotly instances on unmount
+onUnmounted(() => {
+  if (_heatmapClickCleanup) { _heatmapClickCleanup(); _heatmapClickCleanup = null }
+  import('plotly.js-dist-min').then(Plotly => {
+    if (heatmapDiv.value) Plotly.purge(heatmapDiv.value)
+    if (_qSliceInited && qSliceDiv.value) { Plotly.purge(qSliceDiv.value); _qSliceInited = false }
+    if (_azSliceInited && azSliceDiv.value) { Plotly.purge(azSliceDiv.value); _azSliceInited = false }
+  })
+})
+
 </script>
 
 <style scoped>
@@ -851,9 +911,22 @@ async function clearRecords() {
 
 .heatmap-container {
   width: 100%;
-  height: 45vh;
+  height: 60vh;
+  min-height: 380px;
   background: #111;
   border-radius: var(--radius-md);
+}
+
+.slice-plots-inline {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.chart-container-inline {
+  flex: 1;
+  min-width: 0;
+  min-height: 160px;
 }
 
 .chart-container {

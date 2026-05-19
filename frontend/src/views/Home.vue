@@ -239,12 +239,11 @@ const isCheckingUpdate = ref(false)
 const updateCheckResult = ref(null)
 
 const updateItems = [
-  { key: 'fixedLMode', type: 'feature' },
-  { key: 'resultFlow', type: 'feature' },
-  { key: 'markerSize', type: 'fix' },
+  { key: 'angleZeroingFinal', type: 'feature' },
+  { key: 'uniqueAssignment', type: 'feature' },
 ]
 
-const updateKeywordKeys = ['fixedLMode', 'resultFlow', 'markerSize']
+const updateKeywordKeys = ['angleZeroingFinal', 'uniqueAssignment']
 
 const getUpdateSummary = result => {
   if (!result) return ''

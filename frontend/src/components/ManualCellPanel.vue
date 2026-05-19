@@ -261,6 +261,7 @@ const browsableResults = computed(() => {
     .map(r => ({
       label: r.label || r.data?.label || '',
       fullMillerContent: r.data?.fullMillerContent || '',
+      outputMillerContent: r.data?.outputMillerContent || '',
       workDir: r.data?.workDir || '',
       totalReflections: r.data?.totalReflections || 0,
     }))

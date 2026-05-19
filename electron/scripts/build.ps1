@@ -18,7 +18,7 @@ $iconRoot = Join-Path $workspaceRoot 'icon'
 $windowsIconPath = Join-Path $iconRoot 'polymindex.ico'
 $executeRoot = Join-Path $repoRoot 'execute'
 $electronExecuteRoot = Join-Path $executeRoot 'electron'
-$distRoot = Join-Path $electronExecuteRoot 'dist'
+$distRoot = Join-Path $electronExecuteRoot 'dist-pre'
 $smokeOutput = Join-Path $electronExecuteRoot 'smoke-test.json'
 $stageWorkspaceRoot = Join-Path $electronExecuteRoot 'stage\workspace'
 

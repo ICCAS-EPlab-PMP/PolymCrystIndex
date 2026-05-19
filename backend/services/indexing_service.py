@@ -285,7 +285,6 @@ def _build_task_paths(work_dir: str) -> dict:
         "diffraction_file": os.path.join(work_dir, "observed_diffraction.txt"),
         "hdf5_file": os.path.join(work_dir, "results.h5"),
         "output_miller_file": os.path.join(work_dir, "outputMiller.txt"),
-        "output_miller_families_file": os.path.join(work_dir, "outputMillerFamilies.jsonl"),
         "full_miller_file": os.path.join(work_dir, "FullMiller.txt"),
         "peak_symmetry_groups_file": os.path.join(work_dir, "peak_symmetry_groups.json"),
     }
@@ -326,6 +325,8 @@ class IndexingService:
 
     _running_tasks: Dict[str, dict] = {}
     _tasks_lock = threading.Lock()
+    _results_cache: Dict[str, Dict[str, Any]] = {}
+    _results_cache_lock = threading.Lock()
 
     def __init__(self, task_manager: TaskManager):
         """Initialize indexing service.
@@ -347,13 +348,18 @@ class IndexingService:
             return 62
 
     def _get_peak_symmetry_config(self, params: Optional[AnalysisParams]) -> Dict[str, Any]:
-        enabled = False
-        symmetry_tq = getattr(params, "symmetryTq",
-                              getattr(params, "mergeTq", DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD))
-        symmetry_ta = getattr(params, "symmetryTa",
-                              getattr(params, "mergeTa", DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD))
-        merge_gradient_enabled = getattr(params, "mergeGradientEnabled", False)
-        merge_gradient_threshold = float(getattr(params, "mergeGradientThreshold", 0.0) or 0.0)
+        def _p(name, default=None):
+            if params is None:
+                return default
+            if isinstance(params, dict):
+                return params.get(name, default)
+            return getattr(params, name, default)
+
+        enabled = bool(
+            _p("peakSymmetryEnabled", _p("mergeNearbyEnabled", False))
+        )
+        symmetry_tq = _p("symmetryTq", _p("mergeTq", DEFAULT_PEAK_SYMMETRY_Q_THRESHOLD))
+        symmetry_ta = _p("symmetryTa", _p("mergeTa", DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD))
         return {
             "enabled": enabled,
             "symmetryTq": float(
@@ -362,8 +368,6 @@ class IndexingService:
             "symmetryTa": float(
                 DEFAULT_PEAK_SYMMETRY_ANGLE_THRESHOLD if symmetry_ta is None else symmetry_ta
             ),
-            "mergeGradientEnabled": merge_gradient_enabled,
-            "mergeGradientThreshold": merge_gradient_threshold,
         }
 
     def _format_peak_symmetry_summary_log(
@@ -395,199 +399,7 @@ class IndexingService:
             miller_data,
             q_threshold=config["symmetryTq"],
             angle_threshold=config["symmetryTa"],
-            merge_gradient_enabled=config["mergeGradientEnabled"],
-            merge_gradient_threshold=config["mergeGradientThreshold"],
         )
-
-    def _family_hkl_to_dict(self, raw_hkl: Any) -> Optional[Dict[str, int]]:
-        if not isinstance(raw_hkl, (list, tuple)) or len(raw_hkl) < 3:
-            return None
-        try:
-            return {
-                "h": int(raw_hkl[0]),
-                "k": int(raw_hkl[1]),
-                "l": int(raw_hkl[2]),
-            }
-        except (TypeError, ValueError):
-            return None
-
-    def _get_joint_match_artifact_path(self, work_dir: str) -> Optional[str]:
-        task_paths = _build_task_paths(work_dir)
-        artifact_candidates = [
-            task_paths["output_miller_families_file"],
-            os.path.join(task_paths["result_dir"], "outputMillerFamilies.jsonl"),
-        ]
-        return next((path for path in artifact_candidates if os.path.exists(path)), None)
-
-    def _empty_joint_match_source(self, work_dir: str) -> str:
-        return (
-            "empty_joint_match_artifact"
-            if self._get_joint_match_artifact_path(work_dir)
-            else "missing_joint_match_artifact"
-        )
-
-    def _read_joint_match_groups(
-        self,
-        work_dir: str,
-        diffraction_data: List[Dict[str, Any]],
-        miller_data: List[Dict[str, Any]],
-        enabled: bool,
-    ) -> List[Dict[str, Any]]:
-        if not enabled:
-            return []
-
-        artifact_path = self._get_joint_match_artifact_path(work_dir)
-        if not artifact_path:
-            return []
-
-        joint_match_groups: List[Dict[str, Any]] = []
-        with open(artifact_path, "r", encoding="utf-8") as f:
-            for line_number, raw_line in enumerate(f, start=1):
-                stripped = raw_line.strip()
-                if not stripped:
-                    continue
-                try:
-                    payload = json.loads(stripped)
-                except json.JSONDecodeError:
-                    logger.warning(
-                        "Skipping invalid family artifact line %s in %s",
-                        line_number,
-                        artifact_path,
-                    )
-                    continue
-
-                try:
-                    observed_peak_index = int(payload.get("observed_peak_index", 0) or 0)
-                    member_count = int(
-                        payload.get("member_count", len(payload.get("member_hkls", [])))
-                        or len(payload.get("member_hkls", []))
-                    )
-                    family_residual = float(payload.get("family_residual", 0.0) or 0.0)
-                    intra_family_spread = float(
-                        payload.get("intra_family_spread", 0.0) or 0.0
-                    )
-                except (TypeError, ValueError):
-                    logger.warning(
-                        "Skipping malformed numeric family artifact line %s in %s",
-                        line_number,
-                        artifact_path,
-                    )
-                    continue
-
-                if observed_peak_index <= 0:
-                    continue
-
-                member_hkls = [
-                    hkl
-                    for hkl in (
-                        self._family_hkl_to_dict(item)
-                        for item in payload.get("member_hkls", [])
-                    )
-                    if hkl is not None
-                ]
-                family_key = self._family_hkl_to_dict(payload.get("family_key", []))
-                observed_peak = (
-                    diffraction_data[observed_peak_index - 1]
-                    if observed_peak_index <= len(diffraction_data)
-                    else {}
-                )
-                representative_assignment = (
-                    miller_data[observed_peak_index - 1]
-                    if observed_peak_index <= len(miller_data)
-                    else None
-                )
-
-                joint_match_groups.append(
-                    {
-                        "observedPeakIndex": observed_peak_index,
-                        "familySupported": bool(payload.get("family_supported", 0)),
-                        "familyKey": family_key,
-                        "memberCount": member_count,
-                        "memberHkls": member_hkls,
-                        "familyResidual": family_residual,
-                        "intraFamilySpread": intra_family_spread,
-                        "observedPeak": {
-                            "qObs": observed_peak.get("q_obs"),
-                            "psiObs": observed_peak.get("psi_obs"),
-                        },
-                        "representativeAssignment": representative_assignment,
-                        "sourceArtifact": os.path.basename(artifact_path),
-                    }
-                )
-
-        return joint_match_groups
-
-    def _derive_legacy_peak_symmetry_groups_from_joint_matches(
-        self,
-        joint_match_groups: List[Dict[str, Any]],
-        params: Optional[AnalysisParams],
-    ) -> List[Dict[str, Any]]:
-        config = self._get_peak_symmetry_config(params)
-        derived_groups: List[Dict[str, Any]] = []
-        for joint_group in joint_match_groups:
-            member_hkls = joint_group.get("memberHkls", []) or []
-            member_count = int(joint_group.get("memberCount", len(member_hkls)) or len(member_hkls))
-            observed_peak_index = int(joint_group.get("observedPeakIndex", 0) or 0)
-            observed_peak = joint_group.get("observedPeak", {}) or {}
-            if (
-                not joint_group.get("familySupported")
-                or member_count not in (2, 4)
-                or observed_peak_index <= 0
-                or len(member_hkls) != member_count
-            ):
-                continue
-
-            members = [
-                {
-                    "peakIndex": observed_peak_index,
-                    "q": observed_peak.get("qObs"),
-                    "psi": observed_peak.get("psiObs"),
-                    "h": member_hkl.get("h", 0),
-                    "k": member_hkl.get("k", 0),
-                    "l": member_hkl.get("l", 0),
-                }
-                for member_hkl in member_hkls
-            ]
-            family_key = joint_group.get("familyKey") or {}
-            derived_groups.append(
-                {
-                    "groupType": f"{member_count}-peak",
-                    "memberPeakIndices": [observed_peak_index],
-                    "memberCount": member_count,
-                    "withinThreshold": {
-                        "passed": True,
-                        "deltaQMax": 0.0,
-                        "deltaAngleMax": 0.0,
-                        "Tq": config["symmetryTq"],
-                        "Ta": config["symmetryTa"],
-                        "pairChecks": [],
-                    },
-                    "hkRulePassed": True,
-                    "hkRule": {
-                        "hkRulePassed": True,
-                        "sameAbsH": True,
-                        "sameAbsK": True,
-                        "sameL": True,
-                        "absH": family_key.get("h"),
-                        "absK": family_key.get("k"),
-                        "l": family_key.get("l"),
-                        "signVariants": [],
-                        "requiresSupportedMemberCount": True,
-                        "signPatternOk": True,
-                    },
-                    "mergeGradient": {
-                        "enabled": config["mergeGradientEnabled"],
-                        "passed": not config["mergeGradientEnabled"],
-                        "threshold": config["mergeGradientThreshold"],
-                    },
-                    "members": members,
-                    "reportingOnly": True,
-                    "semanticType": "joint-family-derived",
-                    "observedPeakIndex": observed_peak_index,
-                }
-            )
-
-        return derived_groups
 
     def _read_diffraction_data(self, diffraction_file: str) -> List[Dict[str, Any]]:
         diffraction_data = []
@@ -685,6 +497,474 @@ class IndexingService:
     def _read_glide_batch_artifact(self, work_dir: str) -> Dict[str, Any]:
         return postprocess_core.read_glide_batch_artifact(work_dir)
 
+    @staticmethod
+    def _recalc_theoretical_q_psi(
+        h: int, k: int, l: int,
+        cell_params: Dict[str, float],
+        wavelength: float = 1.542,
+    ) -> tuple:
+        """根据 HKL 和晶胞参数重新计算理论 q, psi, psi_root 值。
+
+        使用与 Fortran out.f90 compute_reflection_coordinates 相同的公式：
+        - q = 2π/d，其中 d 从倒易点阵计算
+        - psi = arcsin(l/(c * d1))，光纤衍射几何
+        - psi_root = √|psi|
+
+        Returns:
+            (q_val, psi_val, psi_root) 三元组
+        """
+        import math as _m
+
+        a = float(cell_params.get("a", 1.0))
+        b = float(cell_params.get("b", 1.0))
+        c = float(cell_params.get("c", 1.0))
+        alpha = _m.radians(float(cell_params.get("alpha", 90.0)))
+        beta = _m.radians(float(cell_params.get("beta", 90.0)))
+        gamma = _m.radians(float(cell_params.get("gamma", 90.0)))
+
+        cos_a, cos_b, cos_g = _m.cos(alpha), _m.cos(beta), _m.cos(gamma)
+        sin_a, sin_b, sin_g = _m.sin(alpha), _m.sin(beta), _m.sin(gamma)
+
+        v_sq = 1.0 - cos_a**2 - cos_b**2 - cos_g**2 + 2.0 * cos_a * cos_b * cos_g
+        if v_sq <= 0 or wavelength <= 0:
+            return 0.0, 0.0, 0.0
+        V = a * b * c * _m.sqrt(v_sq)
+
+        # 倒易点阵参数 (已包含 V^2 除法)
+        A11 = b**2 * c**2 * sin_a**2 / V**2
+        B11 = a**2 * c**2 * sin_b**2 / V**2
+        C11 = a**2 * b**2 * sin_g**2 / V**2
+        D11 = a * b * c**2 * (cos_a * cos_b - cos_g) / V**2
+        E11 = a**2 * b * c * (cos_b * cos_g - cos_a) / V**2
+        F11 = a * b**2 * c * (cos_g * cos_a - cos_b) / V**2
+
+        hf, kf, lf = float(h), float(k), float(l)
+        d_star_sq = (
+            A11 * hf**2 + B11 * kf**2 + C11 * lf**2
+            + 2.0 * D11 * hf * kf + 2.0 * E11 * kf * lf + 2.0 * F11 * hf * lf
+        )
+        if d_star_sq <= 0:
+            return 0.0, 0.0, 0.0
+
+        d_star = _m.sqrt(d_star_sq)
+        d_val = 1.0 / d_star
+        theta = _m.asin(min(wavelength / (2.0 * d_val), 1.0))
+        q_val = 2.0 * _m.pi / d_val
+
+        # psi 计算 (匹配 Fortran out.f90: phi_value = asin(y1/d1))
+        y1 = 0.0 if lf == 0.0 else lf / c
+        d1 = _m.sin(2.0 * theta) / wavelength
+        if d1 <= 0:
+            psi_rad = _m.pi / 2.0
+        else:
+            ratio = y1 / d1
+            if abs(ratio) > 1.0:
+                psi_rad = _m.pi / 2.0 if ratio > 0 else -_m.pi / 2.0
+            else:
+                psi_rad = _m.asin(ratio)
+        psi_val = _m.degrees(psi_rad)
+        psi_root = _m.sqrt(abs(psi_val)) if abs(psi_val) >= 0 else 0.0
+
+        return q_val, psi_val, psi_root
+
+    def _apply_deduplicate(
+        self,
+        results_data: Dict[str, Any],
+        params: Optional[AnalysisParams],
+    ) -> Dict[str, Any]:
+        """Inject dedup summary into results_data from Fortran-computed outputMiller.
+
+        Since v1.9.1 the actual dedup runs inside Fortran (error_cal_dedup).
+        This method infers dedup statistics from the final millerData to populate
+        the frontend ResultExport panel.
+        """
+        enabled = bool(
+            getattr(params, "deduplicateEnabled", False) if params else False
+        )
+
+        if not enabled:
+            results_data["deduplicate"] = {"enabled": False}
+            return results_data
+
+        miller_data = results_data.get("millerData", [])
+        total_peaks = len(miller_data)
+
+        if total_peaks == 0:
+            results_data["deduplicate"] = {
+                "enabled": True,
+                "usedHklCount": 0,
+                "totalPeaks": 0,
+                "conflictsResolved": 0,
+                "deduplicatedPeakIndices": [],
+            }
+            return results_data
+
+        merge_mode = 0
+
+        def canonical_hkl(h, k, l, mode):
+            if h == 0 and k == 0:
+                return (0, 0, abs(l))
+            elif h == 0 and l == 0:
+                return (0, abs(k), 0)
+            elif k == 0 and l == 0:
+                return (abs(h), 0, 0)
+            if l == 0:
+                if h < 0:
+                    return (-h, -k, 0)
+                return (h, k, 0)
+            return (h, k, l)
+
+        canonical_set = set()
+        for md in miller_data:
+            ch = canonical_hkl(md.get("h", 0), md.get("k", 0), md.get("l", 0), merge_mode)
+            canonical_set.add(ch)
+
+        used_hkl_count = len(canonical_set)
+        conflicts_resolved = total_peaks - used_hkl_count
+
+        results_data["deduplicate"] = {
+            "enabled": True,
+            "usedHklCount": used_hkl_count,
+            "totalPeaks": total_peaks,
+            "conflictsResolved": max(0, conflicts_resolved),
+            "deduplicatedPeakIndices": [],
+            "symmetryApplied": [],
+        }
+        return results_data
+
+    def _generate_adapted_miller_files(
+        self,
+        work_dir: str,
+        zeroed_cell: Dict[str, float],
+        miller_data: List[Dict[str, Any]],
+        diffraction_data: List[Dict[str, Any]],
+        wavelength: float = 1.542,
+    ) -> Dict[str, str]:
+        """v1.9.1: 生成归零重评适配的 Miller 文件。
+
+        不调用 Fortran，纯 Python 计算。
+        生成文件:
+          - fullmiller_adapted.txt (7列: H K L q psi psi-root 2theta)
+          - outputmiller_adapted.txt (5-6列: H K L q psi [psi-root] + volume)
+
+        Returns:
+            {"fullmillerPath": str, "outputmillerPath": str}
+        """
+        import math as _m
+
+        a = zeroed_cell.get("a", 1.0)
+        b = zeroed_cell.get("b", 1.0)
+        c = zeroed_cell.get("c", 1.0)
+        alpha = _m.radians(zeroed_cell.get("alpha", 90.0))
+        beta = _m.radians(zeroed_cell.get("beta", 90.0))
+        gamma = _m.radians(zeroed_cell.get("gamma", 90.0))
+
+        cos_a = _m.cos(alpha)
+        cos_b = _m.cos(beta)
+        cos_g = _m.cos(gamma)
+        sin_a = _m.sin(alpha)
+        sin_b = _m.sin(beta)
+        sin_g = _m.sin(gamma)
+
+        v_sq = 1.0 - cos_a * cos_a - cos_b * cos_b - cos_g * cos_g + 2.0 * cos_a * cos_b * cos_g
+        if v_sq <= 0:
+            return {}
+        volume = a * b * c * _m.sqrt(v_sq)
+        if volume <= 0:
+            return {}
+
+        # 倒易点阵参数
+        A11 = (b * b * c * c * sin_a * sin_a) / (volume * volume)
+        B11 = (a * a * c * c * sin_b * sin_b) / (volume * volume)
+        C11 = (a * a * b * b * sin_g * sin_g) / (volume * volume)
+        D11 = 2.0 * a * b * c * c * (cos_a * cos_b - cos_g) / (volume * volume)
+        E11 = 2.0 * a * a * b * c * (cos_g * cos_a - cos_b) / (volume * volume)
+        F11 = 2.0 * a * b * b * c * (cos_b * cos_g - cos_a) / (volume * volume)
+
+        fullmiller_lines = [
+            " H K L q(A-1) psi(degree) psi-root(degree) 2theta(degree)\n"
+        ]
+        outputmiller_lines = [
+            " H K L q psi psi-root\n"
+        ]
+
+        for item in miller_data:
+            h = int(item.get("h", 0))
+            k = int(item.get("k", 0))
+            l = int(item.get("l", 0))
+
+            hf, kf, lf = float(h), float(k), float(l)
+            d_star_sq = (
+                A11 * hf * hf + B11 * kf * kf + C11 * lf * lf
+                + D11 * hf * kf + E11 * kf * lf + F11 * hf * lf
+            )
+            if d_star_sq <= 0:
+                continue
+            d_star = _m.sqrt(d_star_sq)
+            q_val = d_star * 2.0 * _m.pi / wavelength if wavelength > 0 else 0.0
+            d_val = 1.0 / d_star if d_star > 0 else 0.0
+            two_theta = _m.degrees(2.0 * _m.asin(min(wavelength / (2.0 * d_val), 1.0))) if d_val > 0 else 0.0
+
+            # psi: 从倒易向量方位角近似
+            psi_val = 0.0
+            if abs(hf) + abs(kf) + abs(lf) > 0:
+                ax = hf * _m.sqrt(A11) + kf * _m.sqrt(B11) * cos_g + lf * _m.sqrt(C11) * cos_b
+                ay = kf * _m.sqrt(B11) * _m.sqrt(max(0, 1 - cos_g * cos_g))
+                psi_val = _m.degrees(_m.atan2(ay, ax)) if abs(ax) > 1e-12 else 90.0
+
+            psi_root = _m.sqrt(abs(psi_val)) if psi_val >= 0 else 0.0
+
+            hf = float(h); kf = float(k); lf = float(l)
+            fullmiller_lines.append(
+                f"          {hf:.16e}          {kf:.16e}           {lf:.16e}   {q_val:.16e}      {psi_val:.16e}        {psi_root:.16e}        {two_theta:.16e}\n"
+            )
+
+            # outputMiller: match with observed peaks
+            q_obs = 0.0
+            psi_obs = 0.0
+            # Find matching observed peak by index
+            idx = item.get("peakIndex", 0)
+            if idx > 0 and idx <= len(diffraction_data):
+                obs = diffraction_data[idx - 1]
+                q_obs = float(obs.get("q_obs", obs.get("q", 0.0)))
+                psi_obs = float(obs.get("psi_obs", obs.get("psi", 0.0)))
+            hf = float(h); kf = float(k); lf = float(l)
+            outputmiller_lines.append(
+                f"   {hf:.16e}       {kf:.16e}        {lf:.16e}        {q_obs:.16e}      {psi_obs:.16e}    {psi_root:.16e}     \n"
+            )
+
+        outputmiller_lines.append(f" volume:   {volume:.16e}     \n")
+
+        fullmiller_path = os.path.join(work_dir, "fullmiller_adapted.txt")
+        outputmiller_path = os.path.join(work_dir, "outputmiller_adapted.txt")
+
+        with open(fullmiller_path, "w", encoding="utf-8") as f:
+            f.writelines(fullmiller_lines)
+        with open(outputmiller_path, "w", encoding="utf-8") as f:
+            f.writelines(outputmiller_lines)
+
+        return {
+            "fullmillerPath": fullmiller_path,
+            "outputmillerPath": outputmiller_path,
+        }
+
+    def _run_angle_zeroing_refinement(
+        self,
+        work_dir: str,
+        zeroed_cell: Dict[str, float],
+        zeroed_angles: List[str],
+        params: AnalysisParams,
+        diffraction_file: str,
+    ) -> Optional[Dict[str, Any]]:
+        """v1.9.1: 归零重评通过后，以固定角度重新运行 Fortran 优化。
+
+        在独立子目录 _refinement/ 中运行，不覆盖原始结果文件。
+        通过 _refinement/result.json 缓存，避免重复执行。
+
+        Returns:
+            优化后的结果 dict，或 None（失败时）
+        """
+        refine_dir = os.path.join(work_dir, "_refinement")
+        cached_path = os.path.join(refine_dir, "result.json")
+
+        if os.path.exists(cached_path):
+            try:
+                import json as _json
+                with open(cached_path, "r") as f:
+                    cached = _json.load(f)
+                logger.info("Returning cached refinement result from %s", cached_path)
+                return cached
+            except Exception:
+                pass
+
+        logger.info("Starting angle zeroing refinement: zeroed_angles=%s", zeroed_angles)
+        try:
+            os.makedirs(refine_dir, exist_ok=True)
+
+            import shutil
+            diffraction_basename = os.path.basename(diffraction_file)
+            refine_diffraction = os.path.join(refine_dir, diffraction_basename)
+            if not os.path.exists(refine_diffraction) and os.path.exists(diffraction_file):
+                shutil.copy2(diffraction_file, refine_diffraction)
+
+            fixed_params = AnalysisParams(
+                steps=min(getattr(params, "steps", 30), 10),
+                generations=1,
+                liveRatio=getattr(params, "liveRatio", 10),
+                exchangeRatio=getattr(params, "exchangeRatio", 20),
+                mutateRatio=getattr(params, "mutateRatio", 50),
+                newRatio=getattr(params, "newRatio", 20),
+                aMin=getattr(params, "aMin", 3.0),
+                aMax=getattr(params, "aMax", 10.0),
+                bMin=getattr(params, "bMin", 3.0),
+                bMax=getattr(params, "bMax", 10.0),
+                cMin=getattr(params, "cMin", 5.0),
+                cMax=getattr(params, "cMax", 15.0),
+                wavelength=float(getattr(params, "wavelength", 1.542)),
+                esym=getattr(params, "esym", 0.95),
+                lmMode=True,
+                tiltCheck=getattr(params, "tiltCheck", False),
+                pseuOrth=getattr(params, "pseuOrth", False),
+                hklMode=getattr(params, "hklMode", "Default"),
+                custH=getattr(params, "custH", 5),
+                custK=getattr(params, "custK", 5),
+                custL=getattr(params, "custL", 0),
+                ompThreads=getattr(params, "ompThreads", 1),
+            )
+
+            angle_map = {"alpha": "alpha", "beta": "beta", "gamma": "gamma"}
+            for angle_name in zeroed_angles:
+                attr_min = angle_map.get(angle_name, angle_name) + "Min"
+                attr_max = angle_map.get(angle_name, angle_name) + "Max"
+                if hasattr(fixed_params, attr_min):
+                    setattr(fixed_params, attr_min, 90.0)
+                if hasattr(fixed_params, attr_max):
+                    setattr(fixed_params, attr_max, 90.0)
+
+            input_path = self._params_to_input_config(fixed_params, refine_dir, refine_diffraction, 0)
+
+            cell_values = [
+                zeroed_cell.get("a", 5.0),
+                zeroed_cell.get("b", 5.0),
+                zeroed_cell.get("c", 10.0),
+                zeroed_cell.get("alpha", 90.0),
+                zeroed_cell.get("beta", 90.0),
+                zeroed_cell.get("gamma", 90.0),
+            ]
+            self._write_cell_parameters(os.path.join(refine_dir, "cell_0.txt"), cell_values)
+
+            import threading as _th
+            stop_event = _th.Event()
+            try:
+                FiberDiffractionIndexer(
+                    input_path, refine_diffraction,
+                    hdf5_file=None, use_hdf5=False, stop_event=stop_event
+                ).run()
+            except Exception as exc:
+                logger.warning("Angle zeroing refinement Fortran run failed: %s", exc)
+                return None
+
+            postprocess_ok = self._run_miller_postprocess(refine_dir, 0)
+            if not postprocess_ok:
+                logger.warning("Angle zeroing refinement post-process failed")
+                return None
+
+            bundle = postprocess_core.read_postprocess_bundle(refine_dir, 0)
+            refinement_result = {
+                "cellParams": bundle.get("cellParams"),
+                "volume": bundle.get("volume"),
+                "totalReflections": bundle.get("totalReflections", 0),
+                "fullMillerContent": bundle.get("fullMillerContent", ""),
+            }
+
+            try:
+                import json as _json
+                with open(cached_path, "w") as f:
+                    _json.dump(refinement_result, f)
+            except Exception:
+                pass
+
+            logger.info("Angle zeroing refinement completed successfully")
+            return refinement_result
+
+        except Exception as exc:
+            logger.warning("Angle zeroing refinement failed: %s", exc)
+            return None
+
+    def _apply_angle_zeroing(
+        self,
+        results_data: Dict[str, Any],
+        params: Optional[AnalysisParams],
+    ) -> Dict[str, Any]:
+        """v1.8.5: 归零重评。"""
+        enabled = bool(getattr(params, "angleZeroingEnabled", False) if params else False)
+        if not enabled:
+            results_data["angleZeroing"] = {"enabled": False}
+            return results_data
+
+        import importlib.util as _iu
+
+        spec = _iu.spec_from_file_location(
+            "angle_zeroing",
+            os.path.join(os.path.dirname(__file__), "angle_zeroing.py"),
+        )
+        if spec is None or spec.loader is None:
+            results_data["angleZeroing"] = {"enabled": False, "error": "module_not_found"}
+            return results_data
+
+        angle_zeroing_mod = _iu.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(angle_zeroing_mod)
+        except Exception:
+            results_data["angleZeroing"] = {"enabled": False, "error": "module_load_failed"}
+            return results_data
+
+        threshold = float(getattr(params, "angleZeroingThreshold", 1.0) if params else 1.0)
+        tolerance = float(getattr(params, "angleZeroingTolerance", 0.5) if params else 0.5)
+
+        candidate = {
+            "cellParams": results_data.get("cellParams", {}),
+            "residual": results_data.get("qualityMetrics", {}).get("r_factor", 0.0),
+            "observedPeaks": results_data.get("diffractionData", []),
+            "hklAssignments": results_data.get("millerData", []),
+            "wavelength": float(getattr(params, "wavelength", 1.542) if params else 1.542),
+        }
+        zr = angle_zeroing_mod.evaluate_angle_zeroing(candidate, threshold, tolerance)
+
+        # v1.9.1: 生成 adapted 文件
+        if zr.get("adapted") and results_data.get("workDir"):
+            try:
+                adapted_files = self._generate_adapted_miller_files(
+                    results_data["workDir"],
+                    zr["zeroedCell"],
+                    results_data.get("millerData", []),
+                    results_data.get("diffractionData", []),
+                    float(getattr(params, "wavelength", 1.542) if params else 1.542),
+                )
+                if adapted_files:
+                    zr["adaptedFiles"] = adapted_files
+            except Exception:
+                pass
+
+            # v1.9.1: 固定角度重优化（后台执行，不阻塞 get_results）
+            refine_enabled = bool(
+                getattr(params, "angleZeroingRefineEnabled", False) if params else False
+            )
+            if refine_enabled:
+                refine_dir = os.path.join(results_data["workDir"], "_refinement")
+                cached_path = os.path.join(refine_dir, "result.json")
+                if os.path.exists(cached_path):
+                    try:
+                        import json as _json
+                        with open(cached_path, "r") as _f:
+                            zr["refinementResult"] = _json.load(_f)
+                        logger.info("Loaded cached refinement result from %s", cached_path)
+                    except Exception as _exc:
+                        logger.warning("Failed to load cached refinement: %s", _exc)
+                else:
+                    try:
+                        task_paths = _build_task_paths(results_data["workDir"])
+                        diffraction_file = task_paths["diffraction_file"]
+                        import threading as _th
+                        _ref_thread = _th.Thread(
+                            target=self._run_angle_zeroing_refinement,
+                            args=(
+                                results_data["workDir"],
+                                zr["zeroedCell"],
+                                zr.get("zeroedAngles", []),
+                                params,
+                                diffraction_file,
+                            ),
+                            daemon=True,
+                        )
+                        _ref_thread.start()
+                        logger.info("Scheduled background refinement thread")
+                    except Exception as _exc:
+                        logger.warning("Failed to start background refinement: %s", _exc)
+
+        results_data["angleZeroing"] = zr
+        return results_data
+
     def _persist_peak_symmetry_artifact(
         self, work_dir: str, params: Optional[AnalysisParams]
     ) -> Dict[str, Any]:
@@ -699,33 +979,22 @@ class IndexingService:
                 "enabled": False,
                 "artifactPath": artifact_path,
                 "groupCount": 0,
-                "jointMatchGroupCount": 0,
                 "peakSymmetryGroups": [],
-                "jointMatchGroups": [],
                 "peakSymmetryGroupsSource": "disabled",
             }
 
         diffraction_data = self._read_diffraction_data(task_paths["diffraction_file"])
         miller_data = self._read_miller_data(task_paths["output_miller_file"])
-        joint_match_groups = self._read_joint_match_groups(
-            work_dir,
+        peak_symmetry_groups = build_peak_symmetry_groups_from_results(
             diffraction_data,
             miller_data,
-            enabled=config["enabled"],
+            q_threshold=config["symmetryTq"],
+            angle_threshold=config["symmetryTa"],
         )
-        if joint_match_groups:
-            peak_symmetry_groups = self._derive_legacy_peak_symmetry_groups_from_joint_matches(
-                joint_match_groups,
-                params,
-            )
-            peak_symmetry_groups_source = "derived_from_joint_match_groups"
-        else:
-            peak_symmetry_groups = []
-            peak_symmetry_groups_source = self._empty_joint_match_source(work_dir)
+        peak_symmetry_groups_source = "direct_computation"
 
         payload = {
             "peakSymmetryConfig": config,
-            "jointMatchGroups": joint_match_groups,
             "peakSymmetryGroups": peak_symmetry_groups,
             "peakSymmetryGroupsSource": peak_symmetry_groups_source,
             "generatedDuringRun": True,
@@ -739,8 +1008,6 @@ class IndexingService:
             "enabled": True,
             "artifactPath": artifact_path,
             "groupCount": len(peak_symmetry_groups),
-            "jointMatchGroupCount": len(joint_match_groups),
-            "jointMatchGroups": joint_match_groups,
             "peakSymmetryGroups": peak_symmetry_groups,
             "peakSymmetryGroupsSource": peak_symmetry_groups_source,
         }
@@ -836,7 +1103,7 @@ class IndexingService:
         data_file: Optional[str] = None,
         fixed_peak_count: Optional[int] = None,
     ) -> str:
-        """Convert AnalysisParams to input.txt file (29-line format for Fortran)."""
+        """Convert AnalysisParams to input.txt file (30-line format for Fortran)."""
         lines = []
         if fixed_peak_count is not None:
             fixed_peak_count_val = fixed_peak_count
@@ -850,7 +1117,6 @@ class IndexingService:
                 fixed_peak_count_val = 0
 
         lines.append(str(params.wavelength))
-        peak_symmetry_enabled = False
         lines.append("0")  # Line 2: placeholder (Fortran skips i=2)
         lines.append("flat")
         lines.append(str(params.generations))
@@ -901,7 +1167,7 @@ class IndexingService:
         lines.append(str(symmetry_ta))
         lines.append("0")
 
-        lines.append("1" if peak_symmetry_enabled else "0")
+        lines.append("0")
         lines.append(f"{params.esym}")
 
         lines.append(
@@ -917,7 +1183,15 @@ class IndexingService:
         fixl_mode = 1 if getattr(params, "fixLModeEnabled", False) else 0
         lines.append(str(fixl_mode))
 
-        if len(lines) != 29:
+        dedup_enabled = 1 if getattr(params, "deduplicateEnabled", False) else 0
+        lines.append(str(dedup_enabled))
+
+        dedup_penalty_val = getattr(params, "deduplicatePenalty", 1.0)
+        if dedup_penalty_val < 1.0:
+            dedup_penalty_val = 1.0
+        lines.append(str(dedup_penalty_val))
+
+        if len(lines) != 31:
             raise ValueError(f"Unexpected input.txt line count: {len(lines)}")
 
         work_dir_abs = os.path.abspath(work_dir)
@@ -1270,8 +1544,9 @@ class IndexingService:
                 "0",
                 "0",
                 "0",
+                "1.0",
             ]
-            if len(lines) != 30:
+            if len(lines) != 31:
                 return {"success": False, "message": f"Unexpected manual input line count: {len(lines)}"}
 
             with open(input_file, "w") as f:
@@ -1303,7 +1578,6 @@ class IndexingService:
                     ),
                     "volume": bundle["volume"],
                     "fullMillerContent": bundle["fullMillerContent"],
-                    "outputMillerContent": bundle["outputMillerContent"],
                     "totalReflections": bundle["totalReflections"],
                     "millerData": diffraction_utils.parse_fullmiller_to_miller_data(
                         bundle.get("fullMillerContent", "")
@@ -1443,8 +1717,10 @@ class IndexingService:
                 "0",
                 "0",
                 "0",
+                "0",
+                "1.0",
             ]
-            if len(lines) != 30:
+            if len(lines) != 32:
                 return {"success": False, "message": f"Unexpected glide input line count: {len(lines)}"}
 
             with open(input_file, "w") as f:
@@ -1498,7 +1774,6 @@ class IndexingService:
                         "outputMillerSize": grp.get("outputMillerSize", 0),
                         "cellParams": grp.get("cellParams"),
                         "fullMillerContent": bundle.get("fullMillerContent", ""),
-                        "outputMillerContent": bundle.get("outputMillerContent", ""),
                         "totalReflections": bundle.get("totalReflections", 0),
                         "volume": bundle.get("volume"),
                         "input": grp.get("input"),
@@ -1593,6 +1868,15 @@ class IndexingService:
 
     async def get_results(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Get analysis results."""
+        _gt = time.time()
+
+        # 内存缓存：同一 task_id 第二次起直接返回
+        with self._results_cache_lock:
+            cached = self._results_cache.get(task_id)
+            if cached is not None:
+                logger.debug("get_results cache HIT for %s", task_id)
+                return cached
+
         task = await self.task_manager.get_task(task_id)
         if not task:
             return None
@@ -1709,34 +1993,11 @@ class IndexingService:
                 if not task.params and peak_symmetry_artifact.get("peakSymmetryConfig"):
                     peak_symmetry_config = peak_symmetry_artifact["peakSymmetryConfig"]
                 if peak_symmetry_config.get("enabled"):
-                    joint_match_groups = peak_symmetry_artifact.get("jointMatchGroups")
-                    if joint_match_groups is None:
-                        joint_match_groups = self._read_joint_match_groups(
-                            work_dir,
-                            diffraction_data,
-                            miller_data,
-                            enabled=True,
-                        )
-                    peak_symmetry_groups = peak_symmetry_artifact.get("peakSymmetryGroups")
+                    peak_symmetry_groups = peak_symmetry_artifact.get("peakSymmetryGroups", [])
                     peak_symmetry_groups_source = peak_symmetry_artifact.get(
-                        "peakSymmetryGroupsSource"
+                        "peakSymmetryGroupsSource", "direct_computation"
                     )
-                    if joint_match_groups:
-                        if peak_symmetry_groups is None:
-                            peak_symmetry_groups = (
-                                self._derive_legacy_peak_symmetry_groups_from_joint_matches(
-                                    joint_match_groups,
-                                    task.params,
-                                )
-                            )
-                        if not peak_symmetry_groups_source or peak_symmetry_groups_source == "legacy_postprocess_zip":
-                            peak_symmetry_groups_source = "derived_from_joint_match_groups"
-                    else:
-                        joint_match_groups = []
-                        peak_symmetry_groups = []
-                        peak_symmetry_groups_source = self._empty_joint_match_source(work_dir)
                 else:
-                    joint_match_groups = []
                     peak_symmetry_groups = []
                     peak_symmetry_groups_source = "disabled"
                 glide_batch_artifact = self._read_glide_batch_artifact(work_dir)
@@ -1788,25 +2049,7 @@ class IndexingService:
                 if volume is not None:
                     cell_params["volume"] = volume
 
-                # jointMatchConfig: stable name for the symmetry/family configuration.
-                # peakSymmetryConfig is preserved as a legacy alias with identical content.
-                # jointMatchSummary: optional aggregate for quick UI display.
-                joint_match_config = peak_symmetry_config
-                joint_match_summary = (
-                    {
-                        "groupCount": len(joint_match_groups),
-                        "legacyGroupCount": len(peak_symmetry_groups),
-                        "source": peak_symmetry_groups_source,
-                    }
-                    if peak_symmetry_config.get("enabled")
-                    else {
-                        "groupCount": 0,
-                        "legacyGroupCount": 0,
-                        "source": "disabled",
-                    }
-                )
-
-                return {
+                result_data = {
                     "resultType": "indexing",
                     "cellParams": cell_params,
                     "millerData": miller_data,
@@ -1820,26 +2063,75 @@ class IndexingService:
                         "max_deviation_psi_point": max_deviation_psi_point,
                     },
                     "taskId": task_id,
-                    "totalReflections": full_miller_count,
+                                "diffractionData": diffraction_data,
+"totalReflections": full_miller_count,
                     "indexedPeaks": len(miller_data),
-                    # --- family-aware joint match fields (stable names) ---
-                    "jointMatchConfig": joint_match_config,
-                    "jointMatchGroups": joint_match_groups,
-                    "jointMatchSummary": joint_match_summary,
-                    # --- legacy alias (preserved for backward compat) ---
                     "peakSymmetryConfig": peak_symmetry_config,
                     "peakSymmetryGroups": peak_symmetry_groups,
                     "peakSymmetryGroupsSource": peak_symmetry_groups_source,
-                    # ---
                     "glideBatchOutputs": glide_batch_artifact,
                     "workDir": work_dir,
                     "files": {
                         "cell_file": f"cell_{task.total_steps - 1}.txt",
                         "miller_file": "outputMiller.txt",
                         "full_miller_file": "FullMiller.txt",
-                        "joint_match_file": "outputMillerFamilies.jsonl",
                         "glide_batch_root": glide_batch_artifact.get("batchRoot"),
                     },
                 }
+
+                import time as _gt2
+
+                for md in result_data.get("millerData", []):
+                    h, k, l = md.get("h", 0), md.get("k", 0), md.get("l", 0)
+                    if h == 0 and k == 0:
+                        md["h"], md["k"], md["l"] = 0, 0, abs(l)
+                    elif h == 0 and l == 0:
+                        md["h"], md["k"], md["l"] = 0, abs(k), 0
+                    elif k == 0 and l == 0:
+                        md["h"], md["k"], md["l"] = abs(h), 0, 0
+                    elif l == 0 and h < 0:
+                        md["h"], md["k"], md["l"] = -h, -k, 0
+
+                _canon_file = os.path.join(work_dir, "outputMiller.txt")
+                try:
+                    with open(_canon_file, "r") as _f:
+                        _lines = _f.readlines()
+                    with open(_canon_file, "w") as _f:
+                        for _line in _lines:
+                            _s = _line.strip()
+                            _p = _s.split()
+                            if len(_p) >= 3 and _s[:1] not in ("H", "h", "v", "V") and not _s.startswith("volume"):
+                                try:
+                                    _h, _k, _l = int(float(_p[0])), int(float(_p[1])), int(float(_p[2]))
+                                    if _h == 0 and _k == 0:
+                                        _h, _k, _l = 0, 0, abs(_l)
+                                    elif _h == 0 and _l == 0:
+                                        _h, _k, _l = 0, abs(_k), 0
+                                    elif _k == 0 and _l == 0:
+                                        _h, _k, _l = abs(_h), 0, 0
+                                    elif _l == 0 and _h < 0:
+                                        _h, _k, _l = -_h, -_k, 0
+                                    _p[0:3] = [str(_h), str(_k), str(_l)]
+                                    _f.write(" ".join(_p) + "\n")
+                                except ValueError:
+                                    _f.write(_line)
+                            else:
+                                _f.write(_line)
+                except OSError:
+                    pass
+
+                result_data = self._apply_deduplicate(result_data, task.params)
+                result_data = self._apply_angle_zeroing(result_data, task.params)
+                _t_angle_end = _gt2.time()
+                _elapsed = _gt2.time() - _gt
+                logger.info(
+                    "get_results timing: total=%.3fs angle_zeroing=%.3fs",
+                    _elapsed, _t_angle_end - _gt,
+                )
+                # 缓存结果，后续调用跳过文件 I/O
+                with self._results_cache_lock:
+                    self._results_cache[task_id] = result_data
+                return result_data
+
         except Exception as e:
             return {"error": str(e)}

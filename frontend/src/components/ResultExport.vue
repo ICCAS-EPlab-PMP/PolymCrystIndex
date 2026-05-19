@@ -194,26 +194,169 @@
         </div>
       </div>
 
-      <div v-if="peakSymmetryEnabled || peakSymmetryGroups.length" class="peak-symmetry-section">
+
+      <div v-if="angleZeroingResult" class="peak-symmetry-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M7 7h10v10H7z"/>
-            <path d="M3 12h4M17 12h4M12 3v4M12 17v4"/>
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
           </svg>
-          {{ t('results.peakSymmetryTitle') }}
+          {{ t('results.angleZeroingTitle') }}
+        </h3>
+
+        <template v-if="angleZeroingResult.evaluated">
+          <div class="peak-symmetry-summary">
+            <div class="peak-symmetry-summary-item">
+              <span class="summary-label">{{ t('results.angleZeroingStatus') }}</span>
+              <span class="summary-value" :class="{ 'text-success': angleZeroingResult.adapted, 'text-warning': !angleZeroingResult.adapted }">
+                {{ angleZeroingResult.adapted ? t('results.angleZeroingAdapted') : t('results.angleZeroingNotAdapted') }}
+              </span>
+            </div>
+            <div v-if="angleZeroingResult.zeroedAngles" class="peak-symmetry-summary-item">
+              <span class="summary-label">{{ t('results.zeroedAngles') }}</span>
+              <span class="summary-value">{{ angleZeroingResult.zeroedAngles.join(', ') }}</span>
+            </div>
+            <div v-if="angleZeroingResult.residualChange !== null" class="peak-symmetry-summary-item">
+              <span class="summary-label">{{ t('results.residualChange') }}</span>
+              <span class="summary-value">{{ (angleZeroingResult.residualChange || 0).toFixed(4) }}</span>
+            </div>
+          </div>
+          <div v-if="angleZeroingResult.adapted && angleZeroingResult.zeroedCell" class="adapted-cell-section">
+            <h4>{{ t('results.adaptedCellParams') }}</h4>
+            <div class="adapted-cell-grid">
+              <div class="adapted-cell-item">
+                <span class="cell-label">a</span>
+                <span class="cell-value">{{ angleZeroingResult.zeroedCell.a.toFixed(3) }}</span>
+                <span class="cell-unit">Å</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">b</span>
+                <span class="cell-value">{{ angleZeroingResult.zeroedCell.b.toFixed(3) }}</span>
+                <span class="cell-unit">Å</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">c</span>
+                <span class="cell-value">{{ angleZeroingResult.zeroedCell.c.toFixed(3) }}</span>
+                <span class="cell-unit">Å</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">α</span>
+                <span class="cell-value">{{ angleZeroingResult.zeroedCell.alpha.toFixed(2) }}</span>
+                <span class="cell-unit">°</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">β</span>
+                <span class="cell-value">{{ angleZeroingResult.zeroedCell.beta.toFixed(2) }}</span>
+                <span class="cell-unit">°</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">γ</span>
+                <span class="cell-value">{{ angleZeroingResult.zeroedCell.gamma.toFixed(2) }}</span>
+                <span class="cell-unit">°</span>
+              </div>
+            </div>
+            <button class="export-btn adapted-export-btn" @click="exportAdaptedCell">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span class="export-label">{{ t('results.exportAdaptedCell') }}</span>
+            </button>
+          </div>
+
+          <!-- Refinement results (v1.9.1) – 重优化后的晶胞参数 -->
+          <div v-if="angleZeroingResult.refinementResult?.cellParams" class="adapted-cell-section">
+            <h4>{{ t('results.refinedCellParams') }}</h4>
+            <div class="adapted-cell-grid">
+              <div class="adapted-cell-item">
+                <span class="cell-label">a</span>
+                <span class="cell-value">{{ angleZeroingResult.refinementResult.cellParams.a.toFixed(3) }}</span>
+                <span class="cell-unit">Å</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">b</span>
+                <span class="cell-value">{{ angleZeroingResult.refinementResult.cellParams.b.toFixed(3) }}</span>
+                <span class="cell-unit">Å</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">c</span>
+                <span class="cell-value">{{ angleZeroingResult.refinementResult.cellParams.c.toFixed(3) }}</span>
+                <span class="cell-unit">Å</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">α</span>
+                <span class="cell-value">{{ angleZeroingResult.refinementResult.cellParams.alpha.toFixed(2) }}</span>
+                <span class="cell-unit">°</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">β</span>
+                <span class="cell-value">{{ angleZeroingResult.refinementResult.cellParams.beta.toFixed(2) }}</span>
+                <span class="cell-unit">°</span>
+              </div>
+              <div class="adapted-cell-item">
+                <span class="cell-label">γ</span>
+                <span class="cell-value">{{ angleZeroingResult.refinementResult.cellParams.gamma.toFixed(2) }}</span>
+                <span class="cell-unit">°</span>
+              </div>
+            </div>
+            <div class="adapted-cell-item" style="margin-top: 8px;">
+              <span class="cell-label">V</span>
+              <span class="cell-value">{{ angleZeroingResult.refinementResult.volume?.toFixed(2) }}</span>
+              <span class="cell-unit">Å³</span>
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="peak-symmetry-summary">
+            <div class="peak-symmetry-summary-item">
+              <span class="summary-label">{{ t('results.angleZeroingStatus') }}</span>
+              <span class="summary-value text-muted">{{ t('results.angleZeroingNotAdapted') }}</span>
+            </div>
+            <div v-if="angleZeroingResult.reason === 'no_angle_near_90'" class="peak-symmetry-summary-item">
+              <span class="summary-label" style="grid-column: 1 / -1; color: #6b7280; font-style: italic;">
+                {{ t('results.angleZeroingNotEvaluated', { threshold: angleZeroingResult.threshold }) }}
+              </span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+
+            <!-- Deduplication results (v1.9.1) -->
+      <div v-if="deduplicateResult && deduplicateResult.enabled" class="peak-symmetry-section">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+          </svg>
+          {{ t('results.deduplicateTitle') }}
         </h3>
         <div class="peak-symmetry-summary">
           <div class="peak-symmetry-summary-item">
-            <span class="summary-label">{{ t('results.mode') }}</span>
-            <span class="summary-value">{{ peakSymmetryEnabled ? t('results.enabled') : t('results.disabled') }}</span>
+            <span class="summary-label">{{ t('results.deduplicateEnabled') }}</span>
+            <span class="summary-value text-success">✓</span>
           </div>
-          <div v-if="peakSymmetryEnabled" class="peak-symmetry-summary-item">
-            <span class="summary-label">{{ t('results.twoPeakGroups') }}</span>
-            <span class="summary-value">{{ twoPeakGroupCount }}</span>
+          <div class="peak-symmetry-summary-item">
+            <span class="summary-label">{{ t('results.usedHklCount') }}</span>
+            <span class="summary-value">{{ deduplicateResult.usedHklCount }} / {{ deduplicateResult.totalPeaks }}</span>
           </div>
-          <div v-if="peakSymmetryEnabled" class="peak-symmetry-summary-item">
-            <span class="summary-label">{{ t('results.fourPeakGroups') }}</span>
-            <span class="summary-value">{{ fourPeakGroupCount }}</span>
+          <div class="peak-symmetry-summary-item">
+            <span class="summary-label">{{ t('results.totalPeaks') }}</span>
+            <span class="summary-value">{{ deduplicateResult.totalPeaks }}</span>
+          </div>
+          <div class="peak-symmetry-summary-item">
+            <span class="summary-label">{{ t('results.conflictsResolved') }}</span>
+            <span class="summary-value">{{ deduplicateResult.conflictsResolved }}</span>
+          </div>
+          <div v-if="deduplicateResult.deduplicatedPeakIndices && deduplicateResult.deduplicatedPeakIndices.length > 0" class="peak-symmetry-summary-item">
+            <span class="summary-label">{{ t('results.deduplicatedPeakIndices') }}</span>
+            <span class="summary-value">{{ deduplicateResult.deduplicatedPeakIndices.join(', ') }}</span>
+          </div>
+          <div v-if="deduplicateResult.symmetryApplied && deduplicateResult.symmetryApplied.length > 0" class="peak-symmetry-summary-item">
+            <span class="summary-label">{{ t('results.symmetryApplied') }}</span>
+            <span class="summary-value">{{ deduplicateResult.symmetryApplied.join(', ') }}</span>
           </div>
         </div>
       </div>
@@ -381,12 +524,9 @@ const maxDeviationLPsi = ref(1)
 const currentTaskId = ref(null)
 const resultWorkDir = ref(null)
 const currentView = ref('reset')
-const peakSymmetryGroups = ref([])
-const peakSymmetryConfig = ref({ enabled: false, mergeTq: 0.02, mergeTa: 1.0, mergeGradientEnabled: false, mergeGradientThreshold: 0.0 })
-const peakSymmetryEnabled = computed(() => Boolean(peakSymmetryConfig.value?.enabled))
+const angleZeroingResult = ref(null)
+const deduplicateResult = ref(null)
 const glideBatchOutputs = ref({ enabled: false, groups: [], batchRoot: '' })
-const twoPeakGroupCount = computed(() => peakSymmetryGroups.value.filter(group => group?.groupType === '2-peak').length)
-const fourPeakGroupCount = computed(() => peakSymmetryGroups.value.filter(group => group?.groupType === '4-peak').length)
 
 const formatMetric = (value, digits) => Number(value ?? 0).toFixed(digits)
 const formatPeakIndices = (indices) => Array.isArray(indices) ? indices.join(', ') : ''
@@ -474,8 +614,6 @@ const applyExternalResult = (data) => {
   totalReflections.value = data.totalReflections || 0
   indexedPeaks.value = data.indexedPeaks || millerData.value.length
   currentTaskId.value = data.taskId || null
-  peakSymmetryGroups.value = Array.isArray(data.peakSymmetryGroups) ? data.peakSymmetryGroups : []
-  peakSymmetryConfig.value = data.peakSymmetryConfig || peakSymmetryConfig.value
   if (data.rFactorQ !== undefined) rFactorQ.value = data.rFactorQ
   if (data.rFactorPsi !== undefined) rFactorPsi.value = data.rFactorPsi
   if (data.qualityMetrics) {
@@ -496,6 +634,8 @@ const applyExternalResult = (data) => {
     }
   }
   hasResults.value = true
+  angleZeroingResult.value = data.angleZeroing || null
+  deduplicateResult.value = data.deduplicate || null
 }
 
 const loadResults = async () => {
@@ -511,8 +651,6 @@ const loadResults = async () => {
       totalReflections.value = result.data.totalReflections || 0
       indexedPeaks.value = result.data.indexedPeaks || millerData.value.length
       currentTaskId.value = result.data.taskId || null
-      peakSymmetryGroups.value = Array.isArray(result.data.peakSymmetryGroups) ? result.data.peakSymmetryGroups : []
-      peakSymmetryConfig.value = result.data.peakSymmetryConfig || peakSymmetryConfig.value
       glideBatchOutputs.value = result.data.glideBatchOutputs || glideBatchOutputs.value
       resultWorkDir.value = result.data.workDir || null
 
@@ -534,6 +672,9 @@ const loadResults = async () => {
         }
       }
       
+      angleZeroingResult.value = result.data.angleZeroing || null
+      deduplicateResult.value = result.data.deduplicate || null
+
       hasResults.value = true
       emit('results-loaded', result.data)
     }
@@ -657,6 +798,13 @@ const exportCell = async () => {
   }
 }
 
+const exportAdaptedCell = () => {
+  const zc = angleZeroingResult.value?.zeroedCell
+  if (!zc) return
+  const content = `# Adapted (zeroed) cell parameters\na: ${zc.a.toFixed(6)} Å\nb: ${zc.b.toFixed(6)} Å\nc: ${zc.c.toFixed(6)} Å\nalpha: ${zc.alpha.toFixed(4)} °\nbeta: ${zc.beta.toFixed(4)} °\ngamma: ${zc.gamma.toFixed(4)} °\n\n# Plain format: a b c alpha beta gamma\n${zc.a.toFixed(6)} ${zc.b.toFixed(6)} ${zc.c.toFixed(6)} ${zc.alpha.toFixed(4)} ${zc.beta.toFixed(4)} ${zc.gamma.toFixed(4)}`
+  downloadFile(content, 'adapted_cell_parameters.txt', 'text/plain')
+}
+
 const exportMiller = async () => {
   try {
     const { blob, filename } = await api.downloadResults('miller', currentTaskId.value)
@@ -686,7 +834,7 @@ const exportHDF5 = async () => {
     URL.revokeObjectURL(url)
   } catch (error) {
     const hdf5Data = {
-      version: '1.8.4',
+        version: '1.8.5',
       timestamp: new Date().toISOString(),
       cellParameters: cellParams.value,
       millerIndices: millerData.value,
@@ -909,6 +1057,64 @@ watch(() => props.resultData, async (newData) => {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
+}
+
+.adapted-cell-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.adapted-cell-section h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 12px 0;
+}
+
+.adapted-cell-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.adapted-cell-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+
+.adapted-cell-item .cell-label {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.875rem;
+  min-width: 14px;
+}
+
+.adapted-cell-item .cell-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.adapted-cell-item .cell-unit {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.adapted-export-btn {
+  margin-top: 8px;
+}
+
+.adapted-export-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .peak-symmetry-summary {
@@ -1374,4 +1580,8 @@ watch(() => props.resultData, async (newData) => {
   width: 18px;
   height: 18px;
 }
+
+.text-success { color: var(--primary, #10B981); }
+.text-muted { color: var(--text-muted, #9CA3AF); }
+.text-warning { color: #F59E0B; }
 </style>

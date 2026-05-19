@@ -475,6 +475,14 @@ const intImgStyle = computed(() => ({
   transformOrigin: '0 0',
 }))
 
+const indexedOverlayGroups = ref([])
+
+const effectiveOverlayGroups = computed(() => {
+  if (props.overlayGroups?.length) return props.overlayGroups
+  if (props.resultType === 'indexing') return indexedOverlayGroups.value
+  return []
+})
+
 function setStatus(msg) { statusMsg.value = msg }
 
 function clampZoom(panel) {
@@ -628,6 +636,9 @@ async function uploadRawImage(file) {
   setStatus(data.message)
   await renderRaw({ preserveView: false })
   emit('raw-session-ready')
+  if (effectiveOverlayGroups.value.length) {
+    await loadOverlayGroups()
+  }
 }
 
 async function uploadRawPoni(file) {
@@ -759,7 +770,7 @@ async function uploadIntImage(file) {
   setStatus(data.message)
   await renderInt({ preserveView: false })
   emit('raw-session-ready')
-  if (props.overlayGroups?.length && props.importRequestKey) {
+  if (effectiveOverlayGroups.value.length) {
     await loadIntOverlayGroups()
   }
 }
@@ -885,6 +896,17 @@ async function loadFromWorkDir(dir) {
     const { data } = await axios.post(`${API_BASE}/raw/load-workdir`, { work_dir: dir })
     if (data.full_miller_count !== undefined) raw.fullCount = data.full_miller_count
     if (data.output_miller_count !== undefined) raw.outputCount = data.output_miller_count
+    if (props.resultType === 'indexing') {
+      indexedOverlayGroups.value = data.output_miller_content
+        ? [{
+            label: 'outputMiller',
+            fullMillerContent: '',
+            outputMillerContent: data.output_miller_content,
+            workDir: dir,
+            totalReflections: data.output_miller_count || 0,
+          }]
+        : []
+    }
     if (data.poni) {
       raw.poniLoaded = true
       raw.p.wl = data.poni.wl || raw.p.wl
@@ -903,6 +925,13 @@ async function loadFromWorkDir(dir) {
       raw.p.cmin = Math.floor(data.p01 ?? data.min ?? 0)
       raw.p.cmax = Math.ceil(data.p99 ?? data.max ?? 65535)
       await renderRaw({ preserveView: false })
+      if (props.resultType === 'indexing') {
+        await axios.delete(`${API_BASE}/raw/miller?miller_type=full`)
+        raw.fullCount = 0
+        if (indexedOverlayGroups.value.length) {
+          await loadOverlayGroups()
+        }
+      }
       setStatus(data.message || `Loaded from workDir: ${dir}`)
       emit('raw-session-ready')
     } else {
@@ -922,13 +951,14 @@ watch(() => props.workDir, async (newDir) => {
 })
 
 async function loadOverlayGroups() {
-  if (!props.overlayGroups || props.overlayGroups.length === 0) return
+  if (!effectiveOverlayGroups.value || effectiveOverlayGroups.value.length === 0) return
   if (!raw.imageLoaded) return
   loading.value = true
   try {
-    const groups = props.overlayGroups.slice(0, 5).map(g => ({
+    const groups = effectiveOverlayGroups.value.slice(0, 5).map(g => ({
       label: g.label || '',
       full_miller_content: g.fullMillerContent || '',
+      output_miller_content: g.outputMillerContent || '',
     }))
     const { data } = await axios.post(`${API_BASE}/raw/set-miller-content`, { groups })
     raw.fullCount = data.full_miller_count ?? 0
@@ -943,13 +973,14 @@ async function loadOverlayGroups() {
 }
 
 async function loadIntOverlayGroups() {
-  if (!props.overlayGroups || props.overlayGroups.length === 0) return
+  if (!effectiveOverlayGroups.value || effectiveOverlayGroups.value.length === 0) return
   if (!int2d.imageLoaded) return
   loading.value = true
   try {
-    const groups = props.overlayGroups.slice(0, 5).map(g => ({
+    const groups = effectiveOverlayGroups.value.slice(0, 5).map(g => ({
       label: g.label || '',
       full_miller_content: g.fullMillerContent || '',
+      output_miller_content: g.outputMillerContent || '',
     }))
     const { data } = await axios.post(`${API_BASE}/int/set-miller-content`, { groups })
     int2d.fullCount = data.full_miller_count ?? 0
@@ -977,6 +1008,11 @@ watch(() => props.importRequestKey, async (newKey, oldKey) => {
   if (canLoadInt) {
     await loadIntOverlayGroups()
   }
+})
+
+watch(() => props.workDir, async (newDir, oldDir) => {
+  if (!newDir || newDir === oldDir || props.resultType !== 'indexing') return
+  indexedOverlayGroups.value = []
 })
 
 onBeforeUnmount(() => {

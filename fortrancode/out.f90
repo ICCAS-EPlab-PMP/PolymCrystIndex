@@ -22,6 +22,11 @@ module fitting_module
     integer :: max_h1_by_cell, max_k1_by_cell, max_l1_by_cell
     integer :: max_h1_by_q, max_k1_by_q, max_l1_by_q
     real*8 :: max_values(6), min_values(6)
+    integer :: deduplicate_enabled  ! 峰独占开关 (0=关, 1=开), input.txt line 30
+    real*8 :: dedup_penalty  ! 峰独占惩罚系数 (默认1.0), input.txt line 31
+    integer :: dedup_loser(maxdata)  ! 峰独占 loser 标记 (0=非loser, 1=loser)
+    real*8 :: miller_original(maxdata, 3)  ! dedup 前原始 Miller 指数
+    real*8, allocatable :: min_error_list(:)  ! 模块级误差列表
 end module
 
 
@@ -482,63 +487,7 @@ contains
         write(text, '(ES24.16E3)') value
     end function real_to_text
 
-    subroutine write_family_artifact(diffraction_num)
-        integer, intent(in) :: diffraction_num
-        integer :: i, member_idx
-        character(len=64) :: observed_idx_text, supported_text, member_count_text
-        character(len=64) :: key_h_text, key_k_text, key_l_text
-        character(len=64) :: residual_text, spread_text
-        character(len=64) :: member_h_text, member_k_text, member_l_text
-        character(len=256) :: member_json
-        character(len=1024) :: members_block
-        character(len=2048) :: line
-
-        open(unit=8, file='outputMillerFamilies.jsonl', status='unknown', action='write')
-
-        do i = 1, diffraction_num
-            observed_idx_text = trim(int_to_text(i))
-            supported_text = trim(int_to_text(family_supported(i)))
-            member_count_text = trim(int_to_text(family_member_count(i)))
-            key_h_text = trim(int_to_text(family_key(i, 1)))
-            key_k_text = trim(int_to_text(family_key(i, 2)))
-            key_l_text = trim(int_to_text(family_key(i, 3)))
-            residual_text = trim(real_to_text(family_residual_raw(i)))
-            spread_text = trim(real_to_text(family_spread_raw(i)))
-
-            members_block = ''
-            do member_idx = 1, family_member_count(i)
-                member_h_text = trim(int_to_text(family_members(i, member_idx, 1)))
-                member_k_text = trim(int_to_text(family_members(i, member_idx, 2)))
-                member_l_text = trim(int_to_text(family_members(i, member_idx, 3)))
-                member_json = '[' // trim(member_h_text) // ',' // trim(member_k_text) // ',' // trim(member_l_text) // ']'
-                if (member_idx > 1) then
-                    members_block = trim(members_block) // ','
-                end if
-                members_block = trim(members_block) // trim(member_json)
-            end do
-
-            line = '{"observed_peak_index":' // trim(observed_idx_text) // &
-                   ',"family_supported":' // trim(supported_text) // &
-                   ',"family_key":[' // trim(key_h_text) // ',' // trim(key_k_text) // ',' // trim(key_l_text) // ']' // &
-                   ',"member_count":' // trim(member_count_text) // &
-                   ',"member_hkls":[' // trim(members_block) // ']' // &
-                   ',"family_residual":' // trim(residual_text) // &
-                   ',"intra_family_spread":' // trim(spread_text) // '}'
-            write(8, '(A)') trim(line)
-        end do
-
-        close(8)
-    end subroutine write_family_artifact
-
-    subroutine clear_family_artifact()
-        logical :: file_exists
-
-        inquire(file='outputMillerFamilies.jsonl', exist=file_exists)
-        if (file_exists) then
-            open(unit=9, file='outputMillerFamilies.jsonl', status='old', action='readwrite')
-            close(9, status='delete')
-        end if
-    end subroutine clear_family_artifact
+    ! write_family_artifact and clear_family_artifact removed — no longer used
 
     subroutine error_cal_initial(diffraction_num, parm)
         integer, intent(in) :: diffraction_num
@@ -557,7 +506,6 @@ contains
         real(kind=8), parameter :: pi = 3.14159265358979323846d0
         real(kind=8) :: tilt_angle, error_mid, unit_residual
         real(kind=8) :: current_V
-        real(kind=8), allocatable :: min_error_list(:)
         logical :: valid
 
         character(len=512) :: filename_6
@@ -610,6 +558,9 @@ contains
             do b1 = -max_k1, max_k1
                 do a1 = -max_h1, max_h1
                     if (a1 == 0 .and. b1 == 0 .and. c1 == 0) cycle
+
+                    ! l=0: (h,k,0) ≡ (-h,-k,0) — skip one half to avoid duplicate
+                    if (c1 == 0 .and. a1 < 0) cycle
 
                     call compute_reflection_coordinates(a1, b1, c1, c, tilt_angle, V, A11, B11, C11, D11, E11, F11, &
                                                         q_value, coord_value, psi_display_rad, psi_root_rad, &
@@ -667,9 +618,239 @@ contains
             end do
         end do
 
-        if (allocated(min_error_list)) deallocate(min_error_list)
         close(6)
     end subroutine error_cal_initial
+
+    subroutine canonical_hkl(h, k, l, merge_mode, hc, kc, lc)
+        implicit none
+        integer, intent(in) :: h, k, l, merge_mode
+        integer, intent(out) :: hc, kc, lc
+
+        ! 前臵规则：轴向 Friedel 对永远等效（两个指数为零时第三个始终 abs）
+        if (h == 0 .and. k == 0) then
+            hc = 0; kc = 0; lc = abs(l)
+            return
+        else if (h == 0 .and. l == 0) then
+            hc = 0; kc = abs(k); lc = 0
+            return
+        else if (k == 0 .and. l == 0) then
+            hc = abs(h); kc = 0; lc = 0
+            return
+        end if
+
+        if (l == 0) then
+            if (h < 0) then
+                hc = -h; kc = -k; lc = 0
+            else
+                hc = h; kc = k; lc = 0
+            end if
+            return
+        end if
+
+        select case (merge_mode)
+        case (1)
+            hc = abs(h); kc = abs(k); lc = abs(l)
+        case (2)
+            hc = abs(h); kc = k; lc = l
+        case (3)
+            hc = h; kc = abs(k); lc = l
+        case (4)
+            hc = h; kc = k; lc = abs(l)
+        case default
+            hc = h; kc = k; lc = l
+        end select
+    end subroutine
+
+    subroutine error_cal_dedup(diffraction_num, parm)
+        use fitting_module
+        implicit none
+        integer, intent(in) :: diffraction_num
+        real*8, intent(in) :: parm(:)
+
+        integer :: i, j, dl
+        integer :: merge_mode
+        integer :: canonical_peak(maxdata, 3)
+        logical :: conflict_flag(maxdata), is_loser(maxdata)
+        integer :: h, k, l, l0
+        integer :: best_h, best_k, best_l
+        integer :: hc, kc, lc, hc2, kc2, lc2
+        real*8 :: best_q, best_psi_display, best_psi_root, psi_root_val
+        real*8 :: current_error, best_error
+        real*8 :: a, b, c, alpha, beta, gamma, V
+        real*8 :: A11, B11, C11, D11, E11, F11
+        real*8 :: d, theta, q, PHI, d1, y1, PHI_asin
+        real*8 :: tilt_angle_rad
+        real*8, parameter :: pi = 3.14159265358979323846d0
+
+        if (diffraction_num <= 1) return
+
+        ! 保存原始 Miller 指数（dedup 前）
+        do i = 1, diffraction_num
+            miller_original(i, 1:3) = Miller_trans(i, 1:3)
+        end do
+        dedup_loser(1:diffraction_num) = 0
+
+        a = parm(1)
+        b = parm(2)
+        c = parm(3)
+        alpha = parm(4) * pi / 180.0d0
+        beta = parm(5) * pi / 180.0d0
+        gamma = parm(6) * pi / 180.0d0
+
+        call determine_symmetry_merge_mode(alpha * 180.0d0 / pi, beta * 180.0d0 / pi, gamma * 180.0d0 / pi, merge_mode)
+
+        ! sym_stat=0 时未开启对称归正，dedup 不应使用 canonical 等价，
+        ! 强制 merge_mode=0 使 canonical_hkl 直接返回原值（exact 匹配）
+        if (sym_stat == 0) merge_mode = 0
+
+        V = a * b * c * (1 - cos(alpha)**2 - cos(beta)**2 - cos(gamma)**2 + 2*cos(alpha)*cos(beta)*cos(gamma))**0.5
+        if (isnan(V) .or. V < 0.01d0) V = 10000000.0d0
+
+        A11 = b**2 * c**2 * sin(alpha)**2
+        B11 = a**2 * c**2 * sin(beta)**2
+        C11 = a**2 * b**2 * sin(gamma)**2
+        D11 = a * b * c**2 * (cos(alpha)*cos(beta) - cos(gamma))
+        E11 = a**2 * b * c * (cos(beta)*cos(gamma) - cos(alpha))
+        F11 = a * b**2 * c * (cos(gamma)*cos(alpha) - cos(beta))
+
+        tilt_angle_rad = 0.0d0
+        if (tilt_check == 1) then
+            tilt_angle_rad = parm(7) * pi / 180.0d0
+        end if
+
+        do i = 1, diffraction_num
+            h = nint(Miller_trans(i, 1))
+            k = nint(Miller_trans(i, 2))
+            l = nint(Miller_trans(i, 3))
+            call canonical_hkl(h, k, l, merge_mode, &
+                               canonical_peak(i, 1), canonical_peak(i, 2), canonical_peak(i, 3))
+        end do
+
+        conflict_flag(1:diffraction_num) = .false.
+        is_loser(1:diffraction_num) = .false.
+
+        do i = 1, diffraction_num
+            if (conflict_flag(i)) cycle
+            do j = i + 1, diffraction_num
+                if (conflict_flag(j)) cycle
+                if (canonical_peak(i, 1) == canonical_peak(j, 1) .and. &
+                    canonical_peak(i, 2) == canonical_peak(j, 2) .and. &
+                    canonical_peak(i, 3) == canonical_peak(j, 3)) then
+                    conflict_flag(i) = .true.
+                    conflict_flag(j) = .true.
+                    if (min_error_list(i) <= min_error_list(j)) then
+                        is_loser(j) = .true.
+                        dedup_loser(j) = 1
+                    else
+                        is_loser(i) = .true.
+                        dedup_loser(i) = 1
+                    end if
+                end if
+            end do
+        end do
+
+        if (.not. any(conflict_flag(1:diffraction_num))) return
+
+        do i = 1, diffraction_num
+            if (.not. is_loser(i)) cycle
+
+            l0 = nint(Miller_trans(i, 3))
+            best_error = 1.0d30
+            best_h = nint(Miller_trans(i, 1))
+            best_k = nint(Miller_trans(i, 2))
+            best_l = l0
+
+            do h = -max_h1, max_h1
+                do k = -max_k1, max_k1
+                    do dl = -1, 1
+                        l = l0 + dl
+                        if (h == 0 .and. k == 0 .and. l == 0) cycle
+
+                        do j = 1, diffraction_num
+                            if (j == i .or. is_loser(j)) cycle
+                            if (nint(Miller_trans(j, 1)) == h .and. &
+                                nint(Miller_trans(j, 2)) == k .and. &
+                                nint(Miller_trans(j, 3)) == l) then
+                                go to 150
+                            end if
+                            call canonical_hkl(nint(Miller_trans(j,1)), nint(Miller_trans(j,2)), &
+                                               nint(Miller_trans(j,3)), merge_mode, hc, kc, lc)
+                            call canonical_hkl(h, k, l, merge_mode, hc2, kc2, lc2)
+                            if (hc == hc2 .and. kc == kc2 .and. lc == lc2) then
+                                go to 150
+                            end if
+                        end do
+
+                        d = 1.0d0 / sqrt( &
+                            (h**2 * A11 + k**2 * B11 + l**2 * C11 + 2*h*k*D11 + 2*k*l*E11 + 2*h*l*F11) / V**2 &
+                        )
+                        if (isnan(d) .or. d <= 0.0d0) cycle
+                        theta = asin(wavelength / (2.0d0 * d))
+                        if (theta /= theta) cycle
+                        q = (1.0d0 / d) * 2.0d0 * pi
+
+                        d1 = 1.0d0 / wavelength * sin(2.0d0 * theta)
+                        if (l == 0) then
+                            y1 = 0.0d0
+                        else
+                            y1 = dble(l) / c
+                        end if
+
+                        if (tilt_check == 1) then
+                            PHI_asin = (y1 / cos(tilt_angle_rad) + 1.0d0 / d * sin(theta) * tan(tilt_angle_rad)) / d1
+                            if (PHI_asin > 1.0d0 .or. PHI_asin < -1.0d0) then
+                                PHI = pi / 2.0d0
+                            else
+                                PHI = asin(PHI_asin)
+                            end if
+                        else
+                            if (y1 / d1 > 1.0d0 .or. y1 / d1 < -1.0d0) then
+                                PHI = pi / 2.0d0
+                            else
+                                PHI = asin(y1 / d1)
+                            end if
+                        end if
+
+                        ! Root psi (uncorrected) — always asin(y1/d1)
+                        if (y1 / d1 > 1.0d0 .or. y1 / d1 < -1.0d0) then
+                            psi_root_val = pi / 2.0d0
+                        else
+                            psi_root_val = asin(y1 / d1)
+                        end if
+
+                        if (level == 1) then
+                            current_error = abs(q - value1(i)) * e3 + abs(PHI * 180.0d0 / pi - value(i)) * e2
+                        else
+                            current_error = abs(q - value1(i)) * e3 + abs(dble(l) / c - value(i)) * e2
+                        end if
+
+                        if (current_error < best_error) then
+                            best_error = current_error
+                            best_h = h
+                            best_k = k
+                            best_l = l
+                            best_q = q
+                            best_psi_display = PHI
+                            best_psi_root = psi_root_val
+                        end if
+150                     continue
+                    end do
+                end do
+            end do
+
+            Miller_trans(i, 1) = best_h
+            Miller_trans(i, 2) = best_k
+            Miller_trans(i, 3) = best_l
+            Miller_trans(i, 4) = best_q
+            Miller_trans(i, 5) = best_psi_display
+            Miller_trans(i, 6) = best_psi_root
+            Miller_trans(i, 7) = V
+            min_error_list(i) = best_error
+        end do
+
+        if (allocated(min_error_list)) deallocate(min_error_list)
+
+    end subroutine
 
 end module calhkl
 
@@ -688,6 +869,7 @@ program LMfit
     real*8, allocatable :: cell_parameter(:, :), error_total(:)
     character c80tmp*80
     real*8 :: tilt_angle
+    integer :: io_status
     real*8, allocatable :: reflection_position(:, :), reflection_position1(:, :)
 
     tol = 1D-7
@@ -733,7 +915,7 @@ program LMfit
     end if
 
     open(unit=1, file=filename_input, status='old', action='read')
-    do i = 1, 28
+    do i = 1, 31
         if (i == 1) then
             read(1, *) wavelength
         else if (i == 13) then
@@ -758,6 +940,12 @@ program LMfit
             if (sym_ta <= 0.0d0) sym_ta = 1.0d0
         else if (i == 27) then
             read(1, *) tilt_check
+        else if (i == 30) then
+            read(1, *, iostat=io_status) deduplicate_enabled
+            if (io_status /= 0) deduplicate_enabled = 0
+        else if (i == 31) then
+            read(1, *, iostat=io_status) dedup_penalty
+            if (io_status /= 0 .or. dedup_penalty < 1.0d0) dedup_penalty = 1.0d0
         else
             read(1, *)
         end if
@@ -809,6 +997,9 @@ program LMfit
         end if
 
         call error_cal_initial(diffraction_num, parm)
+        if (deduplicate_enabled == 1) then
+            call error_cal_dedup(diffraction_num, parm)
+        end if
     end do
 
     filename_5 = 'outputMiller.txt'
@@ -833,11 +1024,29 @@ program LMfit
 
     close(5)
 
-    if (sym_stat == 1) then
-        call write_family_artifact(diffraction_num)
-    else
-        call clear_family_artifact()
+    ! 输出峰独占冲突报告（复用 error_cal_dedup 的 dedup_loser 标记）
+    if (deduplicate_enabled == 1) then
+        open(unit=6, file='dedup_conflicts.txt', status='unknown', action='write')
+        write(6, *) '# Peak Deduplication Conflict Report'
+        write(6, *) '# Peak  Original_HKL  ->  Final_HKL    Status'
+        write(6, *) '#----------------------------------------------'
+        do i = 1, diffraction_num
+            if (dedup_loser(i) == 1) then
+                write(6, '(I4,2X,I4,1X,I4,1X,I4,2X,A3,2X,I4,1X,I4,1X,I4,2X,A6)') &
+                    i, nint(miller_original(i,1)), nint(miller_original(i,2)), nint(miller_original(i,3)), &
+                    ' ->', nint(Miller_trans(i,1)), nint(Miller_trans(i,2)), nint(Miller_trans(i,3)), &
+                    'REMAP'
+            else
+                write(6, '(I4,2X,I4,1X,I4,1X,I4,2X,A3,2X,I4,1X,I4,1X,I4,2X,A6)') &
+                    i, nint(miller_original(i,1)), nint(miller_original(i,2)), nint(miller_original(i,3)), &
+                    ' ->', nint(Miller_trans(i,1)), nint(Miller_trans(i,2)), nint(Miller_trans(i,3)), &
+                    'KEEP'
+            end if
+        end do
+        close(6)
     end if
+
+    ! families artifact removed — no longer generated
 
     write(*, *) ' '
 end program

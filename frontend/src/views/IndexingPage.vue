@@ -47,9 +47,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, markRaw, h, defineAsyncComponent, watch } from 'vue'
+import { ref, reactive, computed, markRaw, h, defineAsyncComponent, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+
+// 会话持久化 TTL: 30 分钟
+const SESSION_TTL = 30 * 60 * 1000
+const SESSION_KEY = 'polycryst_indexing_session'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -194,13 +198,79 @@ const getTabLabel = (tabId) => {
   return LABEL_FALLBACKS[tabId] || tabId
 }
 
+// 会话持久化
+const saveIndexingSession = () => {
+  try {
+    const session = {
+      dataFile: dataFile.value ? { path: dataFile.value.path, file: { name: dataFile.value.file?.name || '' } } : null,
+      gaParams: { ...gaParams },
+      runStatus: runStatus.value,
+      currentTaskId: currentTaskId.value,
+      activeSubTab: activeSubTab.value,
+      timestamp: Date.now()
+    }
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  } catch (e) {
+    // sessionStorage 可能满（大文件内容已排除），静默忽略
+  }
+}
+
+const restoreIndexingSession = () => {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    if (!raw) return
+    const session = JSON.parse(raw)
+    // TTL 检查
+    if (Date.now() - session.timestamp > SESSION_TTL) {
+      sessionStorage.removeItem(SESSION_KEY)
+      return
+    }
+    // 恢复 gaParams
+    if (session.gaParams) {
+      Object.assign(gaParams, session.gaParams)
+    }
+    // 恢复 dataFile（仅 path，不含大文件内容；DataImport 可借此恢复已上传状态）
+    if (session.dataFile) {
+      dataFile.value = {
+        path: session.dataFile.path,
+        file: session.dataFile.file?.name ? { name: session.dataFile.file.name } : null,
+        content: ''
+      }
+    }
+    // 恢复状态
+    if (session.runStatus) runStatus.value = session.runStatus
+    if (session.currentTaskId) currentTaskId.value = session.currentTaskId
+    // subtab 优先来自 route query，然后来自 session
+    if (!route.query.subtab && session.activeSubTab) {
+      activeSubTab.value = session.activeSubTab
+    }
+  } catch (e) {
+    sessionStorage.removeItem(SESSION_KEY)
+  }
+}
+
+const clearIndexingSession = () => {
+  sessionStorage.removeItem(SESSION_KEY)
+}
+
+onMounted(() => {
+  restoreIndexingSession()
+})
+
+onUnmounted(() => {
+  saveIndexingSession()
+})
+
 const handleDataLoaded = (data) => {
   dataFile.value = data
+  // 新上传数据时清除旧 session
+  clearIndexingSession()
   activeSubTab.value = 'params'
 }
 
 const handleFileRemoved = () => {
   dataFile.value = null
+  clearIndexingSession()
 }
 
 const handleTaskStarted = (taskId) => {

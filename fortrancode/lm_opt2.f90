@@ -29,6 +29,7 @@ module fitting_module
     real*8 :: max_values(6),min_values(6)
     integer :: deduplicate_enabled  ! 峰独占开关 (0=关, 1=开), input.txt line 30
     real*8 :: dedup_penalty  ! 峰独占惩罚系数 (默认1.0), input.txt line 31
+    integer :: dedup_sym_mode  ! dedup对称比较模式 (0=精确, 1=canonical), input.txt line 32
     integer :: dedup_loser(maxdata)  ! 峰独占 loser 标记 (0=非loser, 1=loser)
     real*8, allocatable :: min_error_list(:)  ! 局部误差列表（从error_cal_initial提升至模块级）
 end module
@@ -825,7 +826,7 @@ contains
         integer, intent(in) :: h, k, l, merge_mode
         integer, intent(out) :: hc, kc, lc
 
-        ! 前臵规则：轴向 Friedel 对永远等效（两个指数为零时第三个始终 abs）
+        ! 第一层：轴向 Friedel 对（merge_mode 无关，始终生效）
         if (h == 0 .and. k == 0) then
             hc = 0; kc = 0; lc = abs(l)
             return
@@ -837,41 +838,68 @@ contains
             return
         end if
 
+        ! 第二层：l=0 面内反射（merge_mode 感知）
         if (l == 0) then
-            if (h < 0) then
-                hc = -h; kc = -k; lc = 0
-            else
-                hc = h; kc = k; lc = 0
-            end if
+            select case (merge_mode)
+            case (1, 2, 3)
+                ! 正交(1) / alpha-unique(2) / beta-unique(3)：h 和 k 可独立取 abs
+                hc = abs(h); kc = abs(k); lc = 0
+            case (4)
+                ! gamma-unique：2-fold 沿 c 轴仅产生 (h,k,0)~(-h,-k,0)
+                if (h < 0) then
+                    hc = -h; kc = -k; lc = 0
+                else
+                    hc = h; kc = k; lc = 0
+                end if
+            case default
+                ! merge_mode=0（精确匹配 / 无对称）：保留原有 Friedel 规则
+                if (h < 0) then
+                    hc = -h; kc = -k; lc = 0
+                else
+                    hc = h; kc = k; lc = 0
+                end if
+            end select
             return
         end if
 
+        ! 第三层：l /= 0 时的晶系对称（两步归一：独立abs是错的，符号联动）
         select case (merge_mode)
         case (1)
-            ! Friedel / orthogonal: all axes equivalent
-            hc = abs(h)
-            kc = abs(k)
-            lc = abs(l)
+            ! 正交: 三个2-fold轴，所有符号独立翻转 → 独立abs正确
+            hc = abs(h); kc = abs(k); lc = abs(l)
         case (2)
-            ! alpha unique: h is abs'd, k and l retain sign
-            hc = abs(h)
-            kc = k
-            lc = l
+            ! α-unique (unique axis a): 2-fold绕a → (h,k,l)↔(h,-k,-l)
+            ! 两步归一: ① Friedel(全翻)使h≥0 ② 2-fold(翻k,l)使k≥0
+            hc = h; kc = k; lc = l
+            if (hc < 0) then
+                hc = -hc; kc = -kc; lc = -lc   ! Friedel
+            end if
+            if (kc < 0 .or. (kc == 0 .and. lc < 0)) then
+                kc = -kc; lc = -lc              ! 2-fold about a
+            end if
         case (3)
-            ! beta unique: k is abs'd, h and l retain sign
-            hc = h
-            kc = abs(k)
-            lc = l
+            ! β-unique (unique axis b): 2-fold绕b → (h,k,l)↔(-h,k,-l)
+            ! 两步归一: ① Friedel(全翻)使k≥0 ② 2-fold(翻h,l)使h≥0
+            hc = h; kc = k; lc = l
+            if (kc < 0) then
+                hc = -hc; kc = -kc; lc = -lc   ! Friedel
+            end if
+            if (hc < 0 .or. (hc == 0 .and. lc < 0)) then
+                hc = -hc; lc = -lc              ! 2-fold about b
+            end if
         case (4)
-            ! gamma unique: l is abs'd, h and k retain sign
-            hc = h
-            kc = k
-            lc = abs(l)
+            ! γ-unique (unique axis c): 2-fold绕c → (h,k,l)↔(-h,-k,l)
+            ! 两步归一: ① 2-fold(翻h,k)使l≥0 ② Friedel(翻h,k)使h≥0
+            hc = h; kc = k; lc = l
+            if (lc < 0) then
+                hc = -hc; kc = -kc; lc = -lc   ! 2-fold about c
+            end if
+            if (hc < 0 .or. (hc == 0 .and. kc < 0)) then
+                hc = -hc; kc = -kc              ! Friedel
+            end if
         case default
-            ! No symmetry: no abs
-            hc = h
-            kc = k
-            lc = l
+            ! No symmetry: exact match
+            hc = h; kc = k; lc = l
         end select
     end subroutine
 
@@ -920,8 +948,8 @@ contains
 
         call determine_symmetry_merge_mode(alpha * 180.0d0 / pi, beta * 180.0d0 / pi, gamma * 180.0d0 / pi, merge_mode)
 
-        ! sym_stat=0 时未开启对称归正，dedup 不应使用 canonical 等价，
-        ! 强制 merge_mode=0 使 canonical_hkl 直接返回原值（exact 匹配）
+        ! sym_stat=0 时未开启对称归正，dedup 不应使用 canonical 等价。
+        ! dedup_sym_mode 不影响 merge_mode — 只有 sym_stat=1 时才启用对称感知的唯一指派。
         if (sym_stat == 0) merge_mode = 0
 
         V = a * b * c * (1 - cos(alpha)**2 - cos(beta)**2 - cos(gamma)**2 + 2*cos(alpha)*cos(beta)*cos(gamma))**0.5
@@ -1301,7 +1329,7 @@ program LMfit
     fixlmode = 0
     ortho_ab_star = 0!初始化a*与b*垂直约束标志
     !文件第一行为波长，第二行为检测器距离，第三行为检测器类型
-    do i=1,31
+    do i=1,32
         if (i==1) then
             read(1,*) wavelength
         else if (i==4) then
@@ -1368,6 +1396,9 @@ program LMfit
         else if (i == 31) then
             read(1,*,iostat=io_status) dedup_penalty
             if (io_status /= 0 .or. dedup_penalty < 1.0d0) dedup_penalty = 1.0d0
+        else if (i == 32) then
+            read(1,*,iostat=io_status) dedup_sym_mode
+            if (io_status /= 0) dedup_sym_mode = 0
         else
             read(1,*)
         end if 

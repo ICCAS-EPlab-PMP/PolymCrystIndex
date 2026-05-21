@@ -27,6 +27,7 @@ from services.diffraction_utils import (
     PixelCoordinateCalculator,
     PsiAzimuthMapper,
     draw_raw_markers,
+    draw_reference_markers,
 )
 
 try:
@@ -79,6 +80,7 @@ class RawState:
     calculator: PixelCoordinateCalculator = PixelCoordinateCalculator()
     full_miller: list = []
     output_miller: list = []
+    reference_points: list = []
 
 
 class IntState:
@@ -88,6 +90,7 @@ class IntState:
     az_range: tuple = (-180.0, 180.0)
     full_miller: list = []
     output_miller: list = []
+    reference_points: list = []
     mapper: PsiAzimuthMapper = PsiAzimuthMapper(convention="ccw", offset=0.0)
 
 
@@ -144,6 +147,55 @@ class MillerOverlayGroup(BaseModel):
 
 class RawSetMillerBody(BaseModel):
     groups: List[MillerOverlayGroup] = []
+
+
+def _parse_reference_file(content: str) -> list:
+    """解析峰提取格式的参考点文件。
+
+    TXT 格式 (tab 分隔):
+        q        psi_deg         1
+    CSV 格式 (含表头):
+        index,pixel_x,pixel_y,intensity,q_A-1,psi_deg_raw,psi_deg_corrected
+
+    返回 [{'h': 0, 'k': 0, 'l': 0, 'q': float, 'psi': float}, ...]
+    """
+    lines = content.strip().splitlines()
+    if not lines:
+        return []
+
+    # 判断是否为 CSV (含逗号)
+    is_csv = ',' in lines[0]
+    result = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if is_csv:
+            parts = [p.strip() for p in line.split(',')]
+            # 跳过表头行
+            if parts[0].startswith('index') or parts[0].startswith('q'):
+                continue
+            # CSV: index,pixel_x,pixel_y,intensity,q_A-1,psi_deg_raw,psi_deg_corrected
+            if len(parts) >= 6:
+                psi_col = min(5, len(parts) - 1)  # psi_deg_raw 或 psi_deg_corrected
+                q_col = 4
+                try:
+                    q_val = float(parts[q_col])
+                    psi_val = float(parts[psi_col])
+                    result.append({'h': 0, 'k': 0, 'l': 0, 'q': q_val, 'psi': psi_val})
+                except (ValueError, IndexError):
+                    continue
+        else:
+            # TXT: q  psi  1
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    q_val = float(parts[0])
+                    psi_val = float(parts[1])
+                    result.append({'h': 0, 'k': 0, 'l': 0, 'q': q_val, 'psi': psi_val})
+                except (ValueError, IndexError):
+                    continue
+    return result
 
 
 def _load_poni_into_raw_state(poni_path: Path) -> Optional[dict]:
@@ -232,10 +284,12 @@ def get_status():
         "raw_image_shape": list(raw_state.image_shape) if raw_state.image is not None else None,
         "raw_full_miller": len(raw_state.full_miller),
         "raw_output_miller": len(raw_state.output_miller),
+        "raw_reference_points": len(raw_state.reference_points),
         "int_image_loaded": int_state.image is not None,
         "int_image_shape": list(int_state.image_shape) if int_state.image is not None else None,
         "int_full_miller": len(int_state.full_miller),
         "int_output_miller": len(int_state.output_miller),
+        "int_reference_points": len(int_state.reference_points),
         "int_q_range": list(int_state.q_range),
         "int_az_range": list(int_state.az_range),
     }
@@ -254,6 +308,7 @@ async def raw_upload_image(file: UploadFile = File(...)):
     raw_state.image_shape = arr.shape
     raw_state.full_miller = []
     raw_state.output_miller = []
+    raw_state.reference_points = []
     raw_state.ai = None
     raw_state.calculator.clear_invert_geom()
 
@@ -474,6 +529,27 @@ def raw_clear_miller(
     return {"message": "已清除标记点"}
 
 
+@router.post("/raw/reference-points")
+async def raw_upload_reference_points(file: UploadFile = File(...)):
+    """上传参考点文件（峰提取格式），从 q+psi 计算像素坐标后存储"""
+    if raw_state.image is None:
+        raise HTTPException(status_code=400, detail="请先上传图像")
+
+    content = (await file.read()).decode('utf-8', errors='replace')
+    data = _parse_reference_file(content)
+    if not data:
+        raise HTTPException(status_code=400, detail="无法从文件解析有效参考点数据")
+
+    raw_state.reference_points = data
+    return {"message": f"已导入 {len(data)} 个参考点 ← {file.filename}", "count": len(data)}
+
+
+@router.delete("/raw/reference-points")
+def raw_clear_reference_points():
+    raw_state.reference_points = []
+    return {"message": "已清除参考点"}
+
+
 @router.post("/raw/image-only")
 def raw_image_only(params: RawRenderParams):
     """仅返回纯图像（无标记），用于分层渲染优化"""
@@ -583,16 +659,20 @@ def raw_render(params: RawRenderParams):
     full_pts = compute_pts(raw_state.full_miller)
     output_pts = compute_pts(raw_state.output_miller)
 
+    ref_pts = compute_pts(raw_state.reference_points)
+
     pil_marked = draw_raw_markers(
         pil_img, full_pts, output_pts,
         params.cx, params.cy,
         show_labels=params.show_labels,
+        ref_pts=ref_pts,
     )
     return {
         "image": ImageRenderer.to_png_b64(pil_marked),
         "width": w, "height": h,
         "full_miller_count": len(full_pts),
         "output_miller_count": len(output_pts),
+        "reference_points_count": len(ref_pts),
         "pyfai_used": calc.has_invert_geom,
     }
 
@@ -613,6 +693,7 @@ async def int_upload_image(file: UploadFile = File(...)):
     int_state.image_shape = arr.shape
     int_state.full_miller = []
     int_state.output_miller = []
+    int_state.reference_points = []
 
     stats = image_stats(arr)
     h, w = arr.shape
@@ -719,6 +800,27 @@ def int_update_ranges(body: UpdateRangesBody):
     return {"message": "坐标范围已更新", "q_range": list(int_state.q_range), "az_range": list(int_state.az_range)}
 
 
+@router.post("/int/reference-points")
+async def int_upload_reference_points(file: UploadFile = File(...)):
+    """上传参考点文件（峰提取格式），存储到 2D 积分状态"""
+    if int_state.image is None:
+        raise HTTPException(status_code=400, detail="请先上传图像")
+
+    content = (await file.read()).decode('utf-8', errors='replace')
+    data = _parse_reference_file(content)
+    if not data:
+        raise HTTPException(status_code=400, detail="无法从文件解析有效参考点数据")
+
+    int_state.reference_points = data
+    return {"message": f"已导入 {len(data)} 个参考点 ← {file.filename}", "count": len(data)}
+
+
+@router.delete("/int/reference-points")
+def int_clear_reference_points():
+    int_state.reference_points = []
+    return {"message": "已清除参考点"}
+
+
 @router.post("/int/render")
 def int_render(params: IntRenderParams):
     """渲染 2D 积分图（含 Miller 标记），返回 base64 PNG"""
@@ -731,21 +833,40 @@ def int_render(params: IntRenderParams):
 
     full_mapped = mapper.map_miller_list(int_state.full_miller)
     output_mapped = mapper.map_miller_list(int_state.output_miller)
+    ref_mapped = mapper.map_miller_list(int_state.reference_points)
 
     q_lo, q_hi = int_state.q_range
-    crop_start = crop_end = None
-    crop_mask = None
     az_range = int_state.az_range
+    render_image = int_state.image
+    crop_start = crop_end = None
+    crop_extent = None   # if set, overrides az_range in extent
     if params.az_crop_enabled:
         crop_start, crop_end = mapper.crop_bounds(params.az_crop_min, params.az_crop_max)
         az_values = np.linspace(az_range[0], az_range[1], int_state.image.shape[0])
-        crop_mask = np.array(
+        mask = np.array(
             [mapper.azimuth_in_crop(az, crop_start, crop_end) for az in az_values],
             dtype=bool,
         )
-    crop_active = crop_start is not None and crop_end is not None
-    if crop_active:
-        assert crop_start is not None and crop_end is not None
+        indices = np.where(mask)[0]
+        if len(indices) > 0:
+            if crop_start <= crop_end:
+                # non-wrap: contiguous slice
+                render_image = int_state.image[indices[0]:indices[-1] + 1]
+            else:
+                # wrap: two segments — concatenate [az >= start] + [az <= end]
+                split = np.where(np.diff(indices) > 1)[0]
+                if len(split) > 0:
+                    at = split[0] + 1
+                    seg_hi = indices[at:]     # az >= start
+                    seg_lo = indices[:at]     # az <= end
+                    render_image = np.vstack([int_state.image[seg_hi], int_state.image[seg_lo]])
+                else:
+                    render_image = int_state.image[indices]
+            crop_extent = [crop_start, crop_end]
+        else:
+            # All rows cropped out — use 1-row empty image to avoid matplotlib error
+            render_image = int_state.image[:1] * 0
+            crop_extent = [crop_start, crop_end]
 
         def in_crop(azimuth: float) -> bool:
             return mapper.azimuth_in_crop(azimuth, crop_start, crop_end)
@@ -761,19 +882,14 @@ def int_render(params: IntRenderParams):
         m for m in output_mapped
         if q_lo <= m['q'] <= q_hi and in_crop(m['az'])
     ]
+    ref_mapped = [
+        m for m in ref_mapped
+        if q_lo <= m['q'] <= q_hi and in_crop(m['az'])
+    ]
 
     cmap_str = ImageRenderer.mpl_cmap(params.colormap)
     q_range = int_state.q_range
-    render_image = int_state.image
     cmap = copy(plt.get_cmap(cmap_str))
-    if crop_mask is not None:
-        masked_rows = ~crop_mask
-        if np.any(masked_rows):
-            render_image = np.ma.array(
-                int_state.image,
-                mask=np.broadcast_to(masked_rows[:, np.newaxis], int_state.image.shape),
-            )
-            cmap.set_bad(color='#1a1a2e')
 
     fig, ax = plt.subplots(figsize=(9, 7))
     fig.patch.set_facecolor('#1a1a2e')
@@ -794,7 +910,7 @@ def int_render(params: IntRenderParams):
         cmap=cmap,
         vmin=params.contrast_min,
         vmax=params.contrast_max,
-        extent=[q_range[0], q_range[1], az_range[0], az_range[1]],
+        extent=[q_range[0], q_range[1], *(crop_extent or [az_range[0], az_range[1]])],
     )
     ax.set_xlabel(r"$q$ ($\AA^{-1}$)", fontsize=12)
     ax.set_ylabel("Azimuth (°)", fontsize=12)
@@ -815,6 +931,14 @@ def int_render(params: IntRenderParams):
         ax.scatter(qs, azs, s=140, marker='D', facecolors='none',
                    edgecolors=_MPL_OUTPUT, linewidths=3.5, zorder=10, label="outputMiller")
 
+    _MPL_REF = '#ffd700'
+
+    if ref_mapped:
+        qs = [m['q'] for m in ref_mapped]
+        azs = [m['az'] for m in ref_mapped]
+        ax.scatter(qs, azs, s=160, marker='*', color=_MPL_REF,
+                   linewidths=2, zorder=12, label="Reference Points")
+
     handles = []
     if full_mapped:
         handles.append(mpatches.Patch(
@@ -822,12 +946,15 @@ def int_render(params: IntRenderParams):
     if output_mapped:
         handles.append(mpatches.Patch(
             facecolor='none', edgecolor=_MPL_OUTPUT, linewidth=3.5, label="outputMiller"))
+    if ref_mapped:
+        handles.append(mpatches.Patch(
+            facecolor=_MPL_REF, edgecolor=_MPL_REF, linewidth=2, label="Reference Points"))
     if handles:
         ax.legend(handles=handles, loc='upper right', fontsize=10, framealpha=0.9,
                   facecolor='#1a1a2e', edgecolor='#7ad6fb', labelcolor='#d8eeff')
 
     ax.set_xlim(q_range)
-    if crop_active:
+    if crop_extent is not None and crop_start is not None:
         ax.set_ylim(crop_start, crop_end)
     else:
         ax.set_ylim(az_range)
@@ -842,4 +969,5 @@ def int_render(params: IntRenderParams):
         "image": b64,
         "full_miller_count": len(full_mapped),
         "output_miller_count": len(output_mapped),
+        "reference_points_count": len(ref_mapped),
     }

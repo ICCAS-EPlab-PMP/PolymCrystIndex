@@ -40,15 +40,21 @@
                         @click="triggerUpload('rawOutputMiller')">
                   {{ t('visualizer.importOutputMiller') }} ◆
                 </button>
+                <button class="btn btn-gold" :disabled="!raw.imageLoaded"
+                        @click="triggerUpload('rawReferencePoints')">
+                  ★ {{ t('visualizer.importReferencePoints') }}
+                </button>
               </div>
               <div class="stat-labels">
                 <span class="lbl-full">{{ t('visualizer.fullMiller') }}: {{ raw.fullCount > 0 ? raw.fullCount + ' ' + t('visualizer.points') : t('visualizer.notLoaded') }}</span>
                 <span class="lbl-output">{{ t('visualizer.outputMiller') }}: {{ raw.outputCount > 0 ? raw.outputCount + ' ' + t('visualizer.points') : t('visualizer.notLoaded') }}</span>
+                <span class="lbl-ref">{{ t('visualizer.referencePointsCount', {count: raw.refCount}) }}</span>
               </div>
               <div class="btn-row">
                 <button class="btn" :disabled="!raw.imageLoaded" @click="saveRawImage">{{ t('visualizer.saveMarkedImage') }}</button>
                 <button class="btn" :disabled="!raw.imageLoaded || raw.fullCount === 0" @click="clearRawMillerType('full')">{{ t('visualizer.clearFullMiller') }}</button>
                 <button class="btn" :disabled="!raw.imageLoaded || raw.outputCount === 0" @click="clearRawMillerType('output')">{{ t('visualizer.clearOutputMiller') }}</button>
+                <button class="btn" :disabled="!raw.imageLoaded || raw.refCount === 0" @click="clearRawRef">{{ t('visualizer.clearReferencePoints') }}</button>
                 <button class="btn" :disabled="!raw.imageLoaded" @click="clearRawMiller">{{ t('visualizer.clearAllMarkers') }}</button>
               </div>
             </div>
@@ -154,6 +160,7 @@
               <div class="legend-row">
                 <span class="leg-cyan">■&nbsp;{{ t('visualizer.fullMiller') }}</span>
                 <span class="leg-orange">◆&nbsp;{{ t('visualizer.outputMiller') }}</span>
+                <span class="leg-gold">★&nbsp;{{ t('visualizer.refPointLegend') }}</span>
               </div>
             </div>
           </div>
@@ -183,9 +190,9 @@
             <div class="placeholder-text" v-else>
               {{ t('visualizer.pleaseImportDiffractionImage') }}<br/>
               (.tif / .edf / .cbf)
-              <template v-if="raw.fullCount > 0 || raw.outputCount > 0">
+              <template v-if="raw.fullCount > 0 || raw.outputCount > 0 || raw.refCount > 0">
                 <br/>
-                FullMiller: {{ raw.fullCount }} / outputMiller: {{ raw.outputCount }}
+                FullMiller: {{ raw.fullCount }} / outputMiller: {{ raw.outputCount }} / Ref: {{ raw.refCount }}
               </template>
             </div>
           </div>
@@ -215,15 +222,21 @@
                         @click="triggerUpload('intOutputMiller')">
                   {{ t('visualizer.importOutputMiller') }} ◆
                 </button>
+                <button class="btn btn-gold" :disabled="!int2d.imageLoaded"
+                        @click="triggerUpload('intReferencePoints')">
+                  ★ {{ t('visualizer.importReferencePoints') }}
+                </button>
               </div>
               <div class="stat-labels">
                 <span class="lbl-full">{{ t('visualizer.fullMiller') }}: {{ int2d.fullCount > 0 ? int2d.fullCount + ' ' + t('visualizer.points') : t('visualizer.notLoaded') }}</span>
                 <span class="lbl-output">{{ t('visualizer.outputMiller') }}: {{ int2d.outputCount > 0 ? int2d.outputCount + ' ' + t('visualizer.points') : t('visualizer.notLoaded') }}</span>
+                <span class="lbl-ref">{{ t('visualizer.referencePointsCount', {count: int2d.refCount}) }}</span>
               </div>
               <div class="btn-row">
                 <button class="btn" :disabled="!int2d.imageLoaded" @click="saveIntImage">{{ t('visualizer.saveMarkedImage') }}</button>
                 <button class="btn" :disabled="!int2d.imageLoaded || int2d.fullCount === 0" @click="clearIntMillerType('full')">{{ t('visualizer.clearFullMiller') }}</button>
                 <button class="btn" :disabled="!int2d.imageLoaded || int2d.outputCount === 0" @click="clearIntMillerType('output')">{{ t('visualizer.clearOutputMiller') }}</button>
+                <button class="btn" :disabled="!int2d.imageLoaded || int2d.refCount === 0" @click="clearIntRef">{{ t('visualizer.clearReferencePoints') }}</button>
                 <button class="btn" :disabled="!int2d.imageLoaded" @click="clearIntMiller">{{ t('visualizer.clearAllMarkers') }}</button>
               </div>
             </div>
@@ -306,6 +319,7 @@
               <div class="legend-row">
                 <span class="leg-cyan">●&nbsp;{{ t('visualizer.fullMillerCyan') }}</span>
                 <span class="leg-orange">◆&nbsp;{{ t('visualizer.outputMillerOrange') }}</span>
+                <span class="leg-gold">★&nbsp;{{ t('visualizer.refPointLegend') }}</span>
               </div>
             </div>
           </div>
@@ -368,6 +382,8 @@
     <input ref="fileIntInfo"     type="file" accept=".txt" style="display:none" @change="e=>onFileChange(e,'intInfo')" />
     <input ref="fileIntFull"     type="file" accept=".txt" style="display:none" @change="e=>onFileChange(e,'intFullMiller')" />
     <input ref="fileIntOutput"   type="file" accept=".txt" style="display:none" @change="e=>onFileChange(e,'intOutputMiller')" />
+    <input ref="fileRawRef"      type="file" accept=".txt,.csv" style="display:none" @change="e=>onFileChange(e,'rawReferencePoints')" />
+    <input ref="fileIntRef"      type="file" accept=".txt,.csv" style="display:none" @change="e=>onFileChange(e,'intReferencePoints')" />
   </div>
 </template>
 
@@ -427,6 +443,7 @@ const raw = reactive({
   poniLoaded: false,
   fullCount: 0,
   outputCount: 0,
+  refCount: 0,
   zoom: 1.0,
   panX: 0, panY: 0,
   p: {
@@ -442,6 +459,7 @@ const int2d = reactive({
   imgMin: 0, imgMax: 65535,
   fullCount: 0,
   outputCount: 0,
+  refCount: 0,
   zoom: 1.0,
   panX: 0, panY: 0,
   p: {
@@ -460,10 +478,12 @@ const fileRawImage = ref(null)
 const fileRawPoni = ref(null)
 const fileRawFull = ref(null)
 const fileRawOutput = ref(null)
+const fileRawRef = ref(null)
 const fileIntImage = ref(null)
 const fileIntInfo = ref(null)
 const fileIntFull = ref(null)
 const fileIntOutput = ref(null)
+const fileIntRef = ref(null)
 
 const rawImgStyle = computed(() => ({
   transform: `translate(${raw.panX}px, ${raw.panY}px) scale(${raw.zoom})`,
@@ -590,6 +610,8 @@ const refMap = {
   intInfo: () => fileIntInfo.value,
   intFullMiller: () => fileIntFull.value,
   intOutputMiller: () => fileIntOutput.value,
+  rawReferencePoints: () => fileRawRef.value,
+  intReferencePoints: () => fileIntRef.value,
 }
 
 function triggerUpload(key) {
@@ -611,6 +633,8 @@ async function onFileChange(e, key) {
       case 'intInfo': await uploadIntInfo(file); break
       case 'intFullMiller': await uploadIntMiller(file, 'full'); break
       case 'intOutputMiller': await uploadIntMiller(file, 'output'); break
+      case 'rawReferencePoints': await uploadRawReferencePoints(file); break
+      case 'intReferencePoints': await uploadIntReferencePoints(file); break
     }
   } catch(err) {
     setStatus('Error: ' + (err.response?.data?.detail || err.message))
@@ -632,6 +656,7 @@ async function uploadRawImage(file) {
   raw.p.cmax = Math.ceil(data.p99 ?? data.max)
   raw.fullCount = 0
   raw.outputCount = 0
+  raw.refCount = 0
   raw.poniLoaded = false
   setStatus(data.message)
   await renderRaw({ preserveView: false })
@@ -666,11 +691,28 @@ async function uploadRawMiller(file, type) {
   await renderRaw({ preserveView: true })
 }
 
+async function uploadRawReferencePoints(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  const { data } = await axios.post(`${API_BASE}/raw/reference-points`, fd)
+  raw.refCount = data.count
+  setStatus(data.message)
+  await renderRaw({ preserveView: true })
+}
+
+async function clearRawRef() {
+  await axios.delete(`${API_BASE}/raw/reference-points`)
+  raw.refCount = 0
+  setStatus('Reference points cleared')
+  await renderRaw({ preserveView: true })
+}
+
 async function clearRawMiller() {
   await axios.delete(`${API_BASE}/raw/miller?miller_type=all`)
   raw.fullCount = 0
   raw.outputCount = 0
-  setStatus('All Miller markers cleared')
+  raw.refCount = 0
+  setStatus('All markers cleared')
   await renderRaw({ preserveView: true })
 }
 
@@ -706,6 +748,7 @@ async function renderRaw({ preserveView = true } = {}) {
     raw.imageSrc = data.image
     raw.fullCount = data.full_miller_count ?? 0
     raw.outputCount = data.output_miller_count ?? 0
+    raw.refCount = data.reference_points_count ?? raw.refCount
     const msg = `Rendered | FullMiller: ${data.full_miller_count} pts | outputMiller: ${data.output_miller_count} pts${data.pyfai_used ? ' | pyFAI ✓' : ' | Manual geometry'}`
     setStatus(msg)
     return data.image
@@ -767,6 +810,7 @@ async function uploadIntImage(file) {
   int2d.p.cmax = Math.ceil(data.p99 ?? data.max)
   int2d.fullCount = 0
   int2d.outputCount = 0
+  int2d.refCount = 0
   setStatus(data.message)
   await renderInt({ preserveView: false })
   emit('raw-session-ready')
@@ -797,11 +841,28 @@ async function uploadIntMiller(file, type) {
   await renderInt({ preserveView: true })
 }
 
+async function uploadIntReferencePoints(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  const { data } = await axios.post(`${API_BASE}/int/reference-points`, fd)
+  int2d.refCount = data.count
+  setStatus(data.message)
+  await renderInt({ preserveView: true })
+}
+
+async function clearIntRef() {
+  await axios.delete(`${API_BASE}/int/reference-points`)
+  int2d.refCount = 0
+  setStatus('Reference points cleared')
+  await renderInt({ preserveView: true })
+}
+
 async function clearIntMiller() {
   await axios.delete(`${API_BASE}/int/miller?miller_type=all`)
   int2d.fullCount = 0
   int2d.outputCount = 0
-  setStatus('All Miller markers cleared')
+  int2d.refCount = 0
+  setStatus('All markers cleared')
   await renderInt({ preserveView: true })
 }
 
@@ -847,7 +908,9 @@ async function renderInt({ preserveView = true } = {}) {
     int2d.imageSrc = data.image
     int2d.fullCount = data.full_miller_count ?? 0
     int2d.outputCount = data.output_miller_count ?? 0
-    setStatus(`Rendered | FullMiller: ${data.full_miller_count} pts | outputMiller: ${data.output_miller_count} pts`)
+    int2d.refCount = data.reference_points_count ?? int2d.refCount
+    const ptsMsg = `FullMiller: ${data.full_miller_count} pts | outputMiller: ${data.output_miller_count} pts${data.reference_points_count != null ? ' | Ref: ' + data.reference_points_count + ' pts' : ''}`
+    setStatus(`Rendered | ${ptsMsg}`)
     return data.image
   } finally {
     loading.value = false
@@ -880,6 +943,8 @@ onMounted(async () => {
     const { data } = await axios.get(`${API_BASE}/status`)
     status.fabio = data.fabio
     status.pyfai = data.pyfai
+    raw.refCount = data.raw_reference_points ?? 0
+    int2d.refCount = data.int_reference_points ?? 0
     setStatus(`Backend connected — pyFAI: ${data.pyfai ? '✓' : '✗'}  fabio: ${data.fabio ? '✓' : '✗'}`)
   } catch {
     setStatus('⚠ Cannot connect to backend, please confirm the backend is running')
@@ -897,15 +962,17 @@ async function loadFromWorkDir(dir) {
     if (data.full_miller_count !== undefined) raw.fullCount = data.full_miller_count
     if (data.output_miller_count !== undefined) raw.outputCount = data.output_miller_count
     if (props.resultType === 'indexing') {
-      indexedOverlayGroups.value = data.output_miller_content
-        ? [{
+      if (data.full_miller_content || data.output_miller_content) {
+        indexedOverlayGroups.value = [{
             label: 'outputMiller',
-            fullMillerContent: '',
-            outputMillerContent: data.output_miller_content,
+            fullMillerContent: data.full_miller_content || '',
+            outputMillerContent: data.output_miller_content || '',
             workDir: dir,
-            totalReflections: data.output_miller_count || 0,
+            totalReflections: (data.output_miller_count || 0) + (data.full_miller_count || 0),
           }]
-        : []
+      } else {
+        indexedOverlayGroups.value = []
+      }
     }
     if (data.poni) {
       raw.poniLoaded = true
@@ -926,8 +993,6 @@ async function loadFromWorkDir(dir) {
       raw.p.cmax = Math.ceil(data.p99 ?? data.max ?? 65535)
       await renderRaw({ preserveView: false })
       if (props.resultType === 'indexing') {
-        await axios.delete(`${API_BASE}/raw/miller?miller_type=full`)
-        raw.fullCount = 0
         if (indexedOverlayGroups.value.length) {
           await loadOverlayGroups()
         }
@@ -1222,6 +1287,20 @@ onBeforeUnmount(() => {
   background: #d97706;
 }
 
+.btn-gold {
+  background: rgba(212, 175, 55, 0.12);
+  color: #b8860b;
+}
+
+.btn-gold:hover {
+  background: #d4a017;
+  color: var(--text-inverse);
+}
+
+.btn-gold:active {
+  background: #b8860b;
+}
+
 .btn-row {
   display: flex;
   gap: 6px;
@@ -1309,6 +1388,11 @@ onBeforeUnmount(() => {
   color: var(--miller-output);
 }
 
+.lbl-ref {
+  font: italic 11px var(--font-sans);
+  color: #b8860b;
+}
+
 .legend-row {
   display: flex;
   gap: 12px;
@@ -1325,6 +1409,10 @@ onBeforeUnmount(() => {
 
 .leg-orange {
   color: var(--cta);
+}
+
+.leg-gold {
+  color: #b8860b;
 }
 
 .check-row {

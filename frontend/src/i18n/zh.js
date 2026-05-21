@@ -422,6 +422,7 @@ export default {
     outputMillerLabel: 'outputMiller',
     cellLabel: '晶胞',
     goToResultsProcessing: '前往结果处理',
+    backToIndexingResults: '返回指标化结果',
     angleZeroingTitle: '强制直角归正',
     angleZeroingAdapted: '✓ 适配',
     angleZeroingNotAdapted: '✗ 不适配',
@@ -523,7 +524,14 @@ export default {
     rawImageMode: '原始衍射图',
     integrationMode: '2D 积分图',
     loadFailed: '加载图像失败',
-    loaded: '已加载'
+    loaded: '已加载',
+    importReferencePoints: '导入参考点 (★)',
+    importReferencePointsFile: '导入参考点文件',
+    referencePoints: '参考点',
+    clearReferencePoints: '清除参考点',
+    referencePointsCount: '参考点: {count} 个',
+    refPointLegend: '★ 参考点',
+    refPointImportTip: '支持峰提取导出的 txt/csv 格式'
   },
   about: {
     title: '关于',

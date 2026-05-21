@@ -541,6 +541,7 @@ def draw_raw_markers(
     output_pts: list[dict],
     cx: float, cy: float,
     show_labels: bool = True,
+    ref_pts: Optional[list[dict]] = None,
 ) -> Image.Image:
     """
     在 PIL Image 上绘制:
@@ -599,4 +600,26 @@ def draw_raw_markers(
         draw_group(pts, color, draw_square)
 
     draw_group(output_pts, ORANGE, draw_diamond)
+
+    if ref_pts:
+        draw_reference_markers(draw, ref_pts)
+
     return img
+
+
+def draw_reference_markers(draw: ImageDraw.Draw, ref_pts: Optional[list[dict]] = None, size: int = 10):
+    if not ref_pts:
+        return
+    GOLD = (255, 215, 0)
+    outer = size
+    inner = int(round(size * 0.382))
+    for pt in ref_pts:
+        cx, cy = int(round(pt['x'])), int(round(pt['y']))
+        angles = [math.radians(90 - i * 72) for i in range(5)]
+        poly = []
+        for i in range(5):
+            a = angles[i]
+            poly.append((cx + int(round(outer * math.cos(a))), cy - int(round(outer * math.sin(a)))))
+            a_mid = a - math.radians(36)
+            poly.append((cx + int(round(inner * math.cos(a_mid))), cy - int(round(inner * math.sin(a_mid)))))
+        draw.polygon(poly, fill=GOLD)

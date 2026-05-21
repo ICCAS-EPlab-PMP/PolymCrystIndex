@@ -816,7 +816,8 @@ const removeScGlideGroup = (idx) => {
 const generateScGlide = async () => {
   error.value = null
   scGlideGenerating.value = true
-  scGlideResult.value = null
+  results.value = null
+  reverseResult.value = null
 
   const validGroups = scGlideGroups.filter(g => Math.round(g.l0) !== 0)
   if (validGroups.length === 0) {
@@ -844,6 +845,17 @@ const generateScGlide = async () => {
     )
     if (res.success && res.data) {
       scGlideResult.value = res.data
+      const firstGroup = res.data?.glideBatchOutputs?.groups?.find(g => g.workDir || g.fullMillerContent)
+      selectedSingleLabel.value = firstGroup?.label || ''
+      selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
+      browseMode.value = 'single'
+      keepBrowseExpanded.value = true
+      browseExpanded.value = true
+      if (visualizerReady.value && firstGroup) {
+        importSelectionKey.value += 1
+      } else {
+        importSelectionKey.value = 0
+      }
     } else {
       error.value = res.message || t('glide.generationFailed')
     }
@@ -906,7 +918,8 @@ const generate = async () => {
 const generateReverse = async () => {
   error.value = null
   reverseGenerating.value = true
-  reverseResult.value = null
+  results.value = null
+  scGlideResult.value = null
 
   const validCandidates = reverseCandidates.filter(candidate => Math.round(candidate.l0) !== 0)
   if (validCandidates.length === 0) {

@@ -314,6 +314,30 @@ def _angle_between(left: List[float], right: List[float]) -> float:
     return postprocess_core._angle_between(left, right)
 
 
+def _determine_symmetry_merge_mode(
+    alpha_deg: float, beta_deg: float, gamma_deg: float, tol: float = 3.0
+) -> int:
+    """与 Fortran determine_symmetry_merge_mode 一致。
+
+    Returns:
+        0 = 无对称 / 三斜, 1 = 正交, 2 = α-unique 单斜,
+        3 = β-unique 单斜, 4 = γ-unique 单斜
+    """
+    alpha_near = abs(alpha_deg - 90.0) <= tol
+    beta_near = abs(beta_deg - 90.0) <= tol
+    gamma_near = abs(gamma_deg - 90.0) <= tol
+
+    if alpha_near and beta_near and gamma_near:
+        return 1
+    elif (not alpha_near) and beta_near and gamma_near:
+        return 2
+    elif alpha_near and (not beta_near) and gamma_near:
+        return 3
+    elif alpha_near and beta_near and (not gamma_near):
+        return 4
+    return 0
+
+
 def _apply_glide_to_cell(
     cell_params: List[float], n_a: float, n_b: float, l0: float
 ) -> List[float]:
@@ -599,20 +623,97 @@ class IndexingService:
             }
             return results_data
 
-        merge_mode = 0
+        # 尝试从 Fortran 输出的 dedup_conflicts.txt 获取真实冲突信息
+        dedup_peaks = []
+        dedup_conflicts = 0
+        work_dir = results_data.get("workDir")
+        if work_dir:
+            conflict_file = os.path.join(work_dir, "dedup_conflicts.txt")
+            if os.path.exists(conflict_file):
+                try:
+                    with open(conflict_file, "r") as _f:
+                        for _line in _f:
+                            _s = _line.strip()
+                            if not _s or _s.startswith("#") or _s.startswith("-"):
+                                continue
+                            parts = _s.split()
+                            if len(parts) >= 8 and parts[-1] == "REMAP":
+                                peak_idx = int(parts[0])
+                                dedup_peaks.append(peak_idx)
+                                dedup_conflicts += 1
+                except (OSError, ValueError, IndexError):
+                    pass
+
+        if dedup_conflicts > 0:
+            # Fortran 报告了实际冲突，直接使用
+            results_data["deduplicate"] = {
+                "enabled": True,
+                "usedHklCount": total_peaks - dedup_conflicts,
+                "totalPeaks": total_peaks,
+                "conflictsResolved": dedup_conflicts,
+                "deduplicatedPeakIndices": dedup_peaks,
+                "symmetryApplied": [],
+            }
+            return results_data
+
+        # 回退：从最终 HKL 去重统计（仅在无 dedup_conflicts.txt 时使用）
+        cell_params = results_data.get("cellParams", {}) or {}
+        merge_mode = _determine_symmetry_merge_mode(
+            cell_params.get("alpha", 90),
+            cell_params.get("beta", 90),
+            cell_params.get("gamma", 90),
+        )
+        # sym_stat 始终为 0（Python 端硬编码）→ dedup 不使用对称等价比较
+        if merge_mode != 0:
+            merge_mode = 0
 
         def canonical_hkl(h, k, l, mode):
+            """两步归一 canonical form（与 Fortran 版一致）。
+
+            第一层：轴向 Friedel 对（mode 无关，abs 正确）
+            第二层：l=0 面内反射（mode 感知）
+            第三层：l≠0 体反射（两步归一：独立 abs 是错的，符号联动）
+            """
+            # ── 第一层：轴向反射（至少两个 index 为 0）──
             if h == 0 and k == 0:
                 return (0, 0, abs(l))
             elif h == 0 and l == 0:
                 return (0, abs(k), 0)
             elif k == 0 and l == 0:
                 return (abs(h), 0, 0)
+
+            # ── 第二层：l=0 面内反射 ──
             if l == 0:
-                if h < 0:
-                    return (-h, -k, 0)
-                return (h, k, 0)
-            return (h, k, l)
+                if mode in (1, 2, 3):
+                    return (abs(h), abs(k), 0)
+                else:  # mode=0 或 4: Friedel 对 (h,k,0)~(-h,-k,0)
+                    return (h, k, 0) if h >= 0 else (-h, -k, 0)
+
+            # ── 第三层：l≠0 体反射，两步归一 ──
+            hc, kc, lc = h, k, l
+
+            if mode == 1:
+                return (abs(h), abs(k), abs(l))
+            elif mode == 2:
+                if hc < 0:
+                    hc, kc, lc = -hc, -kc, -lc
+                if kc < 0 or (kc == 0 and lc < 0):
+                    kc, lc = -kc, -lc
+                return (hc, kc, lc)
+            elif mode == 3:
+                if kc < 0:
+                    hc, kc, lc = -hc, -kc, -lc
+                if hc < 0 or (hc == 0 and lc < 0):
+                    hc, lc = -hc, -lc
+                return (hc, kc, lc)
+            elif mode == 4:
+                if lc < 0:
+                    hc, kc, lc = -hc, -kc, -lc
+                if hc < 0 or (hc == 0 and kc < 0):
+                    hc, kc = -hc, -kc
+                return (hc, kc, lc)
+            else:
+                return (h, k, l)
 
         canonical_set = set()
         for md in miller_data:
@@ -1191,7 +1292,10 @@ class IndexingService:
             dedup_penalty_val = 1.0
         lines.append(str(dedup_penalty_val))
 
-        if len(lines) != 31:
+        dedup_sym_mode = 1 if getattr(params, "angleZeroingEnabled", False) else 0
+        lines.append(str(dedup_sym_mode))
+
+        if len(lines) != 32:
             raise ValueError(f"Unexpected input.txt line count: {len(lines)}")
 
         work_dir_abs = os.path.abspath(work_dir)
@@ -1717,8 +1821,8 @@ class IndexingService:
                 "0",
                 "0",
                 "0",
-                "0",
                 "1.0",
+                "0",
             ]
             if len(lines) != 32:
                 return {"success": False, "message": f"Unexpected glide input line count: {len(lines)}"}

@@ -321,7 +321,8 @@ async function onImportRecords(e) {
     const { data } = await intApi.importRecords(file, sessionId.value)
     peakRecords.value = Array.isArray(data.records) ? data.records : []
     rtab.value = 'records'
-    refreshHeatmap()
+    // BUG FIX: update markers in-place instead of rebuildHeatmap (which resets the view)
+    await updateMarkersOnly()
     window.$toast?.(`已导入 ${data.imported_count ?? peakRecords.value.length} 条记录`)
   } catch (err) {
     window.$toast?.(err.response?.data?.detail || err.message, true)
@@ -356,7 +357,11 @@ async function applyRanges() {
     qAxis.value  = data.q_axis
     azAxis.value = data.az_axis
     sliceCenter.value = null
-    drawHeatmap()
+
+    // Force-reset the view to the new range (crop or full). Do NOT preserve
+    // the previous zoom/pan — the user explicitly requires a hard reset here.
+    drawHeatmap(false)
+
     emit('status', `Range: q[${qMin.value},${qMax.value}] Az[${azMin.value}°,${azMax.value}°]`)
   } catch(err) { window.$toast?.(err.response?.data?.detail || err.message, true) }
 }
@@ -420,27 +425,29 @@ function _addHeatmapClickListener(el, onPick) {
   }
 }
 
-function drawHeatmap() {
+function drawHeatmap(preserveView = true) {
   if (!zData.value.length) return
   import('plotly.js-dist-min').then(Plotly => {
-    // BUG FIX: preserve zoom/viewport across newPlot so contrast/colormap
-    // changes (via refreshHeatmap) don't reset the user's view.
+    // Only preserve zoom across contrast/colormap changes (refreshHeatmap).
+    // When preserveView=false (e.g. onCropChange), let buildLayout set the range.
     let savedRange = null
-    try {
-      const fl = heatmapDiv.value._fullLayout
-      if (fl && fl.xaxis && fl.yaxis && fl.xaxis.range && fl.yaxis.range) {
-        savedRange = {
-          x: [fl.xaxis.range[0], fl.xaxis.range[1]],
-          y: [fl.yaxis.range[0], fl.yaxis.range[1]],
+    if (preserveView) {
+      try {
+        const fl = heatmapDiv.value._fullLayout
+        if (fl && fl.xaxis && fl.yaxis && fl.xaxis.range && fl.yaxis.range) {
+          savedRange = {
+            x: [fl.xaxis.range[0], fl.xaxis.range[1]],
+            y: [fl.yaxis.range[0], fl.yaxis.range[1]],
+          }
         }
-      }
-    } catch (_) { /* ignore */ }
+      } catch (_) { /* ignore */ }
+    }
 
     const filtered = getFilteredHeatmapData()
     const traces = buildTraces()
     const layout = buildLayout(filtered)
 
-    // Restore zoom if available
+    // Restore zoom if available (skipped for crop changes)
     if (savedRange) {
       layout.xaxis.range = savedRange.x
       layout.yaxis.range = savedRange.y
@@ -507,10 +514,13 @@ function buildTraces() {
 }
 
 function buildLayout(filtered = getFilteredHeatmapData()) {
+  // crop only stretches the y-axis view — does not filter data rows
   const cropRange = getCropAzRange()
   const yRange = cropRange
     ? [cropRange.start, cropRange.end]
-    : [azMin.value, azMax.value]
+    : (filtered.az.length > 0
+      ? [filtered.az[0], filtered.az[filtered.az.length - 1]]
+      : [azMin.value, azMax.value])
 
   const annotations = []
   if (!filtered.hasData) {
@@ -724,9 +734,10 @@ function getCropAzRange() {
 }
 
 function getFilteredHeatmapData() {
+  // azimuth crop only stretches the y-axis range — data is never trimmed
   const az = [...azAxis.value]
   const z = zData.value.map(row => [...(row || [])])
-  const hasData = azAxis.value.length > 0
+  const hasData = az.length > 0
   return { az, z, hasData }
 }
 
@@ -767,6 +778,27 @@ function clearSlices() {
   })
 }
 
+// BUG FIX: update scatter markers on the existing heatmap without rebuilding it
+async function updateMarkersOnly() {
+  const Plotly = await import('plotly.js-dist-min')
+  const el = heatmapDiv.value
+  if (!el || !el.data || !el.data.length) { drawHeatmap(); return }
+  const recs = peakRecords.value
+  const markerTrace = {
+    type: 'scatter', mode: 'markers',
+    x: recs.map(r => r.q),
+    y: recs.map(r => r.azimuth),
+    marker: { color: '#ff3300', size: 10, symbol: 'x', line: { width: 2 } },
+    name: 'Recorded',
+    showlegend: false,
+    hoverinfo: 'skip',
+  }
+  // Keep heatmap trace + update marker trace; preserve full layout with annotations
+  const traces = [el.data[0], markerTrace]
+  const layout = buildLayout()
+  Plotly.react(el, traces, layout, { responsive: true, displayModeBar: false, scrollZoom: true })
+}
+
 function setMode(m) {
   mode.value = m
   clearSelection()
@@ -787,7 +819,9 @@ function onCropChange() {
   selectedQ.value = null
   selectedAz.value = null
   foundPeaks.value = null
-  drawHeatmap()
+  // preserveView=false — let buildLayout apply the new crop y-axis range,
+  // don't restore the previous view which would override the crop.
+  drawHeatmap(false)
 }
 
 watch(cropP, onCropChange, { deep: true })

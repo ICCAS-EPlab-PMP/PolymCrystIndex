@@ -422,7 +422,7 @@ export default {
     outputMillerLabel: 'outputMiller',
     cellLabel: 'Cell',
     goToResultsProcessing: 'Go to Results & Processing',
-    backToIndexingResults: '← Back to Indexing Results',
+    backToIndexingResults: 'Back to Indexing Results',
     mergeConsistencyTitle: 'Merge Consistency Residual',
     angleZeroingTitle: 'Forced Right-Angle Rectification',
     angleZeroingAdapted: '✓ Adapted',
@@ -525,7 +525,14 @@ export default {
     rawImageMode: 'Raw Diffraction',
     integrationMode: '2D Integration',
     loadFailed: 'Failed to load image',
-    loaded: 'Loaded'
+    loaded: 'Loaded',
+    importReferencePoints: 'Import Ref Points (★)',
+    importReferencePointsFile: 'Import Reference Points File',
+    referencePoints: 'Reference Points',
+    clearReferencePoints: 'Clear Ref Points',
+    referencePointsCount: 'Ref Points: {count}',
+    refPointLegend: '★ Reference Points',
+    refPointImportTip: 'Supports peak-exported txt/csv format'
   },
   about: {
     title: 'About',

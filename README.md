@@ -93,9 +93,11 @@ For environment requirements, see `deploy/README.md`: Python 3.9+, Node.js 16+, 
 
 ### macOS（未测试） / macOS (untested)
 
-我们目前没有 macOS 设备，也**没有发布经过验证的 macOS 安装包**。以下方式仅作为与 Linux 相近的参考流程，**未经过官方测试**。
-
-We do not currently maintain or test macOS devices, and we **do not provide a validated macOS release package** at this time. The following is a Linux-like reference workflow only and is **not officially validated**.
+> ⚠️ **注意：macOS 部署未经官方测试或验证。以下说明仅供参考，可能需要手动调整。**
+> 我们目前没有 macOS 设备，也**没有发布经过验证的 macOS 安装包**。
+>
+> ⚠️ **WARNING: macOS deployment is NOT officially tested or supported. The following is provided as reference only and may require manual adjustments.**
+> We do not currently maintain or test macOS devices, and we **do not provide a validated macOS release package** at this time.
 
 ```bash
 # example only; adjust to your own source package layout

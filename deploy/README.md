@@ -1,158 +1,349 @@
-# PolyCryIndex 部署指南
+[中文版](README.zh.md)
 
-## 服务器环境要求
+# PolyCryIndex Server Deployment Guide
 
-| 依赖 | 最低版本 | 用途 |
-|------|---------|------|
-| 操作系统 | Rocky 9 / Ubuntu 20.04+ / CentOS 7+ | 运行环境 |
-| Python | 3.9+ | 后端运行时 |
-| Node.js | 16+ | 构建 `frontend` |
-| gfortran | 任意可用版本 | 编译 `fortrancode` |
+## Requirements
 
-## 源码与安装语义
+| Dependency | Minimum Version | Purpose |
+|------------|----------------|---------|
+| OS | Rocky 9 / Ubuntu 20.04+ / CentOS 7+ / macOS 12+ | Runtime |
+| Python | 3.9+ | Backend runtime |
+| Node.js | 16+ | Frontend build |
+| gfortran | Any available version | Fortran optimizer compilation |
+| curl | Any available version | Health check |
 
-- 当前 GitHub 仓库根目录就是源码入口
-- Linux 部署脚本入口：`deploy/server/*.sh`
-- 安装目标目录仍保持 Workspace 语义：`/opt/polycryindex/Workspace/...`
-- `APP_PROFILE` 是主 profile 入口；Linux 部署固定写入 `APP_PROFILE=cloud`
-- `APP_ENV` 仅保留兼容；默认写入 `beta`
+---
 
-## 安装目录标准
+## Installation Directory Structure
 
 ```text
-/opt/polycryindex/
+/opt/polycryindex-pre/
 ├── Workspace/
 │   ├── backend/
-│   │   ├── .env
-│   │   ├── run_prod.py
-│   │   ├── temp/
-│   │   ├── result/
-│   │   ├── hdf5/
-│   │   ├── userresult/
-│   │   ├── workdir/
-│   │   └── figures/
+│   │   ├── .env                  ← Auto-generated config (with keys)
+│   │   ├── run_prod.py           ← Backend entry point
+│   │   ├── users.db              ← User database (auto-created)
+│   │   ├── temp/                 ← User uploads
+│   │   ├── result/               ← Analysis results
+│   │   ├── hdf5/                 ← HDF5 data
+│   │   ├── userresult/           ← User-defined results
+│   │   ├── workdir/              ← Working directory
+│   │   └── figures/              ← Chart output
 │   ├── frontend/
-│   │   └── dist/
+│   │   └── dist/                 ← Built frontend
 │   ├── fortrancode/
-│   │   ├── lm_opt2
-│   │   └── lm_postprocess
-│   ├── fiber_diffraction_indexing/
-│   └── deploy/
-│       └── systemd/
-│           └── polycryindex.service
-├── venv/
-└── logs/
+│   │   ├── lm_opt2               ← Main optimizer
+│   │   └── lm_postprocess        ← Post-processing program
+│   └── fiber_diffraction_indexing/
+├── venv/                         ← Python virtual environment
+└── logs/                         ← Runtime logs
 ```
 
-## 推荐方式：一键部署
+---
 
-### root / systemd 方式
+## First Deployment
+
+### Linux (root)
+
+```bash
+# 1. Clone source code
+git clone https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex.git
+cd PolymCrystalIndex/deploy/server
+
+# 2. One-click deployment (systemd for long-term running)
+sudo APP_PROFILE=cloud DEPLOY_MODE=1 bash ./deploy_linux.sh
+
+# Or standard mode (nohup, suitable for temporary testing)
+sudo APP_PROFILE=cloud DEPLOY_MODE=0 bash ./deploy_linux.sh
+```
+
+### Linux (current user)
+
+No root privileges required. Installs to `$HOME/.local/share/polycryindex-pre/`:
 
 ```bash
 cd deploy/server
-sudo APP_PROFILE=cloud bash ./deploy_linux.sh
+APP_PROFILE=cloud DEPLOY_MODE=1 bash ./install_user_linux.sh
 ```
 
-### 当前用户方式
+> User-level systemd services do not continue running after logout by default. To enable persistent running:
+> ```bash
+> sudo loginctl enable-linger $USER
+> ```
+
+### macOS
+
+> ⚠️ **WARNING: macOS deployment is NOT officially tested or supported. The following instructions are provided as a reference only and may require manual adjustments.**
+
+macOS does not support systemd; manual deployment is required:
 
 ```bash
-cd deploy/server
-APP_PROFILE=cloud bash ./install_user_linux.sh
-```
+# 1. Install dependencies
+brew install python node gfortran curl
 
-脚本会自动完成：
+# 2. Clone source code
+git clone https://github.com/ICCAS-EPlab-PMP/PolymCrystalIndex.git
+cd PolymCrystalIndex
 
-1. 从当前仓库根目录复制源码到安装目录中的 `Workspace/`
-2. 创建 `venv/` 并安装 `Workspace/backend/requirements.txt`
-3. 编译 `Workspace/fortrancode/` 中的 Fortran 程序
-4. 以 `VITE_APP_PROFILE=cloud` 构建 `Workspace/frontend/`
-5. 生成 `Workspace/backend/.env`
-6. 启动 `run_prod.py` 并执行 `http://127.0.0.1:8000/health`
-
-## 手动部署要点
-
-```bash
-sudo mkdir -p /opt/polycryindex/Workspace
-sudo rsync -a ./ /opt/polycryindex/Workspace/
-cd /opt/polycryindex
+# 3. Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r Workspace/backend/requirements.txt
-cd Workspace/frontend
+pip install -r backend/requirements.txt
+pip install -r fiber_diffraction_indexing/requirements.txt
+
+# 4. Compile Fortran
+cd fortrancode
+gfortran -O2 -o lm_opt2 minpack.f90 lm_opt2.f90
+gfortran -O2 -o lm_postprocess out.f90
+cd ..
+
+# 5. Build frontend
+cd frontend
 npm ci
 APP_PROFILE=cloud VITE_APP_PROFILE=cloud npm run build
+cd ..
+
+# 6. Create runtime directories
+mkdir -p backend/{temp,result,hdf5,userresult,workdir,figures}
+
+# 7. Generate config file
+cat > backend/.env <<'EOF'
+SECRET_KEY=$(openssl rand -hex 32)
+DEFAULT_ADMIN_PASSWORD=$(python3 -c "import secrets; print(''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789') for _ in range(16)))")
+FORTRAN_EXECUTABLE=$(pwd)/fortrancode/lm_opt2
+FORTRAN_POSTPROCESS_EXECUTABLE=$(pwd)/fortrancode/lm_postprocess
+APP_PROFILE=cloud
+APP_ENV=production
+HOST=127.0.0.1
+PORT=8000
+ENABLE_DOCS=false
+LOG_LEVEL=warning
+CORS_ORIGINS=["http://localhost:8000","http://127.0.0.1:8000"]
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+MAX_JOBS=1
+OMP_NUM_THREADS=4
+UPLOAD_DIR=$(pwd)/backend/temp
+RESULT_DIR=$(pwd)/backend/result
+HDF5_DIR=$(pwd)/backend/hdf5
+USER_RESULT_DIR=$(pwd)/backend/userresult
+WORKING_DIR=$(pwd)/backend/workdir
+EOF
+
+# 8. Start the service
+cd backend
+nohup ../venv/bin/python run_prod.py > ../logs/polycryindex.out 2>&1 &
+echo $! > ../logs/polycryindex.pid
 ```
 
-## 环境变量重点
+---
 
-| 配置项 | 说明 | Linux 部署默认值 |
-|--------|------|------------------|
-| `APP_PROFILE` | 主 profile 标识 | `cloud` |
-| `APP_ENV` | 向后兼容环境标识 | `beta` |
-| `SECRET_KEY` | JWT 签名密钥 | 自动生成 |
-| `DEFAULT_ADMIN_PASSWORD` | 管理员初始密码 | 自动生成 |
-| `FORTRAN_EXECUTABLE` | 主优化程序路径 | `/opt/polycryindex/Workspace/fortrancode/lm_opt2` |
-| `FORTRAN_POSTPROCESS_EXECUTABLE` | 后处理程序路径 | `/opt/polycryindex/Workspace/fortrancode/lm_postprocess` |
-| `ENABLE_DOCS` | 是否暴露 docs | `false` |
-| `LOG_LEVEL` | 日志级别 | `warning` |
+## Updating (Upgrade to New Version)
 
-## systemd 路径
+### Update Principles
 
-模板文件位于仓库：`deploy/systemd/polycryindex.service`
+- When updating code, **user data is automatically preserved** (temp, result, hdf5, userresult, workdir, figures)
+- **Secrets and admin password are automatically preserved** (will not be overwritten)
+- Other `.env` configuration items will be updated to new version defaults
 
-关键路径：
+### Linux Update
 
-- `WorkingDirectory=/opt/polycryindex/Workspace/backend`
-- `ExecStart=/opt/polycryindex/venv/bin/python run_prod.py`
-- `EnvironmentFile=/opt/polycryindex/Workspace/backend/.env`
+```bash
+# 1. Pull latest code
+cd /path/to/PolymCrystalIndex
+git pull
 
-## 健康检查与验证
+# 2. Re-run the deployment script (user data will be automatically preserved)
+cd deploy/server
+sudo APP_PROFILE=cloud DEPLOY_MODE=1 bash ./deploy_linux.sh
+
+# The script will automatically:
+# - Sync new code (preserving user data directories)
+# - Preserve existing SECRET_KEY and admin password
+# - Update Python dependencies
+# - Recompile Fortran
+# - Rebuild frontend
+# - Restart the service
+```
+
+### macOS Update
+
+> ⚠️ **WARNING: macOS deployment is NOT officially tested or supported. The following instructions are provided as a reference only and may require manual adjustments.**
+
+```bash
+# 1. Pull latest code
+cd /path/to/PolymCrystalIndex
+git pull
+
+# 2. Stop old service
+kill $(cat logs/polycryindex.pid)
+
+# 3. Update dependencies
+source venv/bin/activate
+pip install -r backend/requirements.txt
+pip install -r fiber_diffraction_indexing/requirements.txt
+
+# 4. Recompile Fortran
+cd fortrancode
+gfortran -O2 -o lm_opt2 minpack.f90 lm_opt2.f90
+gfortran -O2 -o lm_postprocess out.f90
+cd ..
+
+# 5. Rebuild frontend
+cd frontend
+npm ci
+APP_PROFILE=cloud VITE_APP_PROFILE=cloud npm run build
+cd ..
+
+# 6. Restart service
+cd backend
+nohup ../venv/bin/python run_prod.py > ../logs/polycryindex.out 2>&1 &
+echo $! > ../logs/polycryindex.pid
+```
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `APP_PROFILE` | Runtime mode | `cloud` (server) |
+| `APP_ENV` | Environment identifier | `production` |
+| `SECRET_KEY` | JWT signing key | Auto-generated (preserved on update) |
+| `DEFAULT_ADMIN_PASSWORD` | Admin initial password | Auto-generated (preserved on update) |
+| `HOST` | Listening address | `0.0.0.0` (Linux) / `127.0.0.1` (macOS) |
+| `PORT` | Listening port | `8000` |
+| `APP_HOST` | Server domain/IP (for CORS) | `0.0.0.0` |
+| `FORTRAN_EXECUTABLE` | Main optimizer path | Auto-set |
+| `FORTRAN_POSTPROCESS_EXECUTABLE` | Post-processing program path | Auto-set |
+| `ENABLE_DOCS` | Expose API docs | `false` |
+| `LOG_LEVEL` | Log level | `warning` |
+| `MAX_JOBS` | Max parallel tasks | `1` |
+| `OMP_NUM_THREADS` | OpenMP thread count | `4` |
+
+---
+
+## Service Management
+
+### systemd (Linux)
+
+```bash
+# Check status
+sudo systemctl status polycryindex-pre
+
+# View logs
+sudo journalctl -u polycryindex-pre -f
+sudo journalctl -u polycryindex-pre --since "1 hour ago"
+
+# Restart
+sudo systemctl restart polycryindex-pre
+
+# Stop
+sudo systemctl stop polycryindex-pre
+```
+
+### nohup (Linux / macOS)
+
+```bash
+# View logs
+tail -f logs/polycryindex.out
+
+# Stop
+kill $(cat logs/polycryindex.pid)
+
+# Restart
+kill $(cat logs/polycryindex.pid)
+cd backend && nohup ../venv/bin/python run_prod.py > ../logs/polycryindex.out 2>&1 &
+echo $! > ../logs/polycryindex.pid
+```
+
+---
+
+## Health Check
 
 ```bash
 curl -fsS http://127.0.0.1:8000/health
 ```
 
-期望至少包含：
-
+Expected response:
 - `status=healthy`
 - `profile=cloud`
-- `app_env=beta`（或你显式传入的兼容值）
+- `app_env=production`
 
-## 日志查看
+---
 
-```bash
-journalctl -u polycryindex -f
-journalctl -u polycryindex --since "1 hour ago"
-```
+## Uninstallation
 
-## 常见问题排查
-
-| 问题 | 排查方法 |
-|------|---------|
-| Fortran 找不到 | 检查 `/opt/polycryindex/Workspace/backend/.env` 中的 Fortran 路径 |
-| 权限不足 | 检查 `/opt/polycryindex/Workspace/backend/` 与 `/opt/polycryindex/logs/` 权限 |
-| 端口被占用 | `lsof -i :8000` |
-| 前端 404 | 确认 `Workspace/frontend/dist/` 已构建 |
-| 健康检查失败 | 先看 `curl http://127.0.0.1:8000/health`，再看 systemd / nohup 日志 |
-
-## 磁盘清理
+### Linux (root)
 
 ```bash
-rm -rf /opt/polycryindex/Workspace/backend/temp/*
-rm -rf /opt/polycryindex/Workspace/backend/userresult/*
+cd deploy/server
+sudo bash ./uninstall_linux.sh
 ```
 
-## Cloud 验证清单
+By default, the installation directory `/opt/polycryindex-pre/` will be deleted. To preserve data:
 
-- [ ] 浏览器访问 `http://server-ip:8000` 加载前端
-- [ ] 注册/登录/登出
-- [ ] 上传数据文件
-- [ ] 启动分析任务（Fortran 正常调用）
-- [ ] 查看任务状态和日志
-- [ ] 下载结果（zip / hdf5 / cell / miller）
-- [ ] 峰提取功能（原始图像 + 积分图像）
-- [ ] 管理员登录及后台全功能
-- [ ] `/health` 返回 `profile=cloud`
-- [ ] 服务重启后可正常恢复
-- [ ] SPA 路由刷新不 404
+```bash
+sudo REMOVE_INSTALL_DIR=0 bash ./uninstall_linux.sh
+```
+
+### Linux (user)
+
+```bash
+cd deploy/server
+bash ./uninstall_user_linux.sh
+```
+
+### macOS
+
+> ⚠️ **WARNING: macOS deployment is NOT officially tested or supported. The following instructions are provided as a reference only and may require manual adjustments.**
+
+```bash
+# Stop service
+kill $(cat logs/polycryindex.pid)
+
+# Delete installation directory
+rm -rf /path/to/PolymCrystalIndex
+```
+
+---
+
+## Troubleshooting
+
+| Issue | Resolution |
+|-------|------------|
+| Fortran not found | Check `FORTRAN_EXECUTABLE` path in `backend/.env` |
+| Insufficient permissions | Check permissions on `backend/` and `logs/` directories |
+| Port in use | `lsof -i :8000` or `ss -ltnp | grep :8000` |
+| Frontend 404 | Confirm `frontend/dist/` has been built |
+| Health check fails | First run `curl http://127.0.0.1:8000/health`, then check logs |
+| CORS errors | Set `APP_HOST` to the server's actual IP or domain |
+| Password changed after update | Should not happen — the script automatically preserves existing passwords |
+
+---
+
+## Disk Cleanup
+
+```bash
+# Clean temporary upload files
+rm -rf /opt/polycryindex-pre/Workspace/backend/temp/*
+
+# Clean user results (use with caution)
+rm -rf /opt/polycryindex-pre/Workspace/backend/userresult/*
+```
+
+---
+
+## Verification Checklist
+
+- [ ] Browser access to `http://server-ip:8000` loads frontend
+- [ ] Registration / login / logout working
+- [ ] Data file upload successful
+- [ ] Analysis task launched (Fortran called correctly)
+- [ ] Task status and logs viewable
+- [ ] Results downloadable (zip / hdf5 / cell / miller)
+- [ ] Peak extraction working
+- [ ] Admin login and backend features working
+- [ ] `/health` returns `profile=cloud`
+- [ ] Service auto-recovers after restart
+- [ ] Browser page refresh does not 404

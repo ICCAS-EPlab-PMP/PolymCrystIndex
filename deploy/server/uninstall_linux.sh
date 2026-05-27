@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_INSTALL_DIR="${APP_INSTALL_DIR:-/opt/polycryindex}"
-SERVICE_NAME="${SERVICE_NAME:-polycryindex}"
+APP_INSTALL_DIR="${APP_INSTALL_DIR:-/opt/polycryindex-pre}"
+SERVICE_NAME="${SERVICE_NAME:-polycryindex-pre}"
 REMOVE_INSTALL_DIR="${REMOVE_INSTALL_DIR:-1}"
 
 BACKEND_DIR="$APP_INSTALL_DIR/backend"

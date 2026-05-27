@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_INSTALL_DIR="${APP_INSTALL_DIR:-$HOME/.local/share/polycryindex}"
-SERVICE_NAME="${SERVICE_NAME:-polycryindex}"
+APP_INSTALL_DIR="${APP_INSTALL_DIR:-$HOME/.local/share/polycryindex-pre}"
+SERVICE_NAME="${SERVICE_NAME:-polycryindex-pre}"
 REMOVE_INSTALL_DIR="${REMOVE_INSTALL_DIR:-1}"
 
 LOG_DIR="$APP_INSTALL_DIR/logs"

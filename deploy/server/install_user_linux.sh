@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-APP_INSTALL_DIR="${APP_INSTALL_DIR:-$HOME/.local/share/polycryindex}"
+APP_INSTALL_DIR="${APP_INSTALL_DIR:-$HOME/.local/share/polycryindex-pre}"
 PROJECT_ROOT="$APP_INSTALL_DIR/Workspace"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
@@ -12,7 +12,7 @@ VENV_DIR="$APP_INSTALL_DIR/venv"
 LOG_DIR="$APP_INSTALL_DIR/logs"
 STD_LOG_FILE="$LOG_DIR/polycryindex.out"
 PID_FILE="$LOG_DIR/polycryindex.pid"
-SERVICE_NAME="${SERVICE_NAME:-polycryindex}"
+SERVICE_NAME="${SERVICE_NAME:-polycryindex-pre}"
 USER_SYSTEMD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 USER_UNIT_FILE="$USER_SYSTEMD_DIR/${SERVICE_NAME}.service"
 
@@ -23,7 +23,7 @@ SOURCE_FORTRAN_DIR="$SOURCE_WORKSPACE_ROOT/fortrancode"
 APP_HOST="${APP_HOST:-127.0.0.1}"
 APP_PORT="${APP_PORT:-8000}"
 APP_PROFILE_VALUE="cloud"
-APP_ENV_VALUE="${APP_ENV:-beta}"
+APP_ENV_VALUE="${APP_ENV:-production}"
 SECRET_KEY_VALUE="${SECRET_KEY:-}"
 ADMIN_PASSWORD_VALUE="${ADMIN_PASSWORD:-}"
 DEPLOY_MODE="${DEPLOY_MODE:-}"
@@ -114,38 +114,48 @@ sync_project_files() {
   fi
 
   mkdir -p "$PROJECT_ROOT"
-  find "$PROJECT_ROOT" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+  local rsync_excludes=(
+    '.git'
+    'venv'
+    'logs'
+    'deploy'
+    'electron'
+    'scripts'
+    '.github'
+    'icon'
+    'pyside'
+    'EXAMPLE'
+    '__pycache__'
+    '.pytest_cache'
+    'node_modules'
+    '*.pyc'
+    '*.md'
+    '.gitignore'
+    'smoke'
+    'backend/.env'
+    'backend/users.db'
+    'backend/temp'
+    'backend/result'
+    'backend/hdf5'
+    'backend/userresult'
+    'backend/workdir'
+    'backend/figures'
+    'frontend/dist'
+  )
 
   if has_command rsync; then
-    rsync -a --delete \
-      --exclude '.git' \
-      --exclude 'venv' \
-      --exclude 'logs' \
-      --exclude 'backend/.env' \
-      --exclude 'backend/users.db' \
-      --exclude 'backend/temp' \
-      --exclude 'backend/result' \
-      --exclude 'backend/hdf5' \
-      --exclude 'backend/userresult' \
-      --exclude 'backend/workdir' \
-      --exclude 'backend/figures' \
-      --exclude 'frontend/dist' \
-      "$SOURCE_WORKSPACE_ROOT/" "$PROJECT_ROOT/"
+    local rsync_args=(-a --delete)
+    for excl in "${rsync_excludes[@]}"; do
+      rsync_args+=(--exclude "$excl")
+    done
+    rsync "${rsync_args[@]}" "$SOURCE_WORKSPACE_ROOT/" "$PROJECT_ROOT/"
   else
-    tar \
-      --exclude='.git' \
-      --exclude='venv' \
-      --exclude='logs' \
-      --exclude='backend/.env' \
-      --exclude='backend/users.db' \
-      --exclude='backend/temp' \
-      --exclude='backend/result' \
-      --exclude='backend/hdf5' \
-      --exclude='backend/userresult' \
-      --exclude='backend/workdir' \
-      --exclude='backend/figures' \
-      --exclude='frontend/dist' \
-      -C "$SOURCE_WORKSPACE_ROOT" -cf - . | tar -C "$PROJECT_ROOT" -xf -
+    local tar_excludes=()
+    for excl in "${rsync_excludes[@]}"; do
+      tar_excludes+=(--exclude="$excl")
+    done
+    tar "${tar_excludes[@]}" -C "$SOURCE_WORKSPACE_ROOT" -cf - . | tar -C "$PROJECT_ROOT" -xf -
   fi
 }
 
@@ -250,11 +260,24 @@ build_fortran() {
 write_env_file() {
   log "7/10" "Generate backend env file / 生成后端环境文件"
 
-  if [ -z "$SECRET_KEY_VALUE" ]; then
+  local existing_secret=""
+  local existing_password=""
+
+  if [ -f "$BACKEND_DIR/.env" ]; then
+    info "Existing .env found, preserving SECRET_KEY and DEFAULT_ADMIN_PASSWORD / 检测到已有 .env，保留密钥和管理员密码"
+    existing_secret="$(grep -E '^SECRET_KEY=' "$BACKEND_DIR/.env" | cut -d'=' -f2- || true)"
+    existing_password="$(grep -E '^DEFAULT_ADMIN_PASSWORD=' "$BACKEND_DIR/.env" | cut -d'=' -f2- || true)"
+  fi
+
+  if [ -n "$existing_secret" ]; then
+    SECRET_KEY_VALUE="$existing_secret"
+  elif [ -z "$SECRET_KEY_VALUE" ]; then
     SECRET_KEY_VALUE="$(generate_secret)"
   fi
 
-  if [ -z "$ADMIN_PASSWORD_VALUE" ]; then
+  if [ -n "$existing_password" ]; then
+    ADMIN_PASSWORD_VALUE="$existing_password"
+  elif [ -z "$ADMIN_PASSWORD_VALUE" ]; then
     ADMIN_PASSWORD_VALUE="$(generate_password)"
   fi
 
@@ -269,7 +292,7 @@ HOST=$APP_HOST
 PORT=$APP_PORT
 ENABLE_DOCS=false
 LOG_LEVEL=warning
-CORS_ORIGINS=["http://$APP_HOST:$APP_PORT","http://localhost:$APP_PORT"]
+CORS_ORIGINS=["http://$APP_HOST:$APP_PORT","http://localhost:$APP_PORT","http://127.0.0.1:$APP_PORT"]
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 MAX_JOBS=1
 OMP_NUM_THREADS=4

@@ -118,6 +118,14 @@ export default {
         aheadOfRelease: 'The current runtime version {current} is ahead of the latest published release {latest}, which usually means you are running a local development build or unpublished server code.',
         unavailable: 'Latest release information could not be retrieved from remote sources. Please try again later.'
       }
+    },
+    cloudDownload: {
+      title: 'Desktop',
+      heading: 'Desktop Version Available',
+      description: 'The server edition provides online processing. For local offline use, download the desktop installation package.',
+      downloadButton: 'Download Desktop',
+      loading: 'Loading…',
+      macosNote: 'macOS (untested) — Windows x64 verified.'
     }
   },
   modules: {

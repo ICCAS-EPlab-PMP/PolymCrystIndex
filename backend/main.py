@@ -148,6 +148,7 @@ async def health():
         "app_env": settings.APP_ENV,
         "version": settings.VERSION,
         "auth_disabled": settings.AUTH_DISABLED,
+        "officialDownloadUrl": settings.OFFICIAL_DOWNLOAD_URL,
     }
 
 

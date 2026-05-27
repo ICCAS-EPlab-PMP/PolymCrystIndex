@@ -118,6 +118,14 @@ export default {
         aheadOfRelease: '当前运行版本 {current} 高于已发布版本 {latest}，这通常表示你正在使用本地开发版或尚未发布的服务器端代码。',
         unavailable: '未能从远程发布源获取最新版本信息，请稍后重试。'
       }
+    },
+    cloudDownload: {
+      title: '桌面版',
+      heading: '桌面版可用',
+      description: '服务器版提供在线处理能力。如需在本地离线环境中使用全部功能，建议下载桌面版安装包。',
+      downloadButton: '下载桌面版',
+      loading: '加载中…',
+      macosNote: 'macOS（未经验证）—— Windows x64 已验证。'
     }
   },
   modules: {

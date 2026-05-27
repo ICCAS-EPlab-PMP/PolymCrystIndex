@@ -108,6 +108,10 @@ export const api = {
     return request.get('/update/check')
   },
 
+  async getPublicConfig() {
+    return request.get('/health')
+  },
+
   async parsePoniFile(file) {
     const formData = new FormData()
     formData.append('file', file)

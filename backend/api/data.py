@@ -32,7 +32,7 @@ async def check_data(
 ):
     """Validate diffraction data format.
     
-    Request body should contain raw text with format: q psi intensity (one per line)
+    Request body should contain raw text with format: q psi contribution (one per line)
     """
     content = await request.body()
     

@@ -1237,7 +1237,7 @@ class IndexingService:
         lines.append("0")
         diffraction_point_count = self._count_diffraction_points(data_file)
         lines.append(str(diffraction_point_count))
-        lines.append("1" if params.lmMode else "0")
+        lines.append("1")  # LM优化必须始终开启
 
         lines.append("1" if params.pseuOrth else "0")
 

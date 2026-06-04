@@ -36,8 +36,7 @@ class FileService:
             if stripped.startswith('#'):
                 continue
             if not stripped:
-                warnings.append(f"Line {i+1}: blank line/空行")
-                continue
+                return False, 0, f"Line {i+1}: blank line detected/检测到空行，请删除空行后重新上传"
             line = stripped
             
             parts = line.split()

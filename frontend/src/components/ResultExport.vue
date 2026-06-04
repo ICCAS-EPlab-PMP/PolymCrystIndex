@@ -395,6 +395,50 @@
         </div>
       </div>
 
+      <div v-if="reciprocalCellParams" class="reciprocal-params-card">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          {{ t('results.reciprocalCellParams') }}
+        </h3>
+        <p class="reciprocal-desc">{{ t('results.reciprocalCellParamsDesc') }}</p>
+        <div class="params-grid">
+          <div class="param-item">
+            <span class="param-label">a*</span>
+            <span class="param-value">{{ reciprocalCellParams.aStar.toFixed(4) }}</span>
+            <span class="param-unit">Å⁻¹</span>
+          </div>
+          <div class="param-item">
+            <span class="param-label">b*</span>
+            <span class="param-value">{{ reciprocalCellParams.bStar.toFixed(4) }}</span>
+            <span class="param-unit">Å⁻¹</span>
+          </div>
+          <div class="param-item">
+            <span class="param-label">c*</span>
+            <span class="param-value">{{ reciprocalCellParams.cStar.toFixed(4) }}</span>
+            <span class="param-unit">Å⁻¹</span>
+          </div>
+          <div class="param-item">
+            <span class="param-label">α*</span>
+            <span class="param-value">{{ reciprocalCellParams.alphaStar.toFixed(2) }}</span>
+            <span class="param-unit">°</span>
+          </div>
+          <div class="param-item">
+            <span class="param-label">β*</span>
+            <span class="param-value">{{ reciprocalCellParams.betaStar.toFixed(2) }}</span>
+            <span class="param-unit">°</span>
+          </div>
+          <div class="param-item">
+            <span class="param-label">γ*</span>
+            <span class="param-value">{{ reciprocalCellParams.gammaStar.toFixed(2) }}</span>
+            <span class="param-unit">°</span>
+          </div>
+        </div>
+      </div>
+
       <div v-if="resultType === 'indexing'" class="export-section">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -508,6 +552,33 @@ const millerData = ref([])
 const totalReflections = ref(0)
 const indexedPeaks = ref(0)
 const hasTilt = computed(() => cellParams.value.tilt !== undefined && cellParams.value.tilt !== null)
+const reciprocalCellParams = computed(() => {
+  const { a, b, c, alpha, beta, gamma } = cellParams.value
+  const toRad = Math.PI / 180
+  const ar = alpha * toRad
+  const br = beta * toRad
+  const gr = gamma * toRad
+  const cosA = Math.cos(ar)
+  const cosB = Math.cos(br)
+  const cosG = Math.cos(gr)
+  const sinA = Math.sin(ar)
+  const sinB = Math.sin(br)
+  const sinG = Math.sin(gr)
+  const vSq = 1 - cosA * cosA - cosB * cosB - cosG * cosG + 2 * cosA * cosB * cosG
+  if (vSq <= 0) return null
+  const volume = a * b * c * Math.sqrt(vSq)
+  const aStar = (b * c * sinA) / volume
+  const bStar = (a * c * sinB) / volume
+  const cStar = (a * b * sinG) / volume
+  const cosAlphaStar = (cosB * cosG - cosA) / (sinB * sinG)
+  const cosBetaStar = (cosA * cosG - cosB) / (sinA * sinG)
+  const cosGammaStar = (cosA * cosB - cosG) / (sinA * sinB)
+  const clamp = (v) => Math.max(-1, Math.min(1, v))
+  const alphaStar = Math.acos(clamp(cosAlphaStar)) / toRad
+  const betaStar = Math.acos(clamp(cosBetaStar)) / toRad
+  const gammaStar = Math.acos(clamp(cosGammaStar)) / toRad
+  return { aStar, bStar, cStar, alphaStar, betaStar, gammaStar }
+})
 const plotContainer = ref(null)
 const rFactor = ref(0.0234)
 const rFactorQ = ref(0.0)
@@ -1022,6 +1093,7 @@ watch(() => props.resultData, async (newData) => {
 }
 
 .cell-params-card,
+.reciprocal-params-card,
 .miller-info-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -1029,7 +1101,14 @@ watch(() => props.resultData, async (newData) => {
   padding: 20px;
 }
 
+.reciprocal-desc {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin: -8px 0 12px 0;
+}
+
 .cell-params-card h3,
+.reciprocal-params-card h3,
 .miller-info-card h3,
 .peak-symmetry-section h3,
 .visualization-section h3,
@@ -1043,6 +1122,7 @@ watch(() => props.resultData, async (newData) => {
 }
 
 .cell-params-card h3 svg,
+.reciprocal-params-card h3 svg,
 .miller-info-card h3 svg,
 .peak-symmetry-section h3 svg,
 .visualization-section h3 svg,

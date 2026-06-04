@@ -78,9 +78,9 @@ flat                # 备用参数 / Reserved
 
 **衍射文件 (diffraction.txt):**
 ```
-# 格式：q_value  intensity  flag
+# 格式：q_value  contribution  flag
 # q_value: 散射矢量大小 (Å⁻¹) / Scattering vector magnitude
-# intensity: 相对强度 / Relative intensity
+# contribution: 权重贡献 / Weight contribution
 # flag: 标志位 / Flag
 
 1.5179  0.071  1

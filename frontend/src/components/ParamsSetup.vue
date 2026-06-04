@@ -289,10 +289,6 @@
 
           <div class="toggles">
             <label class="toggle-item">
-              <input type="checkbox" v-model="localParams.lmMode" />
-              <span class="toggle-label">{{ t('params.lmOptimization') }}</span>
-            </label>
-            <label class="toggle-item">
               <input type="checkbox" v-model="localParams.tiltCheck" />
               <span class="toggle-label">{{ t('params.tiltOpt') }}</span>
             </label>
@@ -469,6 +465,7 @@ onBeforeUnmount(() => {
 
 watch(() => props.params, (newParams) => {
   Object.assign(localParams, newParams)
+  localParams.lmMode = true  // LM优化必须始终开启
 }, { deep: true })
 
 watch(adminMaxOmpThreads, (maxThreads) => {
@@ -532,9 +529,11 @@ const onAngleZeroingToggle = () => {
 
 const resetParams = () => {
   Object.assign(localParams, defaultParams)
+  localParams.lmMode = true  // LM优化必须始终开启
 }
 
 const saveParams = () => {
+  localParams.lmMode = true  // LM优化必须始终开启
   Object.assign(props.params, localParams)
   saveNotice.value = t('params.saved')
   if (typeof window !== 'undefined') {

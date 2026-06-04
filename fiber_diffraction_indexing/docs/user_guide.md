@@ -127,9 +127,9 @@ flat                # 备用参数
 Diffraction file should contain one or more values per line (space-separated):
 
 ```
-# 格式：q_value [intensity] [flag]
+# 格式：q_value [contribution] [flag]
 # q_value: 散射矢量大小 (Å⁻¹)
-# intensity: 相对强度（可选）
+# contribution: 权重贡献（可选）
 # flag: 标志位（可选）
 
 1.517936588  0.070902605  1

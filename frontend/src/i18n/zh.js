@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.9.0'
+    version: 'v1.9.1'
   },
   home: {
     selectModule: '选择功能模块',
@@ -23,7 +23,7 @@ export default {
       expand: '展开摘要',
       collapse: '收起摘要',
       collapsedSummary: '点击展开可查看本次版本更新内容。',
-      versionValue: 'v 1.9.0',
+      versionValue: 'v 1.9.1',
       keywords: {
         angleZeroing: '强制直角归正',
         angleZeroingFinal: '结尾强制正交归正',
@@ -121,11 +121,11 @@ export default {
     },
     cloudDownload: {
       title: '桌面版',
-      heading: '桌面版可用',
-      description: '服务器版提供在线处理能力。如需在本地离线环境中使用全部功能，建议下载桌面版安装包。',
+      heading: '桌面版可供下载',
+      description: '服务器版提供在线处理能力。如需在本地离线使用，建议先下载桌面版安装包并在 Windows 电脑上运行。',
       downloadButton: '下载桌面版',
-      loading: '加载中…',
-      macosNote: 'macOS（未经验证）—— Windows x64 已验证。'
+      macosNote: 'macOS（未经验证）—— Windows x64 已验证。',
+      loading: '加载中...'
     }
   },
   modules: {
@@ -251,7 +251,7 @@ export default {
     pre3: 'psi 角相对于赤道面 (psi=0)',
     continue: '继续设置参数',
     fileEmpty: '文件为空',
-    formatError: '每行必须包含至少3列 (q, psi, intensity)',
+    formatError: '每行必须包含至少3列 (q, psi, 贡献度)',
     numericError: '包含非数字字符',
     dataPreview: '数据预览'
   },
@@ -383,6 +383,8 @@ export default {
     analysisComplete: '分析完成 - 最佳结构已找到',
     goToPreview: '直达结果预览',
     unitCellParams: '晶胞参数',
+    reciprocalCellParams: '倒易空间参数',
+    reciprocalCellParamsDesc: '由晶胞参数自动计算',
     millerIndices: 'Miller 索引',
     totalReflections: '总反射数',
     indexedPeaks: '索引峰数',
@@ -572,7 +574,7 @@ export default {
     researchFocusTitle: '纤维衍射指标化',
     researchFocusDesc: '集遗传算法工作流、可视化和可重复科学分析于一体的平台。',
     step1Title: '上传衍射数据',
-    step1Desc: '准备纤维衍射数据，格式为 txt，包含 q、psi、intensity 三列。建议进行背景扣除。',
+    step1Desc: '准备纤维衍射数据，格式为 txt，包含 q、psi、贡献度 三列。建议进行背景扣除。',
     step2Title: '配置参数',
     step2Desc: '根据样品信息设置遗传算法参数和晶胞参数约束。',
     step3Title: '运行分析',

@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.9.0'
+    version: 'v1.9.1'
   },
   home: {
     selectModule: 'Select Module',
@@ -23,7 +23,7 @@ export default {
       expand: 'Expand Summary',
       collapse: 'Collapse Summary',
       collapsedSummary: 'Expand to review the contents of this release.',
-      versionValue: 'v 1.9.0',
+      versionValue: 'v 1.9.1',
       keywords: {
         angleZeroing: 'Absolute symmetry search',
         angleZeroingFinal: 'Forced orthogonal rectification',
@@ -251,7 +251,7 @@ export default {
     pre3: 'Psi angles relative to equator (psi=0)',
     continue: 'Continue to Parameters',
     fileEmpty: 'File is empty',
-    formatError: 'Each line must contain at least 3 columns (q, psi, intensity)',
+    formatError: 'Each line must contain at least 3 columns (q, psi, contribution)',
     numericError: 'Contains non-numeric characters',
     dataPreview: 'Data Preview'
   },
@@ -383,6 +383,8 @@ export default {
     analysisComplete: 'Analysis Complete - Best Structure Found',
     goToPreview: 'Go to Results Preview',
     unitCellParams: 'Unit Cell Parameters',
+    reciprocalCellParams: 'Reciprocal Cell Parameters',
+    reciprocalCellParamsDesc: 'Auto-calculated from unit cell parameters',
     millerIndices: 'Miller Indices',
     totalReflections: 'Total Reflections',
     indexedPeaks: 'Indexed Peaks',
@@ -573,7 +575,7 @@ export default {
     researchFocusTitle: 'Fiber diffraction indexing',
     researchFocusDesc: 'Genetic algorithm workflow, visualization, and reproducible scientific analysis in one platform.',
     step1Title: 'Upload Diffraction Data',
-    step1Desc: 'Prepare your fiber diffraction data in txt format with q, psi, intensity columns. Background subtraction is recommended.',
+    step1Desc: 'Prepare your fiber diffraction data in txt format with q, psi, contribution columns. Background subtraction is recommended.',
     step2Title: 'Configure Parameters',
     step2Desc: 'Set genetic algorithm parameters and unit cell constraints based on your sample information.',
     step3Title: 'Run Analysis',

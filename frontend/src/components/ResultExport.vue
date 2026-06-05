@@ -404,7 +404,6 @@
           </svg>
           {{ t('results.reciprocalCellParams') }}
         </h3>
-        <p class="reciprocal-desc">{{ t('results.reciprocalCellParamsDesc') }}</p>
         <div class="params-grid">
           <div class="param-item">
             <span class="param-label">a*</span>
@@ -435,6 +434,18 @@
             <span class="param-label">γ*</span>
             <span class="param-value">{{ reciprocalCellParams.gammaStar.toFixed(2) }}</span>
             <span class="param-unit">°</span>
+          </div>
+        </div>
+        <div class="params-grid params-grid-projection">
+          <div class="param-item">
+            <span class="param-label" v-html="t('results.aProjection')"></span>
+            <span class="param-value">{{ reciprocalCellParams.aStar > 1e-12 ? (1 / reciprocalCellParams.aStar).toFixed(4) : '∞' }}</span>
+            <span class="param-unit">Å</span>
+          </div>
+          <div class="param-item">
+            <span class="param-label" v-html="t('results.bProjection')"></span>
+            <span class="param-value">{{ reciprocalCellParams.bStar > 1e-12 ? (1 / reciprocalCellParams.bStar).toFixed(4) : '∞' }}</span>
+            <span class="param-unit">Å</span>
           </div>
         </div>
       </div>
@@ -1093,7 +1104,6 @@ watch(() => props.resultData, async (newData) => {
 }
 
 .cell-params-card,
-.reciprocal-params-card,
 .miller-info-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -1101,14 +1111,71 @@ watch(() => props.resultData, async (newData) => {
   padding: 20px;
 }
 
-.reciprocal-desc {
-  font-size: 0.8rem;
+.reciprocal-params-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.reciprocal-params-card h3 {
+  font-size: 0.8125rem;
+  margin-bottom: 8px;
+}
+
+.reciprocal-params-card h3 svg {
+  width: 14px;
+  height: 14px;
+}
+
+.reciprocal-params-card .params-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.reciprocal-params-card .params-grid-projection {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.reciprocal-params-card .param-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-md);
+}
+
+.reciprocal-params-card .param-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.reciprocal-params-card .param-value {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-family: 'Fira Code', monospace;
+  color: var(--primary);
+}
+
+.reciprocal-params-card .param-unit {
+  font-size: 0.6875rem;
   color: var(--text-tertiary);
-  margin: -8px 0 12px 0;
+}
+
+.reciprocal-params-card .param-label sub {
+  font-size: 0.625rem;
 }
 
 .cell-params-card h3,
-.reciprocal-params-card h3,
 .miller-info-card h3,
 .peak-symmetry-section h3,
 .visualization-section h3,
@@ -1122,7 +1189,6 @@ watch(() => props.resultData, async (newData) => {
 }
 
 .cell-params-card h3 svg,
-.reciprocal-params-card h3 svg,
 .miller-info-card h3 svg,
 .peak-symmetry-section h3 svg,
 .visualization-section h3 svg,

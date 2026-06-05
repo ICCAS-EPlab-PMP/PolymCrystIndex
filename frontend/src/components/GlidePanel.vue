@@ -190,6 +190,22 @@
         </span>
       </div>
 
+      <div v-if="forwardReciprocalParams" class="base-cell-info">
+        <span class="info-label">{{ t('glide.computedReciprocal') }}</span>
+        <span class="info-hint">{{ t('glide.computedReciprocalHint') }}</span>
+        <span class="info-value">
+          a*={{ forwardReciprocalParams.aStar.toFixed(6) }}, b*={{ forwardReciprocalParams.bStar.toFixed(6) }}, c*={{ forwardReciprocalParams.cStar.toFixed(6) }}, γ*={{ forwardReciprocalParams.gammaStar.toFixed(2) }}°
+        </span>
+      </div>
+
+      <div v-if="forwardReciprocalParams" class="base-cell-info">
+        <span class="info-label">{{ t('glide.computedProjection') }}</span>
+        <span class="info-value">
+          <span v-html="t('glide.aProjection')"></span>={{ forwardReciprocalParams.aStar > 1e-12 ? (1 / forwardReciprocalParams.aStar).toFixed(4) : '∞' }} Å,
+          <span v-html="t('glide.bProjection')"></span>={{ forwardReciprocalParams.bStar > 1e-12 ? (1 / forwardReciprocalParams.bStar).toFixed(4) : '∞' }} Å
+        </span>
+      </div>
+
       <div v-for="group in results.glideBatchOutputs.groups" :key="group.label" class="glide-result-card">
         <div class="glide-result-header">
           <span class="group-badge">{{ group.label }}</span>
@@ -300,6 +316,7 @@
 
       <div v-if="reverseResult.reciprocalParams" class="base-cell-info">
         <span class="info-label">{{ t('glide.computedReciprocal') }}</span>
+        <span class="info-hint">{{ t('glide.computedReciprocalHint') }}</span>
         <span class="info-value">
           a*={{ reverseResult.reciprocalParams.aStar.toFixed(6) }}, b*={{ reverseResult.reciprocalParams.bStar.toFixed(6) }}, γ*={{ reverseResult.reciprocalParams.gammaStar.toFixed(2) }}
         </span>
@@ -308,8 +325,8 @@
       <div v-if="reverseResult.reciprocalParams" class="base-cell-info">
         <span class="info-label">{{ t('glide.computedProjection') }}</span>
         <span class="info-value">
-          a<sub>投影</sub>={{ reverseResult.reciprocalParams.aStar > 1e-12 ? (1 / reverseResult.reciprocalParams.aStar).toFixed(4) : '∞' }} Å,
-          b<sub>投影</sub>={{ reverseResult.reciprocalParams.bStar > 1e-12 ? (1 / reverseResult.reciprocalParams.bStar).toFixed(4) : '∞' }} Å
+          <span v-html="t('glide.aProjection')"></span>={{ reverseResult.reciprocalParams.aStar > 1e-12 ? (1 / reverseResult.reciprocalParams.aStar).toFixed(4) : '∞' }} Å,
+          <span v-html="t('glide.bProjection')"></span>={{ reverseResult.reciprocalParams.bStar > 1e-12 ? (1 / reverseResult.reciprocalParams.bStar).toFixed(4) : '∞' }} Å
         </span>
       </div>
 
@@ -508,6 +525,22 @@
         </span>
       </div>
 
+      <div v-if="scReciprocalParams" class="base-cell-info">
+        <span class="info-label">{{ t('glide.computedReciprocal') }}</span>
+        <span class="info-hint">{{ t('glide.computedReciprocalHint') }}</span>
+        <span class="info-value">
+          a*={{ scReciprocalParams.aStar.toFixed(6) }}, b*={{ scReciprocalParams.bStar.toFixed(6) }}, c*={{ scReciprocalParams.cStar.toFixed(6) }}, γ*={{ scReciprocalParams.gammaStar.toFixed(2) }}°
+        </span>
+      </div>
+
+      <div v-if="scReciprocalParams" class="base-cell-info">
+        <span class="info-label">{{ t('glide.computedProjection') }}</span>
+        <span class="info-value">
+          <span v-html="t('glide.aProjection')"></span>={{ scReciprocalParams.aStar > 1e-12 ? (1 / scReciprocalParams.aStar).toFixed(4) : '∞' }} Å,
+          <span v-html="t('glide.bProjection')"></span>={{ scReciprocalParams.bStar > 1e-12 ? (1 / scReciprocalParams.bStar).toFixed(4) : '∞' }} Å
+        </span>
+      </div>
+
       <div v-for="group in scGlideResult.glideBatchOutputs.groups" :key="group.label" class="glide-result-card">
         <div class="glide-result-header">
           <span class="group-badge">{{ group.label }}</span>
@@ -685,6 +718,33 @@ const selectedSingleLabel = ref('')
 const selectedOverlayLabels = ref([])
 const importSelectionKey = ref(0)
 const visualizerReady = ref(false)
+
+const reciprocalCell = (cell) => {
+  if (!cell) return null
+  const toRad = Math.PI / 180
+  const a = cell.a, b = cell.b, c = cell.c
+  const alpha = cell.alpha * toRad, beta = cell.beta * toRad, gamma = cell.gamma * toRad
+  const ca = Math.cos(alpha), cb = Math.cos(beta), cg = Math.cos(gamma)
+  const sa = Math.sin(alpha), sb = Math.sin(beta), sg = Math.sin(gamma)
+  const V = a * b * c * Math.sqrt(1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg)
+  if (V < 1e-12) return null
+  const astar = b * c * sa / V
+  const bstar = a * c * sb / V
+  const cstar = a * b * sg / V
+  const cosAlphaStar = (cb * cg - ca) / (sb * sg)
+  const cosBetaStar = (ca * cg - cb) / (sa * sg)
+  const cosGammaStar = (ca * cb - cg) / (sa * sb)
+  const clamp = (v) => Math.max(-1, Math.min(1, v))
+  return {
+    aStar: astar, bStar: bstar, cStar: cstar,
+    alphaStar: Math.acos(clamp(cosAlphaStar)) / toRad,
+    betaStar: Math.acos(clamp(cosBetaStar)) / toRad,
+    gammaStar: Math.acos(clamp(cosGammaStar)) / toRad,
+  }
+}
+
+const forwardReciprocalParams = computed(() => reciprocalCell(results.value?.baseCell))
+const scReciprocalParams = computed(() => reciprocalCell(scGlideResult.value?.baseCell))
 
 const browsableGroups = computed(() => {
   if (isReverseMode.value) {
@@ -1287,6 +1347,12 @@ const downloadReverseCandidate = (candidate) => {
   font-size: 0.875rem;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+.info-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: -8px;
 }
 
 .info-value {

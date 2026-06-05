@@ -44,6 +44,26 @@
           </div>
         </div>
 
+        <div v-if="reciprocalCell(group)" class="reciprocal-section">
+          <div class="reciprocal-header">
+            <span class="reciprocal-title">{{ t('manual.reciprocalCell') }}</span>
+            <span class="reciprocal-hint">{{ t('manual.reciprocalCellHint') }}</span>
+          </div>
+          <div class="reciprocal-values">
+            <span class="reciprocal-item">a* = {{ reciprocalCell(group).a.toFixed(4) }} Å⁻¹</span>
+            <span class="reciprocal-item">b* = {{ reciprocalCell(group).b.toFixed(4) }} Å⁻¹</span>
+            <span class="reciprocal-item">c* = {{ reciprocalCell(group).c.toFixed(4) }} Å⁻¹</span>
+            <span class="reciprocal-item">α* = {{ reciprocalCell(group).alpha.toFixed(2) }}°</span>
+            <span class="reciprocal-item">β* = {{ reciprocalCell(group).beta.toFixed(2) }}°</span>
+            <span class="reciprocal-item">γ* = {{ reciprocalCell(group).gamma.toFixed(2) }}°</span>
+          </div>
+          <div class="reciprocal-projection">
+            <span class="reciprocal-projection-label">{{ t('manual.projection') }}</span>
+            <span class="reciprocal-item"><span v-html="t('manual.aProjection')"></span> = {{ reciprocalCell(group).a > 1e-12 ? (1 / reciprocalCell(group).a).toFixed(4) : '∞' }} Å</span>
+            <span class="reciprocal-item"><span v-html="t('manual.bProjection')"></span> = {{ reciprocalCell(group).b > 1e-12 ? (1 / reciprocalCell(group).b).toFixed(4) : '∞' }} Å</span>
+          </div>
+        </div>
+
         <div v-if="isSupercellMode" class="supercell-section">
           <h3>{{ t('manual.supercellFactors') }}</h3>
           <p class="supercell-hint">{{ t('manual.supercellFactorTip') }}</p>
@@ -273,6 +293,29 @@ const selectedGroups = computed(() => {
   }
   return browsableResults.value.filter(group => group.label === selectedSingleLabel.value).slice(0, 1)
 })
+
+const reciprocalCell = (group) => {
+  const toRad = Math.PI / 180
+  const a = group.a, b = group.b, c = group.c
+  const alpha = group.alpha * toRad, beta = group.beta * toRad, gamma = group.gamma * toRad
+  const ca = Math.cos(alpha), cb = Math.cos(beta), cg = Math.cos(gamma)
+  const sa = Math.sin(alpha), sb = Math.sin(beta), sg = Math.sin(gamma)
+  const V = a * b * c * Math.sqrt(1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg)
+  if (V < 1e-12) return null
+  const astar = b * c * sa / V
+  const bstar = a * c * sb / V
+  const cstar = a * b * sg / V
+  const cosAlphaStar = (cb * cg - ca) / (sb * sg)
+  const cosBetaStar = (ca * cg - cb) / (sa * sg)
+  const cosGammaStar = (ca * cb - cg) / (sa * sb)
+  const clamp = (v) => Math.max(-1, Math.min(1, v))
+  return {
+    a: astar, b: bstar, c: cstar,
+    alpha: Math.acos(clamp(cosAlphaStar)) / toRad,
+    beta: Math.acos(clamp(cosBetaStar)) / toRad,
+    gamma: Math.acos(clamp(cosGammaStar)) / toRad,
+  }
+}
 
 const enforcePositiveInt = (group, field) => {
   const val = group[field]
@@ -508,6 +551,61 @@ const downloadResult = (data, idx) => {
 
 .supercell-inputs {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.reciprocal-section {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--bg-surface-alt);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.reciprocal-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.reciprocal-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.reciprocal-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.reciprocal-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 16px;
+}
+
+.reciprocal-item {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.reciprocal-projection {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dotted var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reciprocal-projection-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
 }
 
 .supercell-section {

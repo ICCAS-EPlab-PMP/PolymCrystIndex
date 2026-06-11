@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     """
 
     PROJECT_NAME: str = "PolymCrystIndex API"
-    VERSION: str = "1.9.1"
+    VERSION: str = "1.9.2"
     API_PREFIX: str = "/api"
     OFFICIAL_DOWNLOAD_URL: str = "http://www.polymcrystal.com/download/PolymCrystindexsetup.zip"
     GITHUB_RELEASES_API_URL: str = "https://api.github.com/repos/ICCAS-EPlab-PMP/PolymCrystalIndex/releases/latest"

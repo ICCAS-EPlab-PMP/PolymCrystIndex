@@ -276,13 +276,10 @@ class GeneticEngine:
                 cell[0], cell[1] = cell[1], cell[0]
                 cell[3], cell[4] = cell[4], cell[3]
             
-            # 限制参数在范围内 / Clamp parameters to bounds
             for i in range(6):
                 if i == 2 and self.config.c_axis != 0:
-                    continue  # 跳过固定 c 轴 / Skip fixed c-axis
-                
-                if cell[i] < min_vals[i] or cell[i] > max_vals[i]:
-                    cell[i] = random.uniform(min_vals[i], max_vals[i])
+                    continue
+                cell[i] = max(min_vals[i], min(max_vals[i], cell[i]))
             
             validated.append(cell)
         

@@ -219,28 +219,6 @@
         </p>
       </div>
 
-      <div v-else-if="!isLocal" class="cloud-download-panel">
-        <div class="cloud-download-main">
-          <div class="cloud-download-copy">
-            <span class="update-status-label">{{ t('home.cloudDownload.title') }}</span>
-            <h4>{{ t('home.cloudDownload.heading') }}</h4>
-            <p>{{ t('home.cloudDownload.description') }}</p>
-          </div>
-          <div class="cloud-download-actions">
-            <button
-              class="status-link-button primary"
-              :disabled="!downloadUrl"
-              @click="openExternal(downloadUrl)"
-            >
-              {{ downloadUrl ? t('home.cloudDownload.downloadButton') : t('home.cloudDownload.loading') }}
-            </button>
-          </div>
-        </div>
-        <p class="cloud-download-note">
-          ⚠️ {{ t('home.cloudDownload.macosNote') }}
-        </p>
-      </div>
-
       <div v-if="updatesExpanded" class="updates-grid">
         <article v-for="item in updateItems" :key="item.key" class="update-card">
           <div class="update-card-header">
@@ -924,6 +902,45 @@ onMounted(async () => {
   font-size: 0.875rem;
 }
 
+.cloud-download-panel {
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.96), rgba(248, 250, 252, 0.94));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cloud-download-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.cloud-download-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cloud-download-copy h4,
+.cloud-download-copy p {
+  margin: 0;
+}
+
+.cloud-download-actions {
+  flex-shrink: 0;
+}
+
+.cloud-download-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 .updates-collapsed-summary {
   margin: 0;
   color: var(--text-secondary);
@@ -1058,45 +1075,6 @@ onMounted(async () => {
   .update-meta-grid {
     grid-template-columns: 1fr 1fr;
   }
-}
-
-.cloud-download-panel {
-  margin-bottom: 18px;
-  padding: 18px 20px;
-  border-radius: 20px;
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  background: linear-gradient(180deg, rgba(238, 242, 255, 0.96), rgba(248, 250, 252, 0.94));
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cloud-download-main {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
-}
-
-.cloud-download-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.cloud-download-copy h4,
-.cloud-download-copy p {
-  margin: 0;
-}
-
-.cloud-download-actions {
-  flex-shrink: 0;
-}
-
-.cloud-download-note {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
 }
 
 .home-about {

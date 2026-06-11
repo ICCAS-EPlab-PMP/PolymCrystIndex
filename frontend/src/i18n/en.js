@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.9.1'
+    version: 'v1.9.2'
   },
   home: {
     selectModule: 'Select Module',
@@ -23,7 +23,7 @@ export default {
       expand: 'Expand Summary',
       collapse: 'Collapse Summary',
       collapsedSummary: 'Expand to review the contents of this release.',
-      versionValue: 'v 1.9.1',
+      versionValue: 'v 1.9.2',
       keywords: {
         angleZeroing: 'Absolute symmetry search',
         angleZeroingFinal: 'Forced orthogonal rectification',
@@ -39,7 +39,9 @@ export default {
         uiPolish: 'UI layout and interaction improvements',
         fixedLMode: 'Fixed-l constraint mode',
         resultFlow: 'Result verification flow improvements',
-        markerSize: 'Miller marker visibility'
+        markerSize: 'Miller marker visibility',
+        equivalentCell: 'Equivalent Cell Explorer (Vector Remapping)',
+        psiRangeCheck: 'Diffraction peak angle range check'
       },
       dateLabel: 'Change Date',
       types: {
@@ -48,6 +50,16 @@ export default {
         notice: 'Notice'
       },
       items: {
+        psiRangeCheck: {
+          date: '2026.6.5',
+          title: 'Diffraction Peak Angle Range Check',
+          summary: 'Automatically checks all diffraction peaks for psi angles within -5° to 95° (first quadrant, equator at 0°) during data import. Out-of-range peaks trigger a prominent warning without blocking the workflow. The input help section is now expanded by default with the angle requirements card highlighted for better visibility.'
+        },
+        equivalentCell: {
+          date: '2026.6.5',
+          title: 'Equivalent Cell Explorer (Vector Remapping)',
+          summary: 'Added a vector remapping tool in the manual cell parameters panel. Users can reassign hk0 indices (e.g. treat 100 as 110) and instantly compute the equivalent a*, b*, γ* and projection lengths, helping identify equivalent unit cell descriptions.'
+        },
         angleZeroingFinal: {
           date: '2026.5.19',
           title: 'Forced Orthogonal Rectification',
@@ -91,7 +103,7 @@ export default {
       },
       checkForUpdates: 'Check for Updates',
       checking: 'Checking...',
-      alreadyLatest: 'You are on the latest version (v1.9.0)',
+      alreadyLatest: 'You are on the latest version (v1.9.2)',
       alreadyLatestToast: 'Check complete: you are already on the latest published version.',
       statusLabel: 'Update Status',
       currentVersion: 'Current Version',
@@ -241,9 +253,12 @@ export default {
     helpHide: 'Hide details',
     angleRequirements: 'Angle Requirements',
     angleRequirementsDesc: 'Keep azimuths aligned with the fiber indexing convention:',
-    angle1: 'Use psi angles between -15° and 90° whenever possible.',
+    angle1: '⚠ All diffraction peaks must have psi angles within -5° to 95°. Peaks outside this range will affect indexing quality.',
     angle2: 'Provide first-quadrant data; 0° must correspond to the equatorial plane.',
     angle3: 'Keep the sign and reference direction consistent across the full file.',
+    psiRangeWarning: '⚠ Psi Angle Range Warning',
+    psiRangeWarningHint: 'Some peaks have psi angles outside the -5° ~ 95° range. Data should be in the first quadrant with the equator at 0°. Out-of-range peaks may affect indexing quality — please verify your preprocessing.',
+    psiRangeValid: '✓ All psi angles are within -5° ~ 95° range',
     preprocessing: 'Pre-processing',
     preprocessingDesc: 'Ensure your data has been:',
     pre1: 'Background subtracted',
@@ -983,6 +998,19 @@ export default {
     nc: 'nc (c-axis)',
     supercellFactorTip: 'Positive integers. The cell parameters are multiplied: a*=a·na, b*=b·nb, c*=c·nc, angles unchanged.',
     supercellGenerate: 'Generate Supercell FullMiller ({count}×)',
-    supercellInfo: 'Supercell: {na}×{nb}×{nc} = {total} cells'
+    supercellInfo: 'Supercell: {na}×{nb}×{nc} = {total} cells',
+    equivalentCellTitle: 'Equivalent Cell Explorer (Vector Remapping)',
+    equivalentCellHint: 'Reassign old hk0 indices to new ones and compute the equivalent a*, b*, γ*.',
+    eqOld: 'Old',
+    eqNew: 'New',
+    eqConstraint1: 'Constraint 1',
+    eqConstraint2: 'Constraint 2',
+    eqDefaultHint: 'Constraint 2 defaults to (0,1)→(0,1), keeping b* unchanged',
+    eqArrow: '→',
+    computeEquivalent: 'Compute Equivalent Cell',
+    eqResultTitle: 'Equivalent Cell Result',
+    eqErrorSingular: 'Transformation matrix is singular (determinant is zero), check inputs',
+    eqErrorInvalid: 'Result is invalid, this transformation has no physical meaning',
+    eqAreaRatio: 'Area ratio'
   }
 }

@@ -80,6 +80,28 @@
         </div>
       </div>
 
+      <div v-if="validationResult?.data?.valid && hasPsiRangeWarning" class="psi-range-warning">
+        <div class="psi-warning-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <div class="psi-warning-content">
+          <span class="psi-warning-title">{{ t('dataImport.psiRangeWarning') }}</span>
+          <span class="psi-warning-text">{{ t('dataImport.psiRangeWarningHint') }}</span>
+        </div>
+      </div>
+
+      <div v-if="validationResult?.data?.valid && !hasPsiRangeWarning && dataPreview.length > 0" class="psi-range-ok">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+          <polyline points="22,4 12,14.01 9,11.01"/>
+        </svg>
+        <span>{{ t('dataImport.psiRangeValid') }}</span>
+      </div>
+
       <div v-if="validationResult?.data?.valid && dataPreview.length > 0" class="data-preview">
         <h4>{{ t('dataImport.dataPreview') || 'Data Preview' }}</h4>
         <div class="preview-table-wrapper">
@@ -149,7 +171,7 @@
           </div>
         </div>
 
-        <div class="info-card">
+        <div class="info-card angle-card">
           <div class="card-icon angle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M4 18h16"/>
@@ -203,7 +225,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/index'
 
@@ -223,7 +245,13 @@ const fileContent = ref('')
 const validationResult = ref(null)
 const uploadedFilePath = ref(null)
 const dataPreview = ref([])
-const helpExpanded = ref(false)
+const helpExpanded = ref(true)
+
+/* v1.9.2: Detect psi range warnings from server validation message */
+const hasPsiRangeWarning = computed(() => {
+  const msg = validationResult.value?.message || ''
+  return msg.includes('PSI RANGE WARNING')
+})
 
 onMounted(() => {
   if (props.uploadedFileData?.path) {
@@ -841,5 +869,76 @@ const proceedToParams = () => {
   .help-toggle-action {
     justify-content: space-between;
   }
+}
+
+/* --- v1.9.2: Psi range warning banner --- */
+.psi-range-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px 18px;
+  background: rgba(245, 158, 11, 0.10);
+  border: 2px solid var(--cta);
+  border-radius: var(--radius-md);
+}
+
+.psi-warning-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--cta);
+}
+
+.psi-warning-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.psi-warning-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.psi-warning-title {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: #b45309;
+}
+
+.psi-warning-text {
+  font-size: 0.8125rem;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.psi-range-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 0.8125rem;
+  color: var(--secondary);
+  font-weight: 500;
+}
+
+.psi-range-ok svg {
+  color: var(--secondary);
+  flex-shrink: 0;
+}
+
+/* --- v1.9.2: Angle card highlight --- */
+.info-card.angle-card {
+  border: 2px solid var(--cta);
+  background: rgba(245, 158, 11, 0.04);
+}
+
+.info-card.angle-card .card-content h4 {
+  color: #b45309;
+}
+
+.info-card.angle-card .card-content li::before {
+  color: var(--cta);
 }
 </style>

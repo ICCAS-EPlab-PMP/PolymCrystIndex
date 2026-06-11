@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.9.1'
+    version: 'v1.9.2'
   },
   home: {
     selectModule: '选择功能模块',
@@ -23,7 +23,7 @@ export default {
       expand: '展开摘要',
       collapse: '收起摘要',
       collapsedSummary: '点击展开可查看本次版本更新内容。',
-      versionValue: 'v 1.9.1',
+      versionValue: 'v 1.9.2',
       keywords: {
         angleZeroing: '强制直角归正',
         angleZeroingFinal: '结尾强制正交归正',
@@ -39,7 +39,9 @@ export default {
         uiPolish: 'UI布局与交互改进',
         fixedLMode: '固定l约束模式',
         resultFlow: '结果验证流程改进',
-        markerSize: 'Miller标记可见性'
+        markerSize: 'Miller标记可见性',
+        equivalentCell: '等价晶胞探索（向量重置法）',
+        psiRangeCheck: '衍射峰角度范围检查'
       },
       dateLabel: '改动日期',
       types: {
@@ -48,6 +50,16 @@ export default {
         notice: '使用提醒'
       },
       items: {
+        psiRangeCheck: {
+          date: '2026.6.5',
+          title: '衍射峰角度范围检查',
+          summary: '指标化数据导入时自动检查所有衍射峰的 psi 角是否在 -5° ~ 95° 范围内（第一象限，赤道面在 0°）。超出范围的峰会显示醒目警告，但不阻止继续操作。同时优化了输入帮助区域的可见性，角度要求卡片更加突出。'
+        },
+        equivalentCell: {
+          date: '2026.6.5',
+          title: '等价晶胞探索（向量重置法）',
+          summary: '在手动晶胞参数面板中新增向量重置功能，允许用户将 hk0 指数重新指认（如将 100 视为 110），实时计算等价晶胞的 a*、b*、γ* 及投影长度，辅助判断等价晶胞描述。'
+        },
         angleZeroingFinal: {
           date: '2026.5.19',
           title: '结尾强制正交归正',
@@ -91,7 +103,7 @@ export default {
       },
       checkForUpdates: '检查更新',
       checking: '检查中...',
-      alreadyLatest: '当前已是最新版本 (v1.9.0)',
+      alreadyLatest: '当前已是最新版本 (v1.9.2)',
       alreadyLatestToast: '已完成检查：当前已是最新版本。',
       statusLabel: '更新状态',
       currentVersion: '当前版本',
@@ -241,9 +253,12 @@ export default {
     helpHide: '收起说明',
     angleRequirements: '角度要求',
     angleRequirementsDesc: '请按纤维衍射指标化所需的角度约定整理数据：',
-    angle1: 'psi 角建议落在 -15° 到 90° 范围内。',
+    angle1: '⚠ 所有衍射峰的 psi 角必须落在 -5° 到 95° 范围内，超出范围的峰将影响指标化结果。',
     angle2: '请使用第一象限数据，并确保 0° 对应赤道面。',
     angle3: '整份文件中的角度正负号与参考方向必须保持一致。',
+    psiRangeWarning: '⚠ psi 角度范围警告',
+    psiRangeWarningHint: '部分衍射峰的 psi 角超出 -5° ~ 95° 范围。数据应位于第一象限且赤道面在 0°。超出范围的峰可能影响指标化质量，建议检查预处理步骤。',
+    psiRangeValid: '✓ 所有 psi 角均在 -5° ~ 95° 范围内',
     preprocessing: '数据预处理',
     preprocessingDesc: '请确保您的数据已经：',
     pre1: '扣除背景',
@@ -982,6 +997,19 @@ export default {
     nc: 'nc (c轴)',
     supercellFactorTip: '正整数。晶胞参数乘以倍数：a*=a·na, b*=b·nb, c*=c·nc，角度不变。',
     supercellGenerate: '生成超胞 FullMiller（{count}×）',
-    supercellInfo: '超胞：{na}×{nb}×{nc} = {total} 个晶胞'
+    supercellInfo: '超胞：{na}×{nb}×{nc} = {total} 个晶胞',
+    equivalentCellTitle: '等价晶胞探索（向量重置法）',
+    equivalentCellHint: '将旧 hk0 指数重新指认为新 hk0，计算等价晶胞的 a*, b*, γ*。',
+    eqOld: '旧',
+    eqNew: '新',
+    eqConstraint1: '约束 1',
+    eqConstraint2: '约束 2',
+    eqDefaultHint: '默认第二组为 (0,1)→(0,1)，即保持 b* 方向不变',
+    eqArrow: '→',
+    computeEquivalent: '计算等价晶胞',
+    eqResultTitle: '等价晶胞结果',
+    eqErrorSingular: '变换矩阵奇异（行列式为零），请检查输入',
+    eqErrorInvalid: '计算结果无效，该变换无物理意义',
+    eqAreaRatio: '面积比'
   }
 }

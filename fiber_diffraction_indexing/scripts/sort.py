@@ -308,41 +308,33 @@ def _generate_crossovers(cell_mid: List[List[float]], cross: int,
         else:
             change_list = random.sample([0, 1, 3, 4, 5], change_num)
         
+        child = list(cell_mid[change1])
+
         for j in range(change_num):
             if change_list[j] in [0, 1]:
                 change_list2 = random.randint(0, 1)
-                cell_mid[change1][change_list[j]], cell_mid[change2][change_list2] = \
-                    cell_mid[change2][change_list2], cell_mid[change1][change_list[j]]
+                child[change_list[j]] = cell_mid[change2][change_list2]
             elif change_list[j] == 2 and c_axis == 0:
-                cell_mid[change1][change_list[j]], cell_mid[change2][change_list[j]] = \
-                    cell_mid[change2][change_list[j]], cell_mid[change1][change_list[j]]
+                child[change_list[j]] = cell_mid[change2][change_list[j]]
             elif change_list[j] in [3, 4, 5]:
                 change_list2 = random.randint(3, 5)
-                cell_mid[change1][change_list[j]], cell_mid[change2][change_list2] = \
-                    cell_mid[change2][change_list2], cell_mid[change1][change_list[j]]
+                child[change_list[j]] = cell_mid[change2][change_list2]
             else:
-                cell_mid[change1][change_list[j]], cell_mid[change2][change_list[j]] = \
-                    cell_mid[change2][change_list[j]], cell_mid[change1][change_list[j]]
-        
+                child[change_list[j]] = cell_mid[change2][change_list[j]]
+
         for c in range(6):
             if c in [0, 1] or (c == 2 and c_axis == 0):
                 add_num1 = random.uniform(-1, 1)
-                cell_mid[change1][c] = float(cell_mid[change1][c]) + add_num1 / 4
+                child[c] = float(child[c]) + add_num1 / 4
             elif c in [3, 4, 5]:
                 add_num1 = random.uniform(-4, 4)
-                cell_mid[change1][c] = cell_mid[change1][c] + add_num1
-        
+                child[c] = float(child[c]) + add_num1
+
         if tilt_stat == 1:
-            cell_all.append([
-                cell_mid[change1][0], cell_mid[change1][1], cell_mid[change1][2],
-                cell_mid[change1][3], cell_mid[change1][4], cell_mid[change1][5],
-                cell_mid[change1][6]
-            ])
+            child.append(float(cell_mid[change1][6]))
+            cell_all.append(child[:7])
         else:
-            cell_all.append([
-                cell_mid[change1][0], cell_mid[change1][1], cell_mid[change1][2],
-                cell_mid[change1][3], cell_mid[change1][4], cell_mid[change1][5]
-            ])
+            cell_all.append(child[:6])
     
     return cell_all
 
@@ -353,6 +345,7 @@ def _generate_mutations(cell_mid1: List[List[float]], mutation: int,
     """Generate mutant individuals through random changes."""
     for i in range(mutation):
         change1 = random.randint(0, survive - 1)
+        child = list(cell_mid1[change1])
         change_num = 3
         
         if c_axis == 0:
@@ -365,29 +358,22 @@ def _generate_mutations(cell_mid1: List[List[float]], mutation: int,
         for j in range(change_num):
             add_num = random.uniform(-3, 3)
             if change_list[j] in [0, 1] or (change_list[j] == 2 and c_axis == 0):
-                cell_mid1[change1][change_list[j]] = (
-                    float(cell_mid1[change1][change_list[j]]) + add_num / 1.5
+                child[change_list[j]] = (
+                    float(child[change_list[j]]) + add_num / 1.5
                 )
             elif change_list[j] in [3, 4, 5]:
-                cell_mid1[change1][change_list[j]] = (
-                    float(cell_mid1[change1][change_list[j]]) + add_num * 2
+                child[change_list[j]] = (
+                    float(child[change_list[j]]) + add_num * 2
                 )
             else:
-                cell_mid1[change1][change_list[j]] = (
-                    float(cell_mid1[change1][change_list[j]]) + add_num / 2
+                child[change_list[j]] = (
+                    float(child[change_list[j]]) + add_num / 2
                 )
         
         if tilt_stat == 1:
-            cell_all.append([
-                cell_mid1[change1][0], cell_mid1[change1][1], cell_mid1[change1][2],
-                cell_mid1[change1][3], cell_mid1[change1][4], cell_mid1[change1][5],
-                cell_mid1[change1][6]
-            ])
+            cell_all.append(child[:7])
         else:
-            cell_all.append([
-                cell_mid1[change1][0], cell_mid1[change1][1], cell_mid1[change1][2],
-                cell_mid1[change1][3], cell_mid1[change1][4], cell_mid1[change1][5]
-            ])
+            cell_all.append(child[:6])
     
     return cell_all
 
@@ -456,19 +442,14 @@ def _validate_and_fix_cells(cell_all: List[List[float]], all_min: List[str],
             cell_all[i][0], cell_all[i][1] = cell_all[i][1], cell_all[i][0]
             cell_all[i][3], cell_all[i][4] = cell_all[i][4], cell_all[i][3]
         
-        if float(cell_all[i][0]) < a_min or float(cell_all[i][0]) > a_max:
-            cell_all[i][0] = random.uniform(a_min, a_max)
-        if float(cell_all[i][1]) < b_min or float(cell_all[i][1]) > b_max:
-            cell_all[i][1] = random.uniform(b_min, b_max)
-        if (float(cell_all[i][2]) < c_min or float(cell_all[i][2]) > c_max) and c_axis == 0:
-            cell_all[i][2] = random.uniform(c_min, c_max)
-        
-        if float(cell_all[i][3]) > alpha_max or float(cell_all[i][3]) < alpha_min:
-            cell_all[i][3] = random.uniform(alpha_min, alpha_max)
-        if float(cell_all[i][4]) > beta_max or float(cell_all[i][4]) < beta_min:
-            cell_all[i][4] = random.uniform(beta_min, beta_max)
-        if float(cell_all[i][5]) > gamma_max or float(cell_all[i][5]) < gamma_min:
-            cell_all[i][5] = random.uniform(gamma_min, gamma_max)
+        # 硬约束 clamp：不允许超出上下限
+        cell_all[i][0] = max(a_min, min(a_max, float(cell_all[i][0])))
+        cell_all[i][1] = max(b_min, min(b_max, float(cell_all[i][1])))
+        if c_axis == 0:
+            cell_all[i][2] = max(c_min, min(c_max, float(cell_all[i][2])))
+        cell_all[i][3] = max(alpha_min, min(alpha_max, float(cell_all[i][3])))
+        cell_all[i][4] = max(beta_min, min(beta_max, float(cell_all[i][4])))
+        cell_all[i][5] = max(gamma_min, min(gamma_max, float(cell_all[i][5])))
     
     return cell_all
 

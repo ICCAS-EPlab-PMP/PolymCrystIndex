@@ -390,6 +390,12 @@ class FiberDiffractionIndexer:
                     first_line = f.readline().strip().split()
                     if len(first_line) >= 6:
                         best_cell = [float(x) for x in first_line[:6]]
+                        min_vals = self.config.parameter_min
+                        max_vals = self.config.parameter_max
+                        for i in range(6):
+                            if i == 2 and self.config.c_axis != 0:
+                                continue
+                            best_cell[i] = max(min_vals[i], min(max_vals[i], best_cell[i]))
             except Exception as e:
                 print(f"[Warning] Error reading annealing file: {e}")
 

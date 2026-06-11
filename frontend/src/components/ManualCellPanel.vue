@@ -64,6 +64,66 @@
           </div>
         </div>
 
+        <div v-if="reciprocalCell(group) && !isSupercellMode" class="equivalent-cell-section">
+          <button class="eq-toggle" @click="toggleEqCell(idx)">
+            <svg class="chevron-icon" :class="{ expanded: eqCellExpanded[idx] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6,9 12,15 18,9"/>
+            </svg>
+            <span class="eq-toggle-text">{{ t('manual.equivalentCellTitle') }}</span>
+          </button>
+
+          <div v-if="eqCellExpanded[idx]" class="eq-content">
+            <p class="eq-hint">{{ t('manual.equivalentCellHint') }}</p>
+
+            <div class="eq-constraints">
+              <div class="eq-row">
+                <span class="eq-row-label">{{ t('manual.eqConstraint1') }}</span>
+                <span class="eq-label-tag">{{ t('manual.eqOld') }}</span>
+                <input type="number" v-model.number="eqData[idx].h1" class="eq-input" />
+                <input type="number" v-model.number="eqData[idx].k1" class="eq-input" />
+                <span class="eq-arrow">{{ t('manual.eqArrow') }}</span>
+                <span class="eq-label-tag">{{ t('manual.eqNew') }}</span>
+                <input type="number" v-model.number="eqData[idx].h1p" class="eq-input" />
+                <input type="number" v-model.number="eqData[idx].k1p" class="eq-input" />
+              </div>
+              <div class="eq-row">
+                <span class="eq-row-label">{{ t('manual.eqConstraint2') }}</span>
+                <span class="eq-label-tag">{{ t('manual.eqOld') }}</span>
+                <input type="number" v-model.number="eqData[idx].h2" class="eq-input" />
+                <input type="number" v-model.number="eqData[idx].k2" class="eq-input" />
+                <span class="eq-arrow">{{ t('manual.eqArrow') }}</span>
+                <span class="eq-label-tag">{{ t('manual.eqNew') }}</span>
+                <input type="number" v-model.number="eqData[idx].h2p" class="eq-input" />
+                <input type="number" v-model.number="eqData[idx].k2p" class="eq-input" />
+              </div>
+              <p class="eq-default-hint">{{ t('manual.eqDefaultHint') }}</p>
+            </div>
+
+            <div v-if="equivalentCellError(idx)" class="eq-error">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+              <span>{{ equivalentCellError(idx) }}</span>
+            </div>
+
+            <div v-if="equivalentCellResult(group, idx)" class="eq-result">
+              <div class="eq-result-header">
+                <span class="eq-result-title">{{ t('manual.eqResultTitle') }}</span>
+              </div>
+              <div class="eq-result-values">
+                <span class="eq-result-item">a*<sub>eq</sub> = {{ equivalentCellResult(group, idx).a.toFixed(4) }} Å⁻¹</span>
+                <span class="eq-result-item">b*<sub>eq</sub> = {{ equivalentCellResult(group, idx).b.toFixed(4) }} Å⁻¹</span>
+                <span class="eq-result-item">γ*<sub>eq</sub> = {{ equivalentCellResult(group, idx).gamma.toFixed(2) }}°</span>
+              </div>
+              <div class="eq-result-projection">
+                <span class="eq-result-item">a<sub>投影</sub> = {{ equivalentCellResult(group, idx).aProj.toFixed(4) }} Å</span>
+                <span class="eq-result-item">b<sub>投影</sub> = {{ equivalentCellResult(group, idx).bProj.toFixed(4) }} Å</span>
+                <span class="eq-result-item">{{ t('manual.eqAreaRatio') }}: {{ equivalentCellResult(group, idx).areaRatio.toFixed(4) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div v-if="isSupercellMode" class="supercell-section">
           <h3>{{ t('manual.supercellFactors') }}</h3>
           <p class="supercell-hint">{{ t('manual.supercellFactorTip') }}</p>
@@ -263,6 +323,92 @@ const selectedOverlayLabels = ref([])
 const importSelectionKey = ref(0)
 const visualizerReady = ref(false)
 
+/* --- Equivalent Cell Explorer state --- */
+const defaultEqData = () => ({
+  h1: 1, k1: 0, h1p: 1, k1p: 1,
+  h2: 0, k2: 1, h2p: 0, k2p: 1,
+})
+const eqData = reactive([defaultEqData()])
+const eqCellExpanded = ref([])
+
+const toggleEqCell = (idx) => {
+  if (!eqCellExpanded.value[idx]) {
+    eqCellExpanded.value[idx] = true
+  } else {
+    eqCellExpanded.value[idx] = false
+  }
+}
+
+const equivalentCellResult = (group, idx) => {
+  const rc = reciprocalCell(group)
+  if (!rc) return null
+  const d = eqData[idx]
+  if (!d) return null
+
+  const toRad = Math.PI / 180
+  const gstar = rc.gamma * toRad
+
+  // Old basis vectors in 2D Cartesian (a* along x-axis)
+  const ax = rc.a, ay = 0
+  const bx = rc.b * Math.cos(gstar), by = rc.b * Math.sin(gstar)
+
+  // Physical vectors for the two constraints
+  const v1x = d.h1 * ax + d.k1 * bx
+  const v1y = d.h1 * ay + d.k1 * by
+  const v2x = d.h2 * ax + d.k2 * bx
+  const v2y = d.h2 * ay + d.k2 * by
+
+  // M_new = [[h1p, k1p], [h2p, k2p]]
+  const det = d.h1p * d.k2p - d.k1p * d.h2p
+  if (Math.abs(det) < 1e-12) return null
+
+  // M_new^{-1}
+  const inv00 = d.k2p / det, inv01 = -d.k1p / det
+  const inv10 = -d.h2p / det, inv11 = d.h1p / det
+
+  // New basis vectors
+  const axNew = inv00 * v1x + inv01 * v2x
+  const ayNew = inv00 * v1y + inv01 * v2y
+  const bxNew = inv10 * v1x + inv11 * v2x
+  const byNew = inv10 * v1y + inv11 * v2y
+
+  const astarNew = Math.sqrt(axNew * axNew + ayNew * ayNew)
+  const bstarNew = Math.sqrt(bxNew * bxNew + byNew * byNew)
+
+  if (astarNew < 1e-12 || bstarNew < 1e-12) return null
+
+  const clamp = (v) => Math.max(-1, Math.min(1, v))
+  const cosGammaNew = clamp((axNew * bxNew + ayNew * byNew) / (astarNew * bstarNew))
+  const gammaNew = Math.acos(cosGammaNew) / toRad
+
+  // Area ratio (determinant of transformation)
+  const detOld = d.h1 * d.k2 - d.k1 * d.h2
+  const areaRatio = Math.abs(detOld / det)
+
+  return {
+    a: astarNew,
+    b: bstarNew,
+    gamma: gammaNew,
+    aProj: 1 / astarNew,
+    bProj: 1 / bstarNew,
+    areaRatio,
+  }
+}
+
+const equivalentCellError = (idx) => {
+  const d = eqData[idx]
+  if (!d) return null
+  const det = d.h1p * d.k2p - d.k1p * d.h2p
+  if (Math.abs(det) < 1e-12) return t('manual.eqErrorSingular')
+  // Try computing — check for invalid result
+  const group = groups[idx]
+  const rc = reciprocalCell(group)
+  if (!rc) return null
+  const result = equivalentCellResult(group, idx)
+  if (!result) return t('manual.eqErrorInvalid')
+  return null
+}
+
 const supercellTotal = computed(() => {
   if (!isSupercellMode.value) return 0
   return groups.reduce((sum, g) => sum + (g.na || 1) * (g.nb || 1) * (g.nc || 1), 0)
@@ -380,10 +526,12 @@ watch(() => props.mode, () => {
 
 const addGroup = () => {
   groups.push(defaultGroup())
+  eqData.push(defaultEqData())
 }
 
 const removeGroup = (idx) => {
   groups.splice(idx, 1)
+  eqData.splice(idx, 1)
 }
 
 const generate = async () => {
@@ -1047,5 +1195,175 @@ const downloadResult = (data, idx) => {
   text-align: center;
   padding: 12px 0;
   margin: 0;
+}
+
+/* --- Equivalent Cell Explorer --- */
+.equivalent-cell-section {
+  margin-top: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.eq-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-surface-alt);
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.eq-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.eq-toggle .chevron-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  transition: transform var(--transition-normal);
+}
+
+.eq-toggle .chevron-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.eq-toggle-text {
+  font-size: 0.8125rem;
+}
+
+.eq-content {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-surface);
+}
+
+.eq-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.eq-constraints {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eq-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.eq-row-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 48px;
+}
+
+.eq-label-tag {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-sm);
+}
+
+.eq-input {
+  width: 52px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-family: 'Fira Code', monospace;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: center;
+  transition: border-color var(--transition-fast);
+}
+
+.eq-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.eq-arrow {
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  margin: 0 2px;
+}
+
+.eq-default-hint {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin: 0;
+  font-style: italic;
+}
+
+.eq-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--status-error);
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.06);
+  border-radius: var(--radius-sm);
+}
+
+.eq-error svg {
+  flex-shrink: 0;
+}
+
+.eq-result {
+  padding: 10px 12px;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eq-result-header {
+  margin-bottom: 2px;
+}
+
+.eq-result-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.eq-result-values {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.eq-result-projection {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px dotted var(--border);
+}
+
+.eq-result-item {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
 }
 </style>

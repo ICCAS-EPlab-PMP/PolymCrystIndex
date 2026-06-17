@@ -96,6 +96,9 @@ class IntegrateReq(BaseModel):
     npt_rad_r: int = 150
     threshold_min: float = 0
     threshold_max: float = 65535
+    # 默认开启：把无像素贡献的空 bin(count==0) 置为 NaN，避免 mask 区
+    # 的 0.0 把积分曲线拉出大范围跳跃。真零(有像素但信号为 0)保留为 0。
+    exclude_empty_bins: bool = True
     wavelength: float = 1.0
     pixel_size_x: float = 100.0
     pixel_size_y: float = 100.0
@@ -291,6 +294,24 @@ def _weighted_merge_curves(curves: list[tuple[np.ndarray, float]]) -> list[float
         where=weight_sum > 0,
     )
     return merged.tolist()
+
+
+def _mask_empty_bins(intensity, count) -> np.ndarray:
+    """把无像素贡献的空 bin 标记为 NaN，保留真实的零信号。
+
+    pyFAI 对没有像素落入的 bin 填 ``ai.empty``(默认 0)，它与"积分出来
+    本就是 0"的真零无法区分，导致 mask 区把积分曲线拉出大范围跳跃。
+    用每个 bin 的 ``count`` 局部判别最干净(不设 ``ai.empty=NaN`` 这种会
+    影响所有引擎填值的全局副作用)：count==0 → NaN，曲线在画图时断成洞；
+    真零(count>0 但信号为 0)保持为 0。形状不匹配或 count 缺失时回退原值。
+    """
+    out = np.array(intensity, dtype=float).copy()
+    if count is None:
+        return out
+    count_arr = np.asarray(count)
+    if count_arr.shape == out.shape:
+        out[count_arr == 0] = np.nan
+    return out
 
 
 def _allocate_bins(total_bins: int, segments: list[dict[str, float]]) -> list[int]:
@@ -568,7 +589,9 @@ def integrate(req: IntegrateReq):
             )
             if q_axis is None:
                 q_axis = np.array(res_q.radial, dtype=float)
-            q_results.append((np.array(res_q.intensity, dtype=float), seg["width"]))
+            seg_intensity = _mask_empty_bins(res_q.intensity, getattr(res_q, "count", None)) \
+                if req.exclude_empty_bins else np.array(res_q.intensity, dtype=float)
+            q_results.append((seg_intensity, seg["width"]))
 
         q_min_r = max(0.001, q - req.radial_range_half_r)
         q_max_r = q + req.radial_range_half_r
@@ -589,7 +612,9 @@ def integrate(req: IntegrateReq):
                 mask=mask,
             )
             psi_axis_segment = np.array(res_psi.radial, dtype=float)
-            psi_intensity_segment = _collapse_psi_intensity(np.array(res_psi.intensity, dtype=float))
+            psi_intensity_arr = _mask_empty_bins(res_psi.intensity, getattr(res_psi, "count", None)) \
+                if req.exclude_empty_bins else np.array(res_psi.intensity, dtype=float)
+            psi_intensity_segment = _collapse_psi_intensity(psi_intensity_arr)
             psi_results.append((psi_axis_segment, psi_intensity_segment))
 
         psi_axis, i_psi = _stitch_psi_segments(psi_results, psi)

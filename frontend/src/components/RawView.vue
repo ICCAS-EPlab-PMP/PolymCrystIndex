@@ -63,6 +63,10 @@
             <div class="form-field-stack"><label>{{ t('peakExtraction.radialRange') }}</label><input type="number" v-model.number="intP.radial_range_half" step="0.01" @change="runIntegration" /></div>
             <div class="form-field-stack"><label>Q Points</label><input type="number" v-model.number="intP.npt" step="50" @change="runIntegration" /></div>
           </div>
+          <label class="toggle-item">
+            <input type="checkbox" v-model="intP.exclude_empty_bins" @change="runIntegration" />
+            <span class="toggle-label">{{ t('peakExtraction.excludeEmptyBins') }}</span>
+          </label>
         </div>
 
         <div class="section-card integrate-qi-section">
@@ -77,6 +81,10 @@
             <div class="form-field-stack"><label>{{ t('peakExtraction.radialRange') }}</label><input type="number" v-model.number="intP.radial_range_half_r" step="0.01" @change="runIntegration" /></div>
             <div class="form-field-stack"><label>Psi Points</label><input type="number" v-model.number="intP.npt_rad_r" step="10" @change="runIntegration" /></div>
           </div>
+          <label class="toggle-item">
+            <input type="checkbox" v-model="intP.exclude_empty_bins" @change="runIntegration" />
+            <span class="toggle-label">{{ t('peakExtraction.excludeEmptyBins') }}</span>
+          </label>
         </div>
       </div>
 
@@ -293,7 +301,7 @@ const params = ref({ wavelength: 1.0, pixel_size_x: 100, pixel_size_y: 100, cent
 // ψ offset: corrected_psi = raw_psi_deg - psiOffset
 // e.g. if equator appears at +10°, set offset = 10 → corrected = 0°
 const psiOffset = ref(0)
-const intP   = ref({ azimuth_range_half: 5, radial_range_half: 0.35, npt: 500, npt_rad: 30, azimuth_range_half_r: 30, radial_range_half_r: 0.05, npt_r: 50, npt_rad_r: 150 })
+const intP   = ref({ azimuth_range_half: 5, radial_range_half: 0.35, npt: 500, npt_rad: 30, azimuth_range_half_r: 30, radial_range_half_r: 0.05, npt_r: 50, npt_rad_r: 150, exclude_empty_bins: true })
 
 const zoomB64    = ref(null)
 const zoomCenter = ref(null)
@@ -1074,6 +1082,24 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
+}
+
+.toggle-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-item input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
 }
 
 .instrument-params-grid {

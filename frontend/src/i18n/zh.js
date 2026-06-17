@@ -657,6 +657,7 @@ export default {
     azimuthRange: '方位角范围 (°)',
     radialRange: '径向范围',
     integrateRegion: '积分区域',
+    excludeEmptyBins: '排除空 bin(mask 区断开)',
     recordPoint: '记录点',
     recordedPoints: '已记录点',
     exportCsv: '导出 CSV',

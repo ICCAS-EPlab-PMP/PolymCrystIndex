@@ -658,6 +658,7 @@ export default {
     azimuthRange: 'Azimuth Range (°)',
     radialRange: 'Radial Range',
     integrateRegion: 'Integrate Region',
+    excludeEmptyBins: 'Exclude empty bins (break mask gaps)',
     recordPoint: 'Record Point',
     recordedPoints: 'Recorded Points',
     exportCsv: 'Export CSV',

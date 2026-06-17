@@ -41,7 +41,8 @@ export default {
         resultFlow: '结果验证流程改进',
         markerSize: 'Miller标记可见性',
         equivalentCell: '等价晶胞探索（向量重置法）',
-        psiRangeCheck: '衍射峰角度范围检查'
+        psiRangeCheck: '衍射峰角度范围检查',
+        peakClickFix: '原始图峰位点击修复'
       },
       dateLabel: '改动日期',
       types: {
@@ -50,6 +51,11 @@ export default {
         notice: '使用提醒'
       },
       items: {
+        peakClickFix: {
+          date: '2026.6.16',
+          title: '原始图峰位点击修复',
+          summary: '修复原始图像峰提取中「主点击 → 缩放精修 → 积分」链路的坐标对应偏差。此前缩放精修窗口以区内最亮点作为参考重新定位，与生成窗口时的主点击中心不一致，导致精修点击落在偏离真实峰的位置、积分红线指向错误区域。现已统一以主点击点为参考，点击位置与积分结果精确对应。'
+        },
         psiRangeCheck: {
           date: '2026.6.5',
           title: '衍射峰角度范围检查',
@@ -635,6 +641,9 @@ export default {
     contrast: '对比度',
     contrastMin: '最小值',
     contrastMax: '最大值',
+    zoomContrast: '缩放对比度',
+    zoomContrastMin: '缩放最小值',
+    zoomContrastMax: '缩放最大值',
     applyThreshold: '应用阈值',
     autoThreshold: '自动阈值',
     colormap: '色图',

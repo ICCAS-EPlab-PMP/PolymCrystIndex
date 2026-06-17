@@ -41,7 +41,8 @@ export default {
         resultFlow: 'Result verification flow improvements',
         markerSize: 'Miller marker visibility',
         equivalentCell: 'Equivalent Cell Explorer (Vector Remapping)',
-        psiRangeCheck: 'Diffraction peak angle range check'
+        psiRangeCheck: 'Diffraction peak angle range check',
+        peakClickFix: 'Raw-image peak-click position fix'
       },
       dateLabel: 'Change Date',
       types: {
@@ -50,6 +51,11 @@ export default {
         notice: 'Notice'
       },
       items: {
+        peakClickFix: {
+          date: '2026.6.16',
+          title: 'Raw-Image Peak-Click Position Fix',
+          summary: 'Fixed a coordinate-correspondence bug in the raw-image peak-extraction chain (main click → zoom refine → integrate). The zoom-refine window previously re-anchored on the brightest pixel inside the zone instead of the main-click centre used to render it, so a refinement click landed away from the intended peak and the integration marker pointed at the wrong region. The reference is now consistently the main-click point, so the click position and the integration result correspond exactly.'
+        },
         psiRangeCheck: {
           date: '2026.6.5',
           title: 'Diffraction Peak Angle Range Check',
@@ -636,6 +642,9 @@ export default {
     contrast: 'Contrast',
     contrastMin: 'Min',
     contrastMax: 'Max',
+    zoomContrast: 'Zoom Contrast',
+    zoomContrastMin: 'Zoom Min',
+    zoomContrastMax: 'Zoom Max',
     applyThreshold: 'Apply Threshold',
     autoThreshold: 'Auto Threshold',
     colormap: 'Colormap',

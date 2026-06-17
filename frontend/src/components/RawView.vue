@@ -154,8 +154,22 @@
               <div class="zoom-image">
                 <img v-if="zoomB64" :src="'data:image/png;base64,' + zoomB64" @click="onZoomClick" ref="zoomImgRef" />
                 <div v-else class="zoom-placeholder">{{ t('peakExtraction.clickToSelect') }}</div>
+                <div v-if="greenMarkerPos" class="zoom-green-marker" :style="{ left: greenMarkerPos.leftPct + '%', top: greenMarkerPos.topPct + '%' }"></div>
               </div>
               <div class="zoom-info">
+                <div class="zoom-contrast-controls">
+                  <label class="zoom-contrast-label">{{ t('peakExtraction.zoomContrast') }}</label>
+                  <div class="zoom-contrast-row">
+                    <label class="zoom-contrast-minmax">{{ t('peakExtraction.zoomContrastMin') }}</label>
+                    <input type="range" :min="sliderMin" :max="sliderMax" v-model.number="zoomContrastMin" @input="debouncedZoomRefresh" class="zoom-contrast-slider" />
+                    <input type="number" :min="sliderMin" :max="zoomContrastMax" v-model.number="zoomContrastMin" @input="debouncedZoomRefresh" class="zoom-contrast-num" />
+                  </div>
+                  <div class="zoom-contrast-row">
+                    <label class="zoom-contrast-minmax">{{ t('peakExtraction.zoomContrastMax') }}</label>
+                    <input type="range" :min="sliderMin" :max="sliderMax" v-model.number="zoomContrastMax" @input="debouncedZoomRefresh" class="zoom-contrast-slider" />
+                    <input type="number" :min="zoomContrastMin" :max="sliderMax" v-model.number="zoomContrastMax" @input="debouncedZoomRefresh" class="zoom-contrast-num" />
+                  </div>
+                </div>
                 <div v-if="currentPoint" class="point-info">
                   <div><span class="label">{{ t('peakExtraction.pixel') }}:</span> <b>({{ currentPoint.x }}, {{ currentPoint.y }})</b></div>
                   <div><span class="label">{{ t('peakExtraction.intensity') }}:</span> <b>{{ currentPoint.intensity?.toFixed(1) }}</b></div>
@@ -256,6 +270,8 @@ const sliderMin  = ref(0)
 const sliderMax  = ref(65535)
 const contrastMin = ref(0)
 const contrastMax = ref(65535)
+const zoomContrastMin = ref(0)
+const zoomContrastMax = ref(65535)
 const colormap   = ref('灰度')
 const colormapKeys = ['gray', 'inverted_gray', 'hot', 'jet']
 const colormapValues = ['灰度', '反转灰度', '热力图', '彩虹']
@@ -280,7 +296,9 @@ const psiOffset = ref(0)
 const intP   = ref({ azimuth_range_half: 5, radial_range_half: 0.35, npt: 500, npt_rad: 30, azimuth_range_half_r: 30, radial_range_half_r: 0.05, npt_r: 50, npt_rad_r: 150 })
 
 const zoomB64    = ref(null)
+const zoomCenter = ref(null)
 const currentPoint = ref(null)
+const greenMarkerPos = ref(null)
 const records    = ref([])
 
 const intData    = ref(null)
@@ -364,6 +382,8 @@ async function onLoadFile(e) {
     sliderMax.value  = Math.ceil(data.contrast_max)
     contrastMin.value = Math.floor(data.contrast_min)
     contrastMax.value = Math.ceil(data.contrast_max)
+    zoomContrastMin.value = Math.floor(data.contrast_min)
+    zoomContrastMax.value = Math.ceil(data.contrast_max)
     threshMin.value  = data.threshold_min
     threshMax.value  = data.threshold_max
     // BUG FIX: store auto values for reset
@@ -372,7 +392,9 @@ async function onLoadFile(e) {
     records.value    = []
     intData.value    = null
     zoomB64.value    = null
+    zoomCenter.value = null
     currentPoint.value = null
+    greenMarkerPos.value = null
     _destroyCharts()
     await nextTick()
     imageCanvasRef.value?.resetView()
@@ -464,12 +486,23 @@ async function onMainClick({ imageX, imageY }) {
       image_x: imageX, image_y: imageY,
       zoom_size: zoomSize.value,
       colormap: colormap.value,
-      contrast_min: contrastMin.value,
-      contrast_max: contrastMax.value,
+      contrast_min: zoomContrastMin.value,
+      contrast_max: zoomContrastMax.value,
       ...params.value,
     })
     zoomB64.value = data.zoom_b64
+    // BUG FIX: zoomCenter must be the RENDER CENTRE of the displayed zoom
+    // window — i.e. the user's main-click point — NOT data.max_x/max_y (the
+    // brightest pixel found inside the window). render_zoom() in /click
+    // centres the zone on imageX/imageY, and /zoom-click re-derives the SAME
+    // zone origin from whatever we send here. If this held max_x/max_y, the
+    // origin would shift by (max - click) display-pixels between render and
+    // click, so the refinement click landed up to half a window away from
+    // where the user actually clicked → "integration points to the wrong
+    // peak". The detected peak itself is still tracked in currentPoint below.
+    zoomCenter.value = { x: imageX, y: imageY }
     currentPoint.value = { x: data.max_x, y: data.max_y, intensity: data.intensity, q: data.q, psi_rad: data.psi_rad, psi_deg: data.psi_deg }
+    greenMarkerPos.value = null
     rtab.value = 'analysis'
     emit('status', `Peak: (${data.max_x}, ${data.max_y}) q=${data.q.toFixed(5)} ψ=${data.psi_deg.toFixed(2)}°`)
     runIntegration()
@@ -477,20 +510,23 @@ async function onMainClick({ imageX, imageY }) {
 }
 
 async function onZoomClick(e) {
-  if (!sessionId.value || !currentPoint.value) return
+  if (!sessionId.value || !zoomCenter.value) return
   const rect = zoomImgRef.value.getBoundingClientRect()
+  // BUG FIX: zoom view is no longer vertically flipped, so local_x/local_y
+  // are simply the click position expressed in zoom cells (row 0 = top).
   const localX = Math.round((e.clientX - rect.left) / rect.width * zoomSize.value)
   const localY = Math.round((e.clientY - rect.top) / rect.height * zoomSize.value)
+  greenMarkerPos.value = { leftPct: (e.clientX - rect.left) / rect.width * 100, topPct: (e.clientY - rect.top) / rect.height * 100 }
   try {
     const { data } = await rawApi.zoomClick({
       session_id: sessionId.value,
       local_x: localX, local_y: localY,
-      center_x_img: currentPoint.value.x,
-      center_y_img: currentPoint.value.y,
+      center_x_img: zoomCenter.value.x,
+      center_y_img: zoomCenter.value.y,
       zoom_size: zoomSize.value,
       colormap: colormap.value,
-      contrast_min: contrastMin.value,
-      contrast_max: contrastMax.value,
+      contrast_min: zoomContrastMin.value,
+      contrast_max: zoomContrastMax.value,
       wavelength: params.value.wavelength,
       pixel_size_x: params.value.pixel_size_x,
       pixel_size_y: params.value.pixel_size_y,
@@ -498,11 +534,33 @@ async function onZoomClick(e) {
       beam_center_y: params.value.center_y,
       distance: params.value.distance,
     })
-    zoomB64.value = data.zoom_b64
     currentPoint.value = { x: data.x, y: data.y, intensity: data.intensity, q: data.q, psi_rad: data.psi_rad, psi_deg: data.psi_deg }
     emit('status', `Selected: (${data.x}, ${data.y}) q=${data.q.toFixed(5)}`)
     runIntegration()
   } catch(err) { window.$toast?.(err.response?.data?.detail || err.message, true) }
+}
+
+let _zoomContrastTimer = null
+function debouncedZoomRefresh() {
+  clearTimeout(_zoomContrastTimer)
+  _zoomContrastTimer = setTimeout(refreshZoomContrast, 300)
+}
+
+async function refreshZoomContrast() {
+  if (!sessionId.value || !zoomCenter.value) return
+  try {
+    const { data } = await rawApi.click({
+      session_id: sessionId.value,
+      image_x: zoomCenter.value.x,
+      image_y: zoomCenter.value.y,
+      zoom_size: zoomSize.value,
+      colormap: colormap.value,
+      contrast_min: zoomContrastMin.value,
+      contrast_max: zoomContrastMax.value,
+      ...params.value,
+    })
+    zoomB64.value = data.zoom_b64
+  } catch(err) { console.warn(err) }
 }
 
 async function runIntegration() {
@@ -1058,6 +1116,7 @@ onUnmounted(() => {
   background: #111;
   border-radius: var(--radius-md);
   overflow: hidden;
+  position: relative;
 }
 
 .zoom-image img {
@@ -1074,6 +1133,59 @@ onUnmounted(() => {
   justify-content: center;
   color: #666;
   font-size: 0.8125rem;
+}
+
+.zoom-contrast-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.zoom-contrast-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.zoom-contrast-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zoom-contrast-minmax {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  min-width: 32px;
+}
+
+.zoom-contrast-slider {
+  flex: 1;
+  min-width: 0;
+}
+
+.zoom-contrast-num {
+  width: 60px;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.zoom-green-marker {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #00ff00;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .zoom-info {

@@ -262,11 +262,12 @@ const updateCheckResult = ref(null)
 const downloadUrl = ref('')
 
 const updateItems = [
+  { key: 'peakClickFix', type: 'fix' },
   { key: 'angleZeroingFinal', type: 'feature' },
   { key: 'uniqueAssignment', type: 'feature' },
 ]
 
-const updateKeywordKeys = ['angleZeroingFinal', 'uniqueAssignment']
+const updateKeywordKeys = ['peakClickFix', 'angleZeroingFinal', 'uniqueAssignment']
 
 const getUpdateSummary = result => {
   if (!result) return ''

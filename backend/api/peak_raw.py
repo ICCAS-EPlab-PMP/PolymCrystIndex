@@ -445,10 +445,21 @@ def click_main_image(req: ClickReq):
     sess = raw_store.require(req.session_id)
     original = sess["original"]
     display  = sess["display"]
+    h_orig, w_orig = original.shape
+    h_disp, w_disp = display.shape
+
+    # BUG FIX: the frontend sends the click in ORIGINAL-image pixel
+    # coordinates, but render_zoom indexes the downsampled ``display``
+    # array. Convert before clipping so the zoom region is centred on
+    # the point the user actually clicked (and so the returned
+    # max_x/max_y are in original coords, consistent with PONI centres
+    # and the q/ψ computation).
+    cx_disp = int(round(req.image_x * w_disp / w_orig)) if w_orig else req.image_x
+    cy_disp = int(round(req.image_y * h_disp / h_orig)) if h_orig else req.image_y
 
     zoom_b64, max_x, max_y, intensity = render_zoom(
         original, display,
-        req.image_x, req.image_y, req.zoom_size,
+        cx_disp, cy_disp, req.zoom_size,
         req.colormap, req.contrast_min, req.contrast_max,
     )
     try:
@@ -467,14 +478,35 @@ def click_main_image(req: ClickReq):
 
 @router.post("/zoom-click")
 def click_zoom_image(req: ZoomClickReq):
-    """User clicks the zoom canvas → refine selected point."""
+    """User clicks the zoom canvas → return coordinates only (no image re-render)."""
     sess = raw_store.require(req.session_id)
     original = sess["original"]
     display  = sess["display"]
-    h, w = original.shape
+    h_orig, w_orig = original.shape
+    h_disp, w_disp = display.shape
+
+    # BUG FIX: the centre coords come from the /click response and are
+    # in ORIGINAL-image pixels, but the zoom slice is taken from the
+    # downsampled ``display`` array. Convert the centre to displayed
+    # pixels before slicing, then map the resulting global pixel back
+    # to original-image coords for q/ψ and intensity.
+    cx_disp = int(round(req.center_x_img * w_disp / w_orig)) if w_orig else req.center_x_img
+    cy_disp = int(round(req.center_y_img * h_disp / h_orig)) if h_orig else req.center_y_img
     half = req.zoom_size // 2
-    gx = max(0, min(w - 1, req.center_x_img - half + req.local_x))
-    gy = max(0, min(h - 1, req.center_y_img - half + req.local_y))
+    x1 = max(0, cx_disp - half); y1 = max(0, cy_disp - half)
+    x2 = min(w_disp, cx_disp + half); y2 = min(h_disp, cy_disp + half)
+    # BUG FIX: the zoom view is no longer flipped, so local_x/local_y are
+    # already zone row/col indices measured from the top-left of the zone.
+    # Map them back with the zone origin (x1, y1) — no extra Y flip.
+    gx_disp = max(0, min(w_disp - 1, x1 + req.local_x))
+    gy_disp = max(0, min(h_disp - 1, y1 + req.local_y))
+
+    scale_x = w_orig / w_disp if w_disp else 1.0
+    scale_y = h_orig / h_disp if h_disp else 1.0
+    gx = int(round(gx_disp * scale_x))
+    gy = int(round(gy_disp * scale_y))
+    gx = max(0, min(w_orig - 1, gx))
+    gy = max(0, min(h_orig - 1, gy))
     intensity = float(original[gy, gx])
     try:
         q, psi = q_and_psi(gx, gy, req.wavelength, req.pixel_size_x,
@@ -482,27 +514,7 @@ def click_zoom_image(req: ZoomClickReq):
     except Exception:
         q, psi = 0.0, 0.0
 
-    from PIL import Image as PILImage, ImageDraw
-    from PIL.Image import Resampling
-    from services.image_service import _normalize, _colormap, _to_b64
-    import base64, io as _io
-
-    x1 = max(0, req.center_x_img - half); y1 = max(0, req.center_y_img - half)
-    x2 = min(w, req.center_x_img + half); y2 = min(h, req.center_y_img + half)
-    zone = display[y1:y2, x1:x2]
-    magnify = 4
-    rgb  = _colormap(_normalize(zone, req.contrast_min, req.contrast_max), req.colormap)
-    img  = PILImage.fromarray(rgb, "RGB").resize(
-        (rgb.shape[1] * magnify, rgb.shape[0] * magnify), Resampling.NEAREST
-    )
-    draw = ImageDraw.Draw(img)
-    lx, ly = (req.local_x) * magnify, (req.local_y) * magnify
-    draw.rectangle([lx-3, ly-3, lx+3, ly+3], outline=(0, 255, 0), width=2)
-    buf = _io.BytesIO(); img.save(buf, "PNG")
-    zoom_b64 = base64.b64encode(buf.getvalue()).decode()
-
     return {
-        "zoom_b64": zoom_b64,
         "x": gx, "y": gy, "intensity": intensity,
         "q": q, "psi_rad": psi, "psi_deg": math.degrees(psi),
     }
@@ -759,6 +771,7 @@ def export_marked_image(
 ):
     from PIL import Image as PILImage, ImageDraw
     from services.image_service import _normalize, _colormap
+    from services.diffraction_utils import _ui_font
 
     sess = raw_store.require(session_id)
     display = sess["display"]
@@ -769,11 +782,32 @@ def export_marked_image(
     image = PILImage.fromarray(rgb, "RGB")
     draw = ImageDraw.Draw(image)
 
+    # 文字用了 PIL 默认 ~10 px 位图字体,在 ~1024 px 图上几乎看不清。
+    # 按图边长自适应放大,保持可读。
+    h, w = display.shape
+    font_size = max(18, int(max(h, w) / 45))
+    font = _ui_font(font_size)
+
+    # 灰度 / 反转灰度是黑白图,旧的白色文字在亮(白)峰上完全看不见 →
+    # 这两种配色用红字。热力图 / 彩虹等饱和配色用白字更清楚。
+    # 描边保证数字在任何背景上都可见。
+    if colormap in ("灰度", "反转灰度"):
+        text_color, stroke_color = (255, 0, 0), (255, 255, 255)
+    else:
+        text_color, stroke_color = (255, 255, 255), (0, 0, 0)
+
     for idx, record in enumerate(records, start=1):
         x = int(record["x"])
         y = int(record["y"])
-        draw.rectangle([x - 3, y - 3, x + 3, y + 3], outline=(255, 0, 0), width=2)
-        draw.text((x + 6, y - 12), str(idx), fill=(255, 255, 255))
+        draw.rectangle([x - 5, y - 5, x + 5, y + 5], outline=(255, 0, 0), width=2)
+        draw.text(
+            (x + 8, y - font_size),
+            str(idx),
+            fill=text_color,
+            font=font,
+            stroke_width=2,
+            stroke_fill=stroke_color,
+        )
 
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")

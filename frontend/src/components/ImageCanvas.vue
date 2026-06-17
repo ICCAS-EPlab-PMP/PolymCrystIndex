@@ -67,7 +67,13 @@ function draw() {
   const scaleY = props.dispHeight / props.origHeight
 
   const ctx = canvas.getContext('2d')
-  ctx.setTransform(scale.value, 0, 0, -scale.value, transX.value, transY.value + canvas.height * scale.value)
+  // BUG FIX: no Y-flip. The detector image is stored top-down (row 0 at top,
+  // exactly like the PIL-exported PNG and fabio/matplotlib), so the canvas
+  // must display it the same way. The previous Y-flip transform turned the
+  // image upside-down, which made intuitive clicks land on the mirrored row;
+  // with an off-centre beam (always the case with a real PONI) this produced
+  // the wrong radius/q — i.e. "click an outer ring, integration lands inner".
+  ctx.setTransform(scale.value, 0, 0, scale.value, transX.value, transY.value)
   ctx.drawImage(_img, 0, 0)
 
   if (props.centerX != null && props.centerY != null) {
@@ -88,12 +94,9 @@ function draw() {
     ctx.lineWidth   = 2 / scale.value
     ctx.strokeRect(mx - 4, my - 4, 8, 8)
     if (m.label) {
-      ctx.save()
-      ctx.scale(1, -1)
       ctx.font = `bold ${18 / scale.value}px Arial`
       ctx.fillStyle = m.color || '#ff0000'
-      ctx.fillText(m.label, mx + 8, -(my - 6))
-      ctx.restore()
+      ctx.fillText(m.label, mx + 8, my - 6)
     }
   }
 }
@@ -139,21 +142,27 @@ function onCanvasClick(e) {
   const screenY = e.clientY - rect.top
   const canvasX = screenX * canvas.width / rect.width
   const canvasY = screenY * canvas.height / rect.height
+  // BUG FIX: no Y-flip — imageY grows downward from the top, matching the
+  // displayed image and the backend's original[y, x] array indexing.
   const ix = Math.round((canvasX - transX.value) / scale.value * (props.origWidth / props.dispWidth))
-  const iy = Math.round((canvas.height * scale.value + transY.value - canvasY) / scale.value * (props.origHeight / props.dispHeight))
+  const iy = Math.round((canvasY - transY.value) / scale.value * (props.origHeight / props.dispHeight))
   emit('click', { imageX: ix, imageY: iy })
 }
 
 function onWheel(e) {
   if (!_img) return
-  const rect = canvasRef.value.getBoundingClientRect()
-  const mouseX = e.clientX - rect.left
-  const mouseY = e.clientY - rect.top
+  const canvas = canvasRef.value
+  const rect = canvas.getBoundingClientRect()
+  // BUG FIX: the transform lives in canvas-internal pixels, so convert
+  // the cursor position into that space before doing the zoom math.
+  const mouseX = (e.clientX - rect.left) * canvas.width  / rect.width
+  const mouseY = (e.clientY - rect.top)  * canvas.height / rect.height
 
   const oldScale = scale.value
   const delta = e.deltaY < 0 ? ZOOM_FACTOR : -ZOOM_FACTOR
   const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, oldScale * (1 + delta)))
 
+  // No Y-flip: keep the source point under the cursor fixed while zooming.
   const wxImg = (mouseX - transX.value) / oldScale
   const wyImg = (mouseY - transY.value) / oldScale
   const newTx = mouseX - wxImg * newScale
@@ -173,8 +182,16 @@ function onMouseDown(e) {
 
 function onMouseMove(e) {
   if (!isPanning.value) return
-  transX.value = panStart.value.tx + (e.clientX - panStart.value.x)
-  transY.value = panStart.value.ty + (e.clientY - panStart.value.y)
+  const canvas = canvasRef.value
+  const rect = canvas.getBoundingClientRect()
+  // BUG FIX: the transform is in canvas-internal pixels while the
+  // mouse deltas are in CSS pixels. Scale them so the image tracks
+  // the cursor at 1:1 regardless of how much the browser down-scales
+  // the canvas for display.
+  const cssToCanvasX = canvas.width  / rect.width
+  const cssToCanvasY = canvas.height / rect.height
+  transX.value = panStart.value.tx + (e.clientX - panStart.value.x) * cssToCanvasX
+  transY.value = panStart.value.ty + (e.clientY - panStart.value.y) * cssToCanvasY
   draw()
 }
 
@@ -184,11 +201,13 @@ function onMouseUp() {
 
 function zoomIn() {
   if (!_img) return
-  const rect = canvasRef.value.getBoundingClientRect()
-  const cx = rect.width / 2
-  const cy = rect.height / 2
+  const canvas = canvasRef.value
+  // Zoom around the canvas centre, in canvas-internal pixels.
+  const cx = canvas.width  / 2
+  const cy = canvas.height / 2
   const oldScale = scale.value
   const newScale = Math.min(MAX_SCALE, oldScale * (1 + ZOOM_FACTOR))
+  // No Y-flip: keep the canvas-centre source point fixed under zoom.
   const wxImg = (cx - transX.value) / oldScale
   const wyImg = (cy - transY.value) / oldScale
   scale.value = newScale
@@ -199,11 +218,12 @@ function zoomIn() {
 
 function zoomOut() {
   if (!_img) return
-  const rect = canvasRef.value.getBoundingClientRect()
-  const cx = rect.width / 2
-  const cy = rect.height / 2
+  const canvas = canvasRef.value
+  const cx = canvas.width  / 2
+  const cy = canvas.height / 2
   const oldScale = scale.value
   const newScale = Math.max(MIN_SCALE, oldScale * (1 - ZOOM_FACTOR))
+  // No Y-flip: keep the canvas-centre source point fixed under zoom.
   const wxImg = (cx - transX.value) / oldScale
   const wyImg = (cy - transY.value) / oldScale
   scale.value = newScale

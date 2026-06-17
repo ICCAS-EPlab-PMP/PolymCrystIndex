@@ -87,25 +87,50 @@ def render_zoom(
     cmax: float,
     magnify: int = 4,
 ) -> tuple[str, int, int, float]:
-    """Render zoom area. Returns (b64, max_x, max_y, max_intensity)."""
-    h, w = display.shape
+    """Render zoom area. Returns (b64, max_x, max_y, max_intensity).
+
+    ``cx, cy`` are in displayed-image pixel coordinates. The crop is taken
+    from the **full-resolution ``original``** array (mapped from the display
+    window), NOT from the already-downsampled ``display`` — otherwise the
+    zoom just enlarges a decimated image and peaks look blocky/soft next to
+    the main view. Because the zoom image still spans the same display window
+    ``[x1,x2)×[y1,y2)`` (``zoom_size`` display cells), the frontend's zoom-click
+    mapping (``local_x``/``local_y`` as display-cell offsets) stays valid.
+    ``max_x, max_y`` and the intensity are returned in **original** coords.
+    """
+    h_disp, w_disp = display.shape
+    h_orig, w_orig = original.shape
     half = zoom_size // 2
     x1 = max(0, cx - half); y1 = max(0, cy - half)
-    x2 = min(w, cx + half); y2 = min(h, cy + half)
-    zone = display[y1:y2, x1:x2]
+    x2 = min(w_disp, cx + half); y2 = min(h_disp, cy + half)
+
+    # Map the display window to ORIGINAL coordinates and crop at full
+    # resolution. This is what makes the zoom sharper than the main view,
+    # which renders from the decimated ``display``.
+    scale_x = w_orig / w_disp if w_disp else 1.0
+    scale_y = h_orig / h_disp if h_disp else 1.0
+    ox1 = int(round(x1 * scale_x)); oy1 = int(round(y1 * scale_y))
+    ox2 = int(round(x2 * scale_x)); oy2 = int(round(y2 * scale_y))
+    ox2 = max(ox1 + 1, ox2); oy2 = max(oy1 + 1, oy2)
+    zone = original[oy1:oy2, ox1:ox2]
+
+    # BUG FIX: do NOT flip the zoom view. The main canvas now displays the
+    # image right-way-up (row 0 at top), so the zoom must match.
     norm = _normalize(zone, cmin, cmax)
     rgb  = _colormap(norm, cmap)
 
-    # Magnify
+    # Magnify. Source is full-resolution, so nearest-neighbour keeps real
+    # pixel values (no invented interpolation) while staying sharp.
     img = Image.fromarray(rgb, "RGB")
     img = img.resize((img.width * magnify, img.height * magnify), Image.NEAREST)
 
-    # Find max in zone
+    # Find max in the full-resolution zone (finer peak than display res).
     local_y, local_x = np.unravel_index(np.argmax(zone), zone.shape)
-    max_x = x1 + local_x
-    max_y = y1 + local_y
+    max_x = max(0, min(w_orig - 1, ox1 + int(local_x)))
+    max_y = max(0, min(h_orig - 1, oy1 + int(local_y)))
+    intensity = float(original[max_y, max_x])
 
-    # Draw red square on max (scaled)
+    # Draw red square on max (scaled) — no Y flip
     from PIL import ImageDraw
     draw = ImageDraw.Draw(img)
     mx = local_x * magnify
@@ -115,8 +140,7 @@ def render_zoom(
     buf = io.BytesIO()
     img.save(buf, "PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
-    intensity = float(original[max_y, max_x]) if (0 <= max_y < original.shape[0] and 0 <= max_x < original.shape[1]) else 0.0
-    return b64, int(max_x), int(max_y), intensity
+    return b64, max_x, max_y, intensity
 
 
 def downsample_2d(data: np.ndarray, max_pts: int = 500) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

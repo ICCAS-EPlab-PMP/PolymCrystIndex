@@ -137,7 +137,7 @@
                     <polyline points="14,2 14,8 20,8"/>
                   </svg>
                   {{ t('peakExtraction.importInfo') }}
-                  <input type="file" accept=".txt" @change="onImportInfo" hidden />
+                  <input type="file" accept=".txt,.json" @change="onImportInfo" hidden />
                 </label>
               </div>
               <div class="hint-text">{{ t('peakExtraction.importInfoHint') }}</div>

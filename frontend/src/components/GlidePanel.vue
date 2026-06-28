@@ -81,6 +81,18 @@
         <span v-if="generating" class="spinner"></span>
         {{ generating ? t('glide.generating') : t('glide.generate') }}
       </button>
+
+      <div class="structure-3d-section">
+        <button class="section-toggle" @click="show3D_forward = !show3D_forward">
+          <svg class="chevron-icon" :class="{ expanded: show3D_forward }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          {{ t('glide.structure3D') }}
+        </button>
+        <div v-if="show3D_forward" class="structure-3d-content">
+          <UnitCell3D :cell-params="generatedCellParams_forward" />
+        </div>
+      </div>
     </div>
 
     <div v-else-if="isReverseMode" class="glide-form reverse-form">
@@ -162,6 +174,18 @@
         <span v-if="reverseGenerating" class="spinner"></span>
         {{ reverseGenerating ? t('glide.reverseGenerating') : t('glide.reverseGenerate') }}
       </button>
+
+      <div class="structure-3d-section">
+        <button class="section-toggle" @click="show3D_reverse = !show3D_reverse">
+          <svg class="chevron-icon" :class="{ expanded: show3D_reverse }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          {{ t('glide.structure3D') }}
+        </button>
+        <div v-if="show3D_reverse" class="structure-3d-content">
+          <UnitCell3D :cell-params="generatedCellParams_reverse" />
+        </div>
+      </div>
     </div>
 
     <div v-if="error" class="error-banner">
@@ -506,6 +530,18 @@
         <span v-if="scGlideGenerating" class="spinner"></span>
         {{ scGlideGenerating ? t('glide.generating') : t('glide.generate') }}
       </button>
+
+      <div class="structure-3d-section">
+        <button class="section-toggle" @click="show3D_scglide = !show3D_scglide">
+          <svg class="chevron-icon" :class="{ expanded: show3D_scglide }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          {{ t('glide.structure3D') }}
+        </button>
+        <div v-if="show3D_scglide" class="structure-3d-content">
+          <UnitCell3D :cell-params="generatedCellParams_scglide" />
+        </div>
+      </div>
     </div>
 
     <div v-if="isSupercellGlideMode && scGlideResult" class="results-section">
@@ -639,6 +675,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/index'
 import Visualizer from '@/components/Visualizer.vue'
+import UnitCell3D from './UnitCell3D.vue'
 
 const props = defineProps({
   mode: {
@@ -713,6 +750,33 @@ const reverseResult = ref(null)
 const scGlideResult = ref(null)
 const browseExpanded = ref(false)
 const keepBrowseExpanded = ref(false)
+
+// Independent 3D panel state per mode (forward / reverse / supercell-glide).
+// Each mode owns its own show3D flag + generated cell params so switching modes
+// never disturbs another mode's 3D view. Auto-expand is intentionally OFF;
+// the user must click the toggle to render (Plotly needs a sized container).
+const show3D_forward = ref(false)
+const generatedCellParams_forward = ref(null)
+const show3D_reverse = ref(false)
+const generatedCellParams_reverse = ref(null)
+const show3D_scglide = ref(false)
+const generatedCellParams_scglide = ref(null)
+
+// Map any object exposing lattice fields into a plain {a,b,c,alpha,beta,gamma}
+// snapshot (all Numbers, validated). Returns null when any field is missing or
+// non-finite so UnitCell3D falls back to its empty-state instead of feeding
+// NaN into Plotly's geometry.
+const extractCellParams = (cell) => {
+  if (!cell) return null
+  const a = Number(cell.a)
+  const b = Number(cell.b)
+  const c = Number(cell.c)
+  const alpha = Number(cell.alpha)
+  const beta = Number(cell.beta)
+  const gamma = Number(cell.gamma)
+  if (![a, b, c, alpha, beta, gamma].every(v => Number.isFinite(v))) return null
+  return { a, b, c, alpha, beta, gamma }
+}
 const browseMode = ref('single')
 const selectedSingleLabel = ref('')
 const selectedOverlayLabels = ref([])
@@ -905,6 +969,7 @@ const generateScGlide = async () => {
     )
     if (res.success && res.data) {
       scGlideResult.value = res.data
+      generatedCellParams_scglide.value = extractCellParams(res.data?.baseCell)
       const firstGroup = res.data?.glideBatchOutputs?.groups?.find(g => g.workDir || g.fullMillerContent)
       selectedSingleLabel.value = firstGroup?.label || ''
       selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
@@ -954,6 +1019,7 @@ const generate = async () => {
     )
     if (res.success && res.data) {
       results.value = res.data
+      generatedCellParams_forward.value = extractCellParams(res.data?.baseCell)
       const firstGroup = res.data?.glideBatchOutputs?.groups?.find(g => g.workDir || g.fullMillerContent)
       selectedSingleLabel.value = firstGroup?.label || ''
       selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
@@ -1004,6 +1070,14 @@ const generateReverse = async () => {
     )
     if (res.success && res.data) {
       reverseResult.value = res.data
+      // Reverse mode has no computed baseCell in the response; the meaningful
+      // cell is the direct cell the user supplied. Snapshot it so UnitCell3D
+      // receives a stable plain object (not the live reactive input).
+      generatedCellParams_reverse.value = extractCellParams(res.data?.baseCell) ||
+        extractCellParams({
+          a: reverseCell.a, b: reverseCell.b, c: reverseCell.c,
+          alpha: reverseCell.alpha, beta: reverseCell.beta, gamma: reverseCell.gamma
+        })
       const firstGroup = res.data?.candidateResults?.find(g => g.workDir || g.fullMillerContent || g.outputMillerContent)
       selectedSingleLabel.value = firstGroup?.label || ''
       selectedOverlayLabels.value = firstGroup?.label ? [firstGroup.label] : []
@@ -1460,6 +1534,37 @@ const downloadReverseCandidate = (candidate) => {
 .btn-download-sm:hover {
   background: var(--primary-bg);
   transform: translateY(-1px);
+}
+
+.structure-3d-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-top: 16px;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.section-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.structure-3d-content {
+  padding: 0 16px 16px;
 }
 
 .quick-browse-section {

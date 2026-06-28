@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.9.2'
+    version: 'v1.9.3'
   },
   home: {
     selectModule: 'Select Module',
@@ -23,7 +23,7 @@ export default {
       expand: 'Expand Summary',
       collapse: 'Collapse Summary',
       collapsedSummary: 'Expand to review the contents of this release.',
-      versionValue: 'v 1.9.2',
+      versionValue: 'v 1.9.3',
       keywords: {
         angleZeroing: 'Absolute symmetry search',
         angleZeroingFinal: 'Forced orthogonal rectification',
@@ -413,6 +413,7 @@ export default {
     totalReflections: 'Total Reflections',
     indexedPeaks: 'Indexed Peaks',
     structure3D: '3D Unit Cell Structure',
+    structure3DEmpty: 'No cell parameters available to display 3D structure',
     rFactor: 'R Factor',
     maxDeviation: 'Max Deviation',
     deviationPoint: 'Deviation Point (hkl)',
@@ -431,6 +432,14 @@ export default {
     qcalc: 'q (calc)',
     psicalc: 'ψ (calc)',
     psiRootCalc: 'ψ (no tilt)',
+    colQobs: 'Observed q',
+    colQcalc: 'Calculated q',
+    colQDiff: 'q Difference',
+    colPsiObs: 'Observed ψ',
+    colPsiWithTilt: 'ψ (with tilt)',
+    colPsiNoTilt: 'ψ (no tilt)',
+    colPsiDiffWithTilt: 'ψ Diff (with tilt)',
+    colPsiDiffNoTilt: 'ψ Diff (no tilt)',
     viewReset: 'Reset',
     viewA: 'Along A Axis',
     viewB: 'Along B Axis',
@@ -439,8 +448,10 @@ export default {
     rFactorPsi: 'R Factor (ψ)',
     maxDeviationQ: 'Max Δq',
     maxDeviationQPoint: 'Δq Max Point (hkl)',
+    maxDeviationQPeakNum: 'Δq Max Peak No.',
     maxDeviationPsi: 'Max Δψ',
     maxDeviationPsiPoint: 'Δψ Max Point (hkl)',
+    maxDeviationPsiPeakNum: 'Δψ Max Peak No.',
     mode: 'Mode',
     enabled: 'Enabled',
     disabled: 'Disabled',
@@ -532,7 +543,7 @@ export default {
     rendering: 'Rendering',
     pleaseImportDiffractionImage: 'Please import diffraction image',
     import2DIntegrationImage: 'Import 2D Integration Image',
-    importCoordinateInfoFile: 'Import Coordinate Info (processing_info.txt)',
+    importCoordinateInfoFile: 'Import Coordinate Info (processing_info.txt / .json)',
     refreshImage: 'Refresh Image',
     coordinateRange: 'Coordinate Range',
     azimuthMin: 'Azimuth Min',
@@ -937,6 +948,7 @@ export default {
     visualizerTitle: 'Visualizer',
     quickBrowseExpand: 'Quick Browse',
     quickBrowseCollapse: 'Collapse Browse',
+    structure3D: '3D Unit Cell Structure',
     browseModeSingle: 'Single Group',
     browseModeOverlay: 'Overlay Groups',
     selectGroup: 'Choose a group to browse',
@@ -1021,6 +1033,8 @@ export default {
     eqResultTitle: 'Equivalent Cell Result',
     eqErrorSingular: 'Transformation matrix is singular (determinant is zero), check inputs',
     eqErrorInvalid: 'Result is invalid, this transformation has no physical meaning',
-    eqAreaRatio: 'Area ratio'
+    eqAreaRatio: 'Area ratio',
+    structure3D: '3D Unit Cell Structure',
+    structure3DHint: 'Expand to view the 3D wireframe of the unit cell built from the generated result.'
   }
 }

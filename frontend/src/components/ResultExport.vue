@@ -108,24 +108,32 @@
             </div>
           </div>
           <div class="miller-preview">
-            <div class="preview-header" :class="{ 'has-tilt': hasTilt }">
+            <div class="preview-header">
               <span>h</span>
               <span>k</span>
               <span>l</span>
-              <span>{{ t('results.qcalc') }}</span>
-              <span>{{ t('results.psicalc') }}</span>
-              <span v-if="hasTilt">{{ t('results.psiRootCalc') }}</span>
+              <span>{{ t('results.colQobs') }}</span>
+              <span>{{ t('results.colQcalc') }}</span>
+              <span>{{ t('results.colQDiff') }}</span>
+              <span>{{ t('results.colPsiObs') }}</span>
+              <span>{{ t('results.colPsiWithTilt') }}</span>
+              <span>{{ t('results.colPsiNoTilt') }}</span>
+              <span>{{ t('results.colPsiDiffWithTilt') }}</span>
+              <span>{{ t('results.colPsiDiffNoTilt') }}</span>
             </div>
             <div class="miller-scroll-container">
-              <div v-for="(m, i) in millerData" :key="i" class="preview-row" :class="{ 'has-tilt': hasTilt }">
+              <div v-for="(m, i) in millerData" :key="i" class="preview-row">
                 <span>{{ m.h }}</span>
                 <span>{{ m.k }}</span>
                 <span>{{ m.l }}</span>
-                <span>{{ m.qcalc.toFixed(3) }}</span>
-                <span>{{ m.psicalc.toFixed(2) }}°</span>
-                <span v-if="hasTilt && m.psiRootCalc !== null" class="psi-root">
-                  {{ m.psiRootCalc.toFixed(2) }}°
-                </span>
+                <span>{{ m.qobs != null ? m.qobs.toFixed(4) : '—' }}</span>
+                <span>{{ m.qcalc != null ? m.qcalc.toFixed(4) : '—' }}</span>
+                <span>{{ (m.qobs != null && m.qcalc != null) ? (m.qobs - m.qcalc).toFixed(4) : '—' }}</span>
+                <span>{{ m.psiobs != null ? m.psiobs.toFixed(2) + '°' : '—' }}</span>
+                <span>{{ m.psicalc != null ? m.psicalc.toFixed(2) + '°' : '—' }}</span>
+                <span class="psi-root">{{ m.psiRootCalc != null ? m.psiRootCalc.toFixed(2) + '°' : '—' }}</span>
+                <span>{{ (m.psiobs != null && m.psicalc != null) ? (m.psiobs - m.psicalc).toFixed(2) + '°' : '—' }}</span>
+                <span>{{ (m.psiobs != null && m.psiRootCalc != null) ? (m.psiobs - m.psiRootCalc).toFixed(2) + '°' : '—' }}</span>
               </div>
             </div>
           </div>
@@ -172,10 +180,6 @@
             <span class="quality-value">{{ rFactorQ.toFixed(4) }}</span>
           </div>
           <div class="quality-item">
-            <span class="quality-label">{{ t('results.rFactorPsi') }}</span>
-            <span class="quality-value">{{ rFactorPsi.toFixed(4) }}</span>
-          </div>
-          <div class="quality-item">
             <span class="quality-label">{{ t('results.maxDeviationQ') }}</span>
             <span class="quality-value">{{ maxDeviationQ.toFixed(4) }}</span>
           </div>
@@ -184,12 +188,24 @@
             <span class="quality-value">({{ maxDeviationHQ }}, {{ maxDeviationKQ }}, {{ maxDeviationLQ }})</span>
           </div>
           <div class="quality-item">
+            <span class="quality-label">{{ t('results.maxDeviationQPeakNum') }}</span>
+            <span class="quality-value">{{ maxDeviationQPeakNum != null ? maxDeviationQPeakNum : '—' }}</span>
+          </div>
+          <div class="quality-item">
+            <span class="quality-label">{{ t('results.rFactorPsi') }}</span>
+            <span class="quality-value">{{ rFactorPsi.toFixed(4) }}</span>
+          </div>
+          <div class="quality-item">
             <span class="quality-label">{{ t('results.maxDeviationPsi') }}</span>
             <span class="quality-value">{{ maxDeviationPsi.toFixed(4) }}</span>
           </div>
           <div class="quality-item">
             <span class="quality-label">{{ t('results.maxDeviationPsiPoint') }}</span>
             <span class="quality-value">({{ maxDeviationHPsi }}, {{ maxDeviationKPsi }}, {{ maxDeviationLPsi }})</span>
+          </div>
+          <div class="quality-item">
+            <span class="quality-label">{{ t('results.maxDeviationPsiPeakNum') }}</span>
+            <span class="quality-value">{{ maxDeviationPsiPeakNum != null ? maxDeviationPsiPeakNum : '—' }}</span>
           </div>
         </div>
       </div>
@@ -603,6 +619,26 @@ const maxDeviationLQ = ref(0)
 const maxDeviationHPsi = ref(1)
 const maxDeviationKPsi = ref(1)
 const maxDeviationLPsi = ref(1)
+
+const maxDeviationQPeakNum = computed(() => {
+  if (!millerData.value.length) return null
+  const idx = millerData.value.findIndex(m =>
+    m.h === maxDeviationHQ.value &&
+    m.k === maxDeviationKQ.value &&
+    m.l === maxDeviationLQ.value
+  )
+  return idx >= 0 ? idx + 1 : null
+})
+
+const maxDeviationPsiPeakNum = computed(() => {
+  if (!millerData.value.length) return null
+  const idx = millerData.value.findIndex(m =>
+    m.h === maxDeviationHPsi.value &&
+    m.k === maxDeviationKPsi.value &&
+    m.l === maxDeviationLPsi.value
+  )
+  return idx >= 0 ? idx + 1 : null
+})
 const currentTaskId = ref(null)
 const resultWorkDir = ref(null)
 const currentView = ref('reset')
@@ -1099,7 +1135,7 @@ watch(() => props.resultData, async (newData) => {
 
 .results-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 20px;
 }
 
@@ -1497,7 +1533,7 @@ watch(() => props.resultData, async (newData) => {
 
 .preview-header {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(11, 1fr);
   padding: 8px 12px;
   background: var(--border);
   font-size: 0.75rem;
@@ -1507,12 +1543,12 @@ watch(() => props.resultData, async (newData) => {
 }
 
 .preview-header.has-tilt {
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(11, 1fr);
 }
 
 .preview-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(11, 1fr);
   padding: 8px 12px;
   font-size: 0.8125rem;
   font-family: 'Fira Code', monospace;
@@ -1521,7 +1557,7 @@ watch(() => props.resultData, async (newData) => {
 }
 
 .preview-row.has-tilt {
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(11, 1fr);
 }
 
 .psi-root {

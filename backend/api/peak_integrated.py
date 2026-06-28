@@ -1,7 +1,7 @@
 """api/peak_integrated.py – 2D integrated data peak-finding endpoints."""
 
 from __future__ import annotations
-import csv, io, re, uuid
+import csv, io, json, re, uuid
 from typing import Optional
 
 import numpy as np
@@ -239,22 +239,63 @@ async def load_image(file: UploadFile = File(...)):
 
 @router.post("/import-info")
 async def import_info(file: UploadFile = File(...)):
-    """Parse a processing_info.txt and extract coordinate ranges."""
-    text = (await file.read()).decode("utf-8", errors="ignore")
-    ranges = {}
-    for line in text.splitlines():
-        line = line.strip()
-        if "X-axis (q" in line and "range:" in line:
-            parts = line.split("range:")[1].strip().split(" to ")
-            if len(parts) == 2:
-                ranges["q_min"] = float(parts[0]); ranges["q_max"] = float(parts[1])
-        elif "Y-axis (chi)" in line and "range (degrees):" in line:
-            parts = line.split("range (degrees):")[1].strip().split(" to ")
-            if len(parts) == 2:
-                ranges["az_min"] = float(parts[0]); ranges["az_max"] = float(parts[1])
-    if not ranges:
-        raise HTTPException(400, "Could not parse coordinate ranges from file.")
-    return ranges
+    """Parse a processing_info file and extract coordinate ranges.
+
+    Supports .json (xAxisRange → q_min/q_max, yAxisRangeDeg → az_min/az_max)
+    and .txt (legacy line-by-line parser). Branch by file extension (case-insensitive).
+    """
+    filename = file.filename or ""
+    raw = await file.read()
+
+    if filename.lower().endswith(".json"):
+        # ── JSON path ─────────────────────────────────────────────────────────
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise HTTPException(400, detail=f"JSON parse error: {e}")
+
+        unit = data.get("xAxisUnit", "")
+        if "q" not in unit.lower():
+            raise HTTPException(400, detail="xAxisUnit must be q-based")
+
+        xr = data.get("xAxisRange")
+        yr = data.get("yAxisRangeDeg")
+        if not (isinstance(xr, list) and len(xr) == 2):
+            raise HTTPException(400, detail="xAxisRange must be [min, max]")
+        if not (isinstance(yr, list) and len(yr) == 2):
+            raise HTTPException(400, detail="yAxisRangeDeg must be [min, max]")
+
+        try:
+            q_min, q_max = float(xr[0]), float(xr[1])
+            az_min, az_max = float(yr[0]), float(yr[1])
+        except (TypeError, ValueError, IndexError) as e:
+            raise HTTPException(400, detail=f"range values must be numeric: {e}")
+
+        if q_min >= q_max or az_min >= az_max:
+            raise HTTPException(400, detail="range min must be less than max")
+
+        return {"q_min": q_min, "q_max": q_max, "az_min": az_min, "az_max": az_max}
+
+    elif filename.lower().endswith(".txt"):
+        # ── TXT path (legacy) ─────────────────────────────────────────────────
+        text = raw.decode("utf-8", errors="ignore")
+        ranges = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if "X-axis (q" in line and "range:" in line:
+                parts = line.split("range:")[1].strip().split(" to ")
+                if len(parts) == 2:
+                    ranges["q_min"] = float(parts[0]); ranges["q_max"] = float(parts[1])
+            elif "Y-axis (chi)" in line and "range (degrees):" in line:
+                parts = line.split("range (degrees):")[1].strip().split(" to ")
+                if len(parts) == 2:
+                    ranges["az_min"] = float(parts[0]); ranges["az_max"] = float(parts[1])
+        if not ranges:
+            raise HTTPException(400, "Could not parse coordinate ranges from file.")
+        return ranges
+
+    else:
+        raise HTTPException(400, detail="Unsupported file extension. Use .txt or .json")
 
 
 @router.post("/set-ranges")

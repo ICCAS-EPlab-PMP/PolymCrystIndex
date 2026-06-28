@@ -1,7 +1,7 @@
 export default {
   app: {
     name: 'PolymCrystIndex',
-    version: 'v1.9.2'
+    version: 'v1.9.3'
   },
   home: {
     selectModule: '选择功能模块',
@@ -23,7 +23,7 @@ export default {
       expand: '展开摘要',
       collapse: '收起摘要',
       collapsedSummary: '点击展开可查看本次版本更新内容。',
-      versionValue: 'v 1.9.2',
+      versionValue: 'v 1.9.3',
       keywords: {
         angleZeroing: '强制直角归正',
         angleZeroingFinal: '结尾强制正交归正',
@@ -413,6 +413,7 @@ export default {
     totalReflections: '总反射数',
     indexedPeaks: '索引峰数',
     structure3D: '3D 晶胞结构',
+    structure3DEmpty: '暂无晶胞参数，无法显示 3D 结构',
     rFactor: 'R 因子',
     maxDeviation: '最大偏差',
     deviationPoint: '偏差点 (hkl)',
@@ -431,6 +432,14 @@ export default {
     qcalc: 'q (计算)',
     psicalc: 'ψ (计算)',
     psiRootCalc: 'ψ (无tilt)',
+    colQobs: '观测值 q',
+    colQcalc: '计算值 q',
+    colQDiff: 'q 差值',
+    colPsiObs: '观测值 ψ',
+    colPsiWithTilt: 'ψ (有 tilt)',
+    colPsiNoTilt: 'ψ (无 tilt)',
+    colPsiDiffWithTilt: 'ψ 差值 (有 tilt)',
+    colPsiDiffNoTilt: 'ψ 差值 (无 tilt)',
     viewReset: '复位',
     viewA: '沿 A 轴',
     viewB: '沿 B 轴',
@@ -439,8 +448,10 @@ export default {
     rFactorPsi: 'R 因子 (ψ)',
     maxDeviationQ: '最大 Δq',
     maxDeviationQPoint: 'Δq 最大点 (hkl)',
+    maxDeviationQPeakNum: 'Δq 最大点编号',
     maxDeviationPsi: '最大 Δψ',
     maxDeviationPsiPoint: 'Δψ 最大点 (hkl)',
+    maxDeviationPsiPeakNum: 'Δψ 最大点编号',
     mode: '模式',
     enabled: '已启用',
     disabled: '未启用',
@@ -531,7 +542,7 @@ export default {
     rendering: '渲染中',
     pleaseImportDiffractionImage: '请导入衍射图像',
     import2DIntegrationImage: '导入 2D积分图像',
-    importCoordinateInfoFile: '导入坐标信息文件 (processing_info.txt)',
+    importCoordinateInfoFile: '导入坐标信息文件 (processing_info.txt / .json)',
     refreshImage: '刷新图像',
     coordinateRange: '坐标范围',
     azimuthMin: '方位角最小',
@@ -936,6 +947,7 @@ export default {
     visualizerTitle: '可视化',
     quickBrowseExpand: '快速浏览',
     quickBrowseCollapse: '收起浏览',
+    structure3D: '3D 晶胞结构',
     browseModeSingle: '单组浏览',
     browseModeOverlay: '叠加浏览',
     selectGroup: '选择要浏览的分组',
@@ -1020,6 +1032,8 @@ export default {
     eqResultTitle: '等价晶胞结果',
     eqErrorSingular: '变换矩阵奇异（行列式为零），请检查输入',
     eqErrorInvalid: '计算结果无效，该变换无物理意义',
-    eqAreaRatio: '面积比'
+    eqAreaRatio: '面积比',
+    structure3D: '3D 晶胞结构',
+    structure3DHint: '点击展开后展示由生成结果得到的晶胞三维线框结构。'
   }
 }

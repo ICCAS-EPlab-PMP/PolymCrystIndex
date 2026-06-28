@@ -58,10 +58,19 @@ const SESSION_KEY = 'polycryst_indexing_session'
 const { t } = useI18n()
 const route = useRoute()
 
-const DataImport = defineAsyncComponent(() => import('@/components/DataImport.vue'))
-const ParamsSetup = defineAsyncComponent(() => import('@/components/ParamsSetup.vue'))
-const Console = defineAsyncComponent(() => import('@/components/Console.vue'))
-const ResultExport = defineAsyncComponent(() => import('@/components/ResultExport.vue'))
+const AsyncError = {
+  props: ['error'],
+  render() {
+    return h('div', { style: 'padding:24px;color:#dc2626;font-family:monospace;font-size:14px' }, [
+      'Failed to load component: ', String(this.error?.message || this.error)
+    ])
+  }
+}
+
+const DataImport = defineAsyncComponent({ loader: () => import('@/components/DataImport.vue'), errorComponent: AsyncError, delay: 0 })
+const ParamsSetup = defineAsyncComponent({ loader: () => import('@/components/ParamsSetup.vue'), errorComponent: AsyncError, delay: 0 })
+const Console = defineAsyncComponent({ loader: () => import('@/components/Console.vue'), errorComponent: AsyncError, delay: 0 })
+const ResultExport = defineAsyncComponent({ loader: () => import('@/components/ResultExport.vue'), errorComponent: AsyncError, delay: 0 })
 
 const IconIndex = {
   render() {

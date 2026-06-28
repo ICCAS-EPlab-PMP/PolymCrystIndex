@@ -2153,6 +2153,16 @@ class IndexingService:
                 if volume is not None:
                     cell_params["volume"] = volume
 
+                # Fix qobs/psiobs to real observed values (was incorrectly = qcalc/psicalc)
+                n_pairs = min(len(miller_data), len(diffraction_data))
+                for i in range(n_pairs):
+                    miller_data[i]["qobs"] = diffraction_data[i].get("q_obs")
+                    miller_data[i]["psiobs"] = diffraction_data[i].get("psi_obs")
+                # Entries beyond diffraction_data: set to None (frontend renders "—")
+                for i in range(n_pairs, len(miller_data)):
+                    miller_data[i]["qobs"] = None
+                    miller_data[i]["psiobs"] = None
+
                 result_data = {
                     "resultType": "indexing",
                     "cellParams": cell_params,

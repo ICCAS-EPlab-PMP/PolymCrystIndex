@@ -162,6 +162,19 @@
       </div>
     </div>
 
+    <div class="structure-3d-section">
+      <button class="section-toggle" :class="{ expanded: show3D }" @click="show3D = !show3D">
+        <svg class="chevron-icon" :class="{ expanded: show3D }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6,9 12,15 18,9"/>
+        </svg>
+        <span class="section-toggle-text">{{ t('manual.structure3D') }}</span>
+      </button>
+      <div v-if="show3D" class="structure-3d-content">
+        <p class="structure-3d-hint">{{ t('manual.structure3DHint') }}</p>
+        <UnitCell3D :cell-params="generatedCellParams" />
+      </div>
+    </div>
+
     <div v-if="error" class="error-banner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
@@ -290,6 +303,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/index'
 import Visualizer from '@/components/Visualizer.vue'
+import UnitCell3D from '@/components/UnitCell3D.vue'
 
 const props = defineProps({
   mode: {
@@ -330,6 +344,32 @@ const defaultEqData = () => ({
 })
 const eqData = reactive([defaultEqData()])
 const eqCellExpanded = ref([])
+
+/* --- 3D Unit Cell Structure panel state --- */
+// Collapsed by default; user must manually expand. Cell params come from the
+// generate() API response (NOT the form inputs) so the wireframe always matches
+// what the backend actually indexed — including supercell-scaled dimensions.
+const show3D = ref(false)
+const generatedCellParams = ref(null)
+
+/**
+ * Map a batch API result item to the {a,b,c,alpha,beta,gamma} shape expected by
+ * UnitCell3D. The backend (IndexingService.run_manual_fullmiller /
+ * run_supercell_fullmiller) returns cellParams under result.data.cellParams.
+ * Returns null when the params are absent or non-finite so UnitCell3D shows its
+ * empty state instead of rendering a broken Plotly scene.
+ */
+const extractCellParams = (result) => {
+  if (!result || !result.success) return null
+  const cp = result.data?.cellParams
+  if (!cp) return null
+  const { a, b, c, alpha, beta, gamma } = cp
+  const values = [a, b, c, alpha, beta, gamma]
+  if (!values.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+    return null
+  }
+  return { a, b, c, alpha, beta, gamma }
+}
 
 const toggleEqCell = (idx) => {
   if (!eqCellExpanded.value[idx]) {
@@ -537,6 +577,10 @@ const removeGroup = (idx) => {
 const generate = async () => {
   error.value = null
   generating.value = true
+  // Clear stale 3D params so an expanded UnitCell3D does not keep showing the
+  // previous cell while a new request is in flight. Repopulated on success.
+  // NOTE: show3D is intentionally NOT reset — the user controls expand state.
+  generatedCellParams.value = null
 
   try {
     if (isSupercellMode.value) {
@@ -605,6 +649,14 @@ const generate = async () => {
         error.value = res.message || t('manual.generationFailed')
       }
     }
+
+    // Extract cell params from the first successful result for the 3D panel.
+    // Uses the API-returned cellParams (e.g. supercell-scaled), NOT the form
+    // inputs. Does NOT auto-expand show3D — user must open the panel manually.
+    const firstOk = batchResults.value.find(
+      (r) => r && r.success && r.data && r.data.cellParams
+    )
+    generatedCellParams.value = firstOk ? extractCellParams(firstOk) : null
   } catch (e) {
     error.value = e.message || t('manual.requestFailed')
   } finally {
@@ -1194,6 +1246,62 @@ const downloadResult = (data, idx) => {
   color: var(--text-muted);
   text-align: center;
   padding: 12px 0;
+  margin: 0;
+}
+
+/* --- 3D Unit Cell Structure panel (mirrors .equivalent-cell-section / .eq-toggle) --- */
+.structure-3d-section {
+  margin-top: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-surface-alt);
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.section-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.section-toggle .chevron-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  transition: transform var(--transition-normal);
+}
+
+.section-toggle .chevron-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.section-toggle-text {
+  font-size: 0.8125rem;
+}
+
+.structure-3d-content {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-surface);
+}
+
+.structure-3d-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
   margin: 0;
 }
 

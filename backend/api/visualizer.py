@@ -29,6 +29,7 @@ from services.diffraction_utils import (
     draw_raw_markers,
     draw_reference_markers,
 )
+from services.physics import q_and_psi
 
 try:
     import fabio
@@ -38,9 +39,13 @@ except Exception:
 
 try:
     import pyFAI
+    from pyFAI import detector_factory as _detector_factory
+    from pyFAI.integrator.azimuthal import AzimuthalIntegrator as _AI_CLS
     PYFAI_OK = True
 except Exception:
     PYFAI_OK = False
+    _detector_factory = None
+    _AI_CLS = None
 
 import matplotlib
 matplotlib.use('Agg')
@@ -113,6 +118,55 @@ class RawRenderParams(BaseModel):
     cy: float = 0.0
     dist: float = 1000.0
     use_pyfai: bool = True
+
+
+class BoxIntegrateParams(BaseModel):
+    """方框积分请求：用户在原始图像上画的像素矩形 + 几何参数。
+
+    x0/y0/x1/y1 为图像像素坐标（无需排序，端点会自动归一化为左上/右下）。
+    """
+    x0: int
+    y0: int
+    x1: int
+    y1: int
+    npt: int = 500
+    threshold_min: float = 0.0
+    threshold_max: float = 65535.0
+    wl: float = 1.0
+    px: float = 100.0
+    py: float = 100.0
+    cx: float = 0.0
+    cy: float = 0.0
+    dist: float = 1000.0
+    quadrant: str = "第一象限"
+    rot_offset: float = 0.0
+    use_pyfai: bool = True
+
+
+def _mask_empty_bins_box(intensity, count) -> list:
+    """把无像素贡献的空 bin 标记为 None（与 /peak/raw/integrate 同语义）。"""
+    import numpy as _np
+    out = _np.array(intensity, dtype=float).copy()
+    if count is not None:
+        count_arr = _np.asarray(count)
+        if count_arr.shape == out.shape:
+            out[count_arr == 0] = _np.nan
+    return [None if (v != v) else float(v) for v in out.tolist()]  # NaN→None
+
+
+class Hdf5SliceReq(BaseModel):
+    """加载 HDF5 dataset 的特定 2D 切片。
+
+    extra_axes 形如 [{"axis": 0, "mode": "index", "index": 5},
+                     {"axis": 1, "mode": "max"}]
+    - axis: 数据集中"非最后两维"的轴索引（最后两维默认为 y, x）。
+    - mode: "index"（取该索引的单帧）或 "max"/"sum"/"mean"（沿该轴投影）。
+    - index: mode=="index" 时使用的整数索引。
+    未在 extra_axes 中列出的额外轴默认取索引 0。
+    """
+    file_key: str
+    dataset_path: str
+    extra_axes: List[dict] = []
 
 
 class IntRenderParams(BaseModel):
@@ -225,6 +279,12 @@ def load_image_auto(data: bytes, filename: str) -> np.ndarray:
     """根据扩展名自动选择加载器"""
     name_lower = filename.lower()
 
+    if name_lower.endswith(('.h5', '.hdf5')):
+        raise ValueError(
+            "HDF5 文件请使用专用流程（probe-hdf5 + load-hdf5-slice），"
+            "以便选择 dataset 与切片。"
+        )
+
     if name_lower.endswith('.npy'):
         arr = np.load(io.BytesIO(data))
         if arr.ndim != 2:
@@ -259,12 +319,61 @@ def load_image_auto(data: bytes, filename: str) -> np.ndarray:
     raise ValueError(f"不支持的文件格式: {filename}（请安装 fabio）")
 
 
+# ============ HDF5 支持 ============
+
+H5_OK = False
+try:
+    import h5py
+    H5_OK = True
+except Exception:
+    H5_OK = False
+
+# file_key → 临时文件路径。探测后的 HDF5 文件保留于此，供 load-hdf5-slice 复用。
+_hdf5_cache: dict[str, str] = {}
+
+
+def _is_hdf5(filename: str) -> bool:
+    return filename.lower().endswith(('.h5', '.hdf5'))
+
+
+def _probe_hdf5_datasets(path: str) -> list[dict]:
+    """递归扫描 HDF5 文件中所有 ndim>=2 的 dataset，返回元信息列表。"""
+    out = []
+    if not H5_OK:
+        return out
+    with h5py.File(path, 'r') as f:
+        def _visit(name, obj):
+            if isinstance(obj, h5py.Dataset) and obj.ndim >= 2:
+                out.append({
+                    "path": "/" + name if not name.startswith("/") else name,
+                    "shape": list(obj.shape),
+                    "ndim": int(obj.ndim),
+                    "dtype": str(obj.dtype),
+                    "size": int(obj.size),
+                })
+        f.visititems(_visit)
+    # 优先把"看起来像图像"的大数据集排在前面
+    out.sort(key=lambda d: d["size"], reverse=True)
+    return out
+
+
 def image_stats(arr: np.ndarray) -> dict:
     mn = float(np.min(arr))
     mx = float(np.max(arr))
     p99 = float(np.percentile(arr, 99.9)) if arr.size > 1 else mx
     p01 = float(np.percentile(arr, 0.1)) if arr.size > 1 else mn
-    return {"min": mn, "max": mx, "p01": p01, "p99": p99}
+    # 前 1% 最强像素的中位数:作为方框积分阈值的推荐上限,比单一最亮像素
+    # 更稳健(不受热点/坏点主导),能代表"真实强信号"水平。
+    top1_median = mx
+    if arr.size > 1:
+        try:
+            cutoff = float(np.percentile(arr, 99))  # 前 1% 的下界
+            strong = arr[arr >= cutoff]
+            if strong.size > 0:
+                top1_median = float(np.median(strong))
+        except Exception:
+            top1_median = mx
+    return {"min": mn, "max": mx, "p01": p01, "p99": p99, "top1pct_median": top1_median}
 
 
 def mpl_fig_to_b64(fig) -> str:
@@ -320,6 +429,145 @@ async def raw_upload_image(file: UploadFile = File(...)):
         **stats,
         "pyfai_available": PYFAI_OK,
     }
+
+
+@router.post("/raw/probe-hdf5")
+async def raw_probe_hdf5(file: UploadFile = File(...)):
+    """探测 HDF5 文件中的 dataset（ndim>=2），返回供前端选择的列表。
+
+    文件被缓存到临时目录，返回 file_key 供后续 /raw/load-hdf5-slice 使用。
+    """
+    if not H5_OK:
+        raise HTTPException(status_code=400, detail="h5py 未安装，无法读取 HDF5。")
+    data = await file.read()
+    suffix = os.path.splitext(file.filename)[1] or '.h5'
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tf:
+        tf.write(data)
+        tf_path = tf.name
+    try:
+        datasets = _probe_hdf5_datasets(tf_path)
+    except Exception as e:
+        os.unlink(tf_path)
+        raise HTTPException(status_code=400, detail=f"HDF5 解析失败: {e}")
+    if not datasets:
+        os.unlink(tf_path)
+        raise HTTPException(status_code=400, detail="HDF5 中未找到 ndim>=2 的 dataset。")
+
+    # 生成 file_key 并缓存路径（清理旧的缓存项以防膨胀）
+    import uuid as _uuid
+    file_key = _uuid.uuid4().hex
+    _hdf5_cache[file_key] = tf_path
+    _gc_hdf5_cache()
+
+    return {
+        "file_key": file_key,
+        "filename": file.filename,
+        "datasets": datasets,
+    }
+
+
+def _gc_hdf5_cache(max_items: int = 8):
+    """保留最近 max_items 个 HDF5 缓存文件，删除多余的并清盘。"""
+    if len(_hdf5_cache) <= max_items:
+        return
+    # 简单策略：按键排序后删除最早的若干个
+    for key in list(_hdf5_cache.keys())[: len(_hdf5_cache) - max_items]:
+        path = _hdf5_cache.pop(key, None)
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+@router.post("/raw/load-hdf5-slice")
+def raw_load_hdf5_slice(req: Hdf5SliceReq):
+    """根据用户选择加载 HDF5 dataset 的 2D 切片并存入 raw_state。"""
+    if not H5_OK:
+        raise HTTPException(status_code=400, detail="h5py 未安装。")
+    path = _hdf5_cache.get(req.file_key)
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=400, detail="HDF5 文件已过期，请重新上传。")
+
+    try:
+        with h5py.File(path, 'r') as f:
+            if req.dataset_path not in f:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"dataset 不存在: {req.dataset_path}",
+                )
+            ds = f[req.dataset_path]
+            if ds.ndim < 2:
+                raise HTTPException(status_code=400, detail="所选 dataset 不足 2 维。")
+
+            arr = _materialize_2d_slice(ds, req.extra_axes)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback as _tb
+        _tb.print_exc()
+        raise HTTPException(status_code=500, detail=f"HDF5 切片失败: {e}")
+
+    arr = arr.astype(np.float64)
+    raw_state.image = arr
+    raw_state.image_shape = arr.shape
+    raw_state.full_miller = []
+    raw_state.output_miller = []
+    raw_state.reference_points = []
+    raw_state.ai = None
+    raw_state.calculator.clear_invert_geom()
+
+    stats = image_stats(arr)
+    h, w = arr.shape
+    return {
+        "message": f"已加载 HDF5 切片: {req.dataset_path}  ({w}×{h})",
+        "width": w, "height": h,
+        "dataset_path": req.dataset_path,
+        **stats,
+        "pyfai_available": PYFAI_OK,
+    }
+
+
+def _materialize_2d_slice(dataset, extra_axes_spec: list) -> np.ndarray:
+    """把 ndim>=2 的 dataset 折叠成 2D 数组。
+
+    默认把最后两维当作 (y, x)。其余额外维（原轴号 0..ndim-3）按 extra_axes_spec
+    处理：
+      - mode="index" + index=N → 取该轴第 N 帧
+      - mode="max"/"sum"/"mean" → 沿该轴做对应投影
+    未指定的额外轴默认取索引 0。
+
+    实现上从最高的额外轴往最低轴处理；每处理掉一个轴，剩余轴在 arr 中的位置
+    保持稳定（始终 < 当前 ndim-2），因此轴号不会错位。
+    """
+    ndim = dataset.ndim
+    if ndim < 2:
+        raise ValueError("dataset 必须 >=2 维")
+
+    spec_by_axis = {int(s["axis"]): s for s in (extra_axes_spec or [])}
+
+    arr = np.array(dataset[...])  # 读入内存
+    # 从最高额外轴（原轴号 ndim-3）往最低（0）处理。
+    for axis in range(ndim - 3, -1, -1):
+        if arr.ndim <= 2:
+            break
+        spec = spec_by_axis.get(axis, {})
+        mode = spec.get("mode", "index")
+        if mode == "index":
+            idx = int(spec.get("index", 0))
+            size = arr.shape[axis]
+            idx = max(0, min(idx, size - 1))
+            arr = np.take(arr, idx, axis=axis)
+        elif mode == "max":
+            arr = np.nanmax(arr, axis=axis)
+        elif mode == "sum":
+            arr = np.nansum(arr, axis=axis)
+        else:  # mean
+            arr = np.nanmean(arr, axis=axis)
+
+    if arr.ndim != 2:
+        raise ValueError(f"切片后维度异常: ndim={arr.ndim}")
+    return arr
 
 
 @router.post("/raw/upload-poni")
@@ -615,6 +863,215 @@ def raw_markers(params: RawRenderParams):
         "output_miller_count": len(output_pts),
         "pyfai_used": calc.has_invert_geom,
     }
+
+
+def _compute_miller_pixels(calc, miller_list, w, h, rot_offset):
+    """共享 helper：对 Miller 列表调用 calc.compute 得到落在图像范围内的像素点。
+
+    返回 [{'h','k','l','q','psi','x','y','overlay_index','overlay_label'}]，
+    其中 q/psi 为原始 Å⁻¹/度 值，便于前端展示。
+    """
+    pts = []
+    for pt in miller_list:
+        coords = calc.compute(pt['q'], pt['psi'], rot_offset)
+        if coords is None:
+            continue
+        x, y = coords
+        if 0 <= x < w and 0 <= y < h:
+            pts.append({
+                'h': pt['h'], 'k': pt['k'], 'l': pt['l'],
+                'q': pt['q'], 'psi': pt['psi'],
+                'x': int(round(x)), 'y': int(round(y)),
+                'overlay_index': pt.get('overlay_index', 0),
+                'overlay_label': pt.get('overlay_label', ''),
+            })
+    return pts
+
+
+@router.post("/raw/integrate-box")
+def raw_integrate_box(params: BoxIntegrateParams):
+    """在用户绘制的像素矩形内做径向积分，并返回落在矩形内的 Miller 点。
+
+    返回:
+        q_values, i_q           — q(Å⁻¹) vs 积分强度
+        two_theta, d_spacing    — 同一曲线上每个 q 对应的 2θ(°) / d(Å)
+        miller_in_box           — 矩形内 Miller 点（hkl + 像素 + q/psi + intensity）
+        box                     — 归一化后的矩形 {x0,y0,x1,y1}
+    """
+    if raw_state.image is None:
+        raise HTTPException(status_code=400, detail="请先上传图像")
+    if not PYFAI_OK or _AI_CLS is None or _detector_factory is None:
+        raise HTTPException(status_code=400, detail="pyFAI not installed.")
+
+    image = raw_state.image
+    h, w = raw_state.image_shape
+
+    # 归一化矩形为左上/右下（min/max），并裁剪到图像范围。
+    x0 = max(0, min(params.x0, params.x1))
+    x1 = min(w - 1, max(params.x0, params.x1))
+    y0 = max(0, min(params.y0, params.y1))
+    y1 = min(h - 1, max(params.y0, params.y1))
+    if x1 <= x0 or y1 <= y0:
+        raise HTTPException(status_code=400, detail="矩形无效或完全落在图像外。")
+
+    # 复用 raw_state.calculator 计算 Miller 像素坐标，与 /raw/markers 一致。
+    calc = raw_state.calculator
+    calc.set_manual_params(
+        wl=params.wl, px=params.px, py=params.py,
+        cx=params.cx, cy=params.cy, dist=params.dist,
+    )
+    calc.set_quadrant(params.quadrant)
+    if params.use_pyfai and PYFAI_OK:
+        calc.build_invert_geom_from_params()
+
+    try:
+        # —— pyFAI 积分器构造（照搬 peak_raw.integrate） ——
+        wl_m = params.wl * 1e-10
+        px_m = params.px * 1e-6
+        py_m = params.py * 1e-6
+        det = _detector_factory('detector', config={'pixel1': py_m, 'pixel2': px_m})
+        ai = _AI_CLS(detector=det, wavelength=wl_m)
+        ai.dist = params.dist * 1e-3
+        ai.poni1 = params.cy * py_m
+        ai.poni2 = params.cx * px_m
+        ai.rot1 = 0.0
+        ai.rot2 = 0.0
+        ai.rot3 = 0.0
+
+        # 组合掩膜：threshold 外的像素 + 矩形外的像素，全部置 1（mask=1 表示忽略）。
+        thresh_mask = np.where(
+            (image >= params.threshold_min) & (image <= params.threshold_max), 0, 1
+        ).astype(np.int8)
+        rect_mask = np.ones((h, w), dtype=np.int8)
+        rect_mask[y0:y1 + 1, x0:x1 + 1] = 0
+        combined_mask = np.where((thresh_mask == 1) | (rect_mask == 1), 1, 0).astype(np.int8)
+
+        npt = max(2, min(int(params.npt), 5000))
+        res_q = ai.integrate1d_ng(
+            image,
+            npt,
+            unit="q_A^-1",
+            method="splitpixel",
+            correctSolidAngle=False,
+            mask=combined_mask,
+        )
+        q_axis = np.array(res_q.radial, dtype=float)
+        count = getattr(res_q, "count", None)
+        i_q = _mask_empty_bins_box(res_q.intensity, count)
+
+        # q → 2θ / d 本地换算（避免再跑两次 integrate1d，保证三点严格对齐）。
+        wl_a = params.wl  # Å
+        two_theta = []
+        d_spacing = []
+        for q in q_axis.tolist():
+            if q is None or q <= 0:
+                two_theta.append(None)
+                d_spacing.append(None)
+                continue
+            sin_theta = q * wl_a / (4.0 * math.pi)
+            if abs(sin_theta) >= 1.0:
+                two_theta.append(None)
+                d_spacing.append(None)
+                continue
+            tt = 2.0 * math.degrees(math.asin(sin_theta))
+            two_theta.append(tt)
+            d_spacing.append((2.0 * math.pi) / q)
+
+        # —— 矩形内 Miller 点筛选 ——
+        full_pts = _compute_miller_pixels(
+            calc, raw_state.full_miller, w, h, params.rot_offset
+        )
+        output_pts = _compute_miller_pixels(
+            calc, raw_state.output_miller, w, h, params.rot_offset
+        )
+
+        def _in_box_and_enrich(pt):
+            px_, py_ = pt['x'], pt['y']
+            if not (x0 <= px_ <= x1 and y0 <= py_ <= y1):
+                return None
+            in_thresh = (
+                params.threshold_min <= image[py_, px_]
+                <= params.threshold_max
+            )
+            pt = dict(pt)
+            pt['intensity'] = float(image[py_, px_]) if in_thresh else None
+            # 附 2θ / d
+            q_val = pt.get('q')
+            if q_val and q_val > 0:
+                sin_theta = q_val * wl_a / (4.0 * math.pi)
+                if abs(sin_theta) < 1.0:
+                    pt['two_theta'] = 2.0 * math.degrees(math.asin(sin_theta))
+                    pt['d_spacing'] = (2.0 * math.pi) / q_val
+                else:
+                    pt['two_theta'] = None
+                    pt['d_spacing'] = None
+            else:
+                pt['two_theta'] = None
+                pt['d_spacing'] = None
+            return pt
+
+        miller_in_box = []
+        for pt in full_pts + output_pts:
+            enriched = _in_box_and_enrich(pt)
+            if enriched is not None:
+                miller_in_box.append(enriched)
+
+        # —— 方框覆盖范围（把 4 个角点的像素坐标转成 q，再算 2θ/d 的 min/max） ——
+        # 用于前端在"显示单位=q/2θ/d"时报告方框覆盖的散射范围。
+        corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
+        corner_qs = []
+        for cxp, cyp in corners:
+            try:
+                cq, _ = q_and_psi(
+                    cxp, cyp,
+                    params.wl, params.px, params.py,
+                    params.cx, params.cy, params.dist,
+                )
+                corner_qs.append(cq)
+            except Exception:
+                continue
+        if corner_qs:
+            q_min_box, q_max_box = float(min(corner_qs)), float(max(corner_qs))
+            two_theta_min_box = d_max_box = None
+            two_theta_max_box = d_min_box = None
+            for cq in corner_qs:
+                if cq <= 0:
+                    continue
+                sin_th = cq * wl_a / (4.0 * math.pi)
+                if abs(sin_th) >= 1.0:
+                    continue
+                tt = 2.0 * math.degrees(math.asin(sin_th))
+                dd = (2.0 * math.pi) / cq
+                two_theta_min_box = tt if two_theta_min_box is None else min(two_theta_min_box, tt)
+                two_theta_max_box = tt if two_theta_max_box is None else max(two_theta_max_box, tt)
+                d_max_box = dd if d_max_box is None else max(d_max_box, dd)
+                d_min_box = dd if d_min_box is None else min(d_min_box, dd)
+            box_coverage = {
+                "q": [q_min_box, q_max_box],
+                "two_theta": [two_theta_min_box, two_theta_max_box],
+                "d_spacing": [d_min_box, d_max_box],
+            }
+        else:
+            box_coverage = {"q": None, "two_theta": None, "d_spacing": None}
+
+        return {
+            "q_values": [float(v) for v in q_axis.tolist()],
+            "i_q": i_q,
+            "two_theta": two_theta,
+            "d_spacing": d_spacing,
+            "miller_in_box": miller_in_box,
+            "miller_in_box_count": len(miller_in_box),
+            "box": {"x0": x0, "y0": y0, "x1": x1, "y1": y1},
+            "box_coverage": box_coverage,
+            "image_shape": {"w": int(w), "h": int(h)},
+            "pyfai_used": calc.has_invert_geom,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback as _tb
+        _tb.print_exc()
+        raise HTTPException(status_code=500, detail=f"方框积分失败: {e}")
 
 
 @router.post("/raw/render")
@@ -959,7 +1416,7 @@ def int_render(params: IntRenderParams):
     else:
         ax.set_ylim(az_range)
 
-    ax.grid(True, color='#2a2a4e', linewidth=0.5)
+    ax.grid(False)
 
     fig.tight_layout()
     b64 = mpl_fig_to_b64(fig)
